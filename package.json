@@ -1,0 +1,19 @@
+{
+  "name": "hireflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HireFlow - AI-Powered Recruitment Platform (Open Source ATS) | 智能招聘 AI 辅助平台",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "format": "prettier --write \"{apps,packages}/*/src/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.9.5"
+  }
+}
