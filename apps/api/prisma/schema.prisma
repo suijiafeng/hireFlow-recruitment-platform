@@ -1,0 +1,11 @@
+// HireFlow 数据模型（枚举与 packages/shared/src/enums.ts 保持同步，schema 是事实来源）
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
