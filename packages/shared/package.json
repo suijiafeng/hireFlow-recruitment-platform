@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
+    "dev": "concurrently -n shared-cjs,shared-esm \"tsc -w -p tsconfig.cjs.json --preserveWatchOutput\" \"tsc -w -p tsconfig.esm.json --preserveWatchOutput\"",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

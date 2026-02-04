@@ -11,11 +11,14 @@
     "node": ">=20.19"
   },
   "scripts": {
+    "build": "npm run build -w packages/shared",
+    "build:shared": "npm run build -w packages/shared",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "format": "prettier --write \"{apps,packages}/*/src/**/*.{ts,tsx}\""
   },
   "devDependencies": {
+    "concurrently": "^10.0.3",
     "prettier": "^3.9.5"
   }
 }
