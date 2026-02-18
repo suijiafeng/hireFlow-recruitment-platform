@@ -11,9 +11,11 @@
     "node": ">=20.19"
   },
   "scripts": {
-    "build": "npm run build -w packages/shared && npm run build -w apps/api",
+    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
     "build:shared": "npm run build -w packages/shared",
+    "dev": "npm run build:shared && concurrently -n shared,api,web -c cyan,green,magenta \"npm run dev -w packages/shared\" \"npm run start:dev -w apps/api\" \"npm run dev -w apps/web\"",
     "dev:api": "npm run build:shared && npm run start:dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "npm run db:migrate -w apps/api",

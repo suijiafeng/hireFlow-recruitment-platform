@@ -13,4 +13,5 @@ apps/api/src/generated/
 *.log
 .DS_Store
 coverage/
+.vite/
 .replay
