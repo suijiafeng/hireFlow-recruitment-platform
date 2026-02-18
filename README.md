@@ -23,8 +23,10 @@ cp apps/api/.env.example apps/api/.env
 npm run db:migrate            # 应用数据库迁移
 npm run db:generate           # 生成 Prisma Client 到 apps/api/src/generated
 npm run db:seed               # 写入角色/权限/测试账号
-npm run dev:api               # api(:3000)，接口文档 http://localhost:3000/api/docs
+npm run dev                   # shared 监听编译 + api(:3000) + web(:5173)
 ```
+
+打开 http://localhost:5173 ，接口文档在 http://localhost:3000/api/docs 。
 
 ### 测试账号（密码统一 `Admin@123456`）
 
@@ -39,6 +41,7 @@ npm run dev:api               # api(:3000)，接口文档 http://localhost:3000/
 
 ```
 apps/api        NestJS 后端（modules: auth/users/rbac/departments/activity-log）
+apps/web        React 前端（登录/数据大盘/职位/候选人/招聘看板/面试/设置）
 packages/shared 前后端共享枚举与权限码（CJS + ESM 双产物）
 ```
 

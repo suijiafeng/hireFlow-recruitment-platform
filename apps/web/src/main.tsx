@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp, Card, ConfigProvider } from 'antd';
+import { App as AntApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { RouterProvider } from 'react-router/dom';
+import { router } from './router';
 
 dayjs.locale('zh-cn');
 
@@ -19,7 +21,7 @@ createRoot(document.getElementById('root')!).render(
     <ConfigProvider locale={zhCN}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
-          <Card style={{ margin: 24 }}>智能招聘平台建设中</Card>
+          <RouterProvider router={router} />
         </QueryClientProvider>
       </AntApp>
     </ConfigProvider>
