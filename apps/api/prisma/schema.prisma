@@ -22,6 +22,14 @@ enum DataScope {
   ASSIGNED
 }
 
+enum JobStatus {
+  DRAFT
+  PENDING_APPROVAL
+  OPEN
+  PAUSED
+  CLOSED
+}
+
 model User {
   id           String      @id @default(cuid())
   email        String      @unique
@@ -34,7 +42,9 @@ model User {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  activityLogs ActivityLog[]
+  activityLogs      ActivityLog[]
+  hiringManagerJobs Job[]         @relation("JobHiringManager")
+  createdJobs       Job[]         @relation("JobCreatedBy")
 }
 
 model Role {
@@ -80,6 +90,36 @@ model Department {
   parent   Department?  @relation("DeptTree", fields: [parentId], references: [id])
   children Department[] @relation("DeptTree")
   users    User[]
+  jobs     Job[]
+}
+
+model Job {
+  id              String     @id @default(cuid())
+  title           String
+  description     String?
+  requirement     String?
+  headcount       Int        @default(1)
+  status          JobStatus  @default(DRAFT)
+  departmentId    String
+  department      Department @relation(fields: [departmentId], references: [id])
+  hiringManagerId String?
+  hiringManager   User?      @relation("JobHiringManager", fields: [hiringManagerId], references: [id])
+  createdById     String
+  createdBy       User       @relation("JobCreatedBy", fields: [createdById], references: [id])
+  stages          PipelineStage[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+// 每个职位可自定义的招聘阶段（Pipeline Builder）
+model PipelineStage {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name  String
+  order Int
+
+  @@index([jobId])
 }
 
 // 全流程操作日志：360° 时间轴 + 合规审计
