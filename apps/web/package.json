@@ -10,6 +10,9 @@
     "lint": "oxlint ."
   },
   "dependencies": {
+    "@ant-design/icons": "^6.3.2",
+    "antd": "^6.5.1",
+    "dayjs": "^1.11.21",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
