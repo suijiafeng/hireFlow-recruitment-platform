@@ -33,6 +33,8 @@ model User {
   roles        UserRole[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+
+  activityLogs ActivityLog[]
 }
 
 model Role {
@@ -78,4 +80,19 @@ model Department {
   parent   Department?  @relation("DeptTree", fields: [parentId], references: [id])
   children Department[] @relation("DeptTree")
   users    User[]
+}
+
+// 全流程操作日志：360° 时间轴 + 合规审计
+model ActivityLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  actorName  String? // 冗余存储：候选人/系统触发时无内部用户
+  action     String // 约定见 shared ACTIVITY_ACTIONS，如 application.stage_changed
+  entityType String // 取值如 Job / Candidate / Application / Interview
+  entityId   String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
 }
