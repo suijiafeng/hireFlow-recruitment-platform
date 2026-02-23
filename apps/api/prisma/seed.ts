@@ -79,16 +79,26 @@ async function upsertDepartment(name: string) {
   return found ?? prisma.department.create({ data: { name } });
 }
 
-async function seedDemoJobs(techDeptId: string, productDeptId: string) {
+interface DemoCandidate {
+  name: string;
+  email: string;
+  phone: string;
+  source: string;
+  tags: string[];
+  matchScore: number;
+  stage: string;
+}
+
+async function seedDemoData(techDeptId: string, productDeptId: string) {
   if ((await prisma.job.count()) > 0) {
-    console.log('… 已存在职位数据，跳过示例职位');
+    console.log('… 已存在职位数据，跳过示例数据');
     return;
   }
 
   const hr = await prisma.user.findUniqueOrThrow({ where: { email: 'hr@arthr.local' } });
   const manager = await prisma.user.findUniqueOrThrow({ where: { email: 'manager@arthr.local' } });
 
-  await prisma.job.create({
+  const backendJob = await prisma.job.create({
     data: {
       title: '后端工程师',
       description:
@@ -101,9 +111,10 @@ async function seedDemoJobs(techDeptId: string, productDeptId: string) {
       createdById: hr.id,
       stages: { create: DEFAULT_PIPELINE_STAGES.map((name, index) => ({ name, order: index })) },
     },
+    include: { stages: true },
   });
 
-  await prisma.job.create({
+  const productJob = await prisma.job.create({
     data: {
       title: '产品经理（B端）',
       description: '负责 ATS 产品规划与需求落地，深度参与 AI 招聘场景设计。',
@@ -114,15 +125,86 @@ async function seedDemoJobs(techDeptId: string, productDeptId: string) {
       createdById: hr.id,
       stages: { create: DEFAULT_PIPELINE_STAGES.map((name, index) => ({ name, order: index })) },
     },
+    include: { stages: true },
   });
 
-  console.log('✔ 示例职位：后端工程师 / 产品经理（B端）');
+  const stageByName = (jobStages: { id: string; name: string }[], name: string) =>
+    jobStages.find((s) => s.name === name)!;
+
+  const backendCandidates: DemoCandidate[] = [
+    { name: '张伟', email: 'zhangwei@example.com', phone: '13800000001', source: 'BOSS直聘', tags: ['React', 'TypeScript', 'Node.js'], matchScore: 92, stage: '二面' },
+    { name: '李娜', email: 'lina@example.com', phone: '13800000002', source: '猎聘', tags: ['NestJS', 'PostgreSQL', '微服务'], matchScore: 88, stage: '一面' },
+    { name: '王强', email: 'wangqiang@example.com', phone: '13800000003', source: '内推', tags: ['Java', 'Spring', '高并发'], matchScore: 85, stage: '一面' },
+    { name: '赵敏', email: 'zhaomin@example.com', phone: '13800000004', source: '拉勾', tags: ['Go', 'Kubernetes', '微服务'], matchScore: 81, stage: '简历初筛' },
+    { name: '刘洋', email: 'liuyang@example.com', phone: '13800000005', source: 'BOSS直聘', tags: ['Python', '数据工程'], matchScore: 74, stage: '简历初筛' },
+    { name: '陈静', email: 'chenjing@example.com', phone: '13800000006', source: '官网投递', tags: ['Node.js', 'React', '全栈'], matchScore: 79, stage: '简历初筛' },
+    { name: '杨帆', email: 'yangfan@example.com', phone: '13800000007', source: '猎头推荐', tags: ['Java', '分布式', '带团队'], matchScore: 90, stage: 'Offer' },
+    { name: '周杰', email: 'zhoujie@example.com', phone: '13800000008', source: '人才库唤醒', tags: ['Vue', '小程序'], matchScore: 68, stage: '待入职' },
+  ];
+  const productCandidates: DemoCandidate[] = [
+    { name: '吴悠', email: 'wuyou@example.com', phone: '13800000011', source: 'BOSS直聘', tags: ['B端产品', '数据分析'], matchScore: 86, stage: '一面' },
+    { name: '郑好', email: 'zhenghao@example.com', phone: '13800000012', source: '猎聘', tags: ['产品设计', '用户研究'], matchScore: 77, stage: '简历初筛' },
+  ];
+
+  const seedApplications = async (job: typeof backendJob, candidates: DemoCandidate[]) => {
+    let position = 0;
+    for (const c of candidates) {
+      const candidate = await prisma.candidate.create({
+        data: {
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          source: c.source,
+          tags: c.tags,
+          resumes: {
+            create: {
+              fileName: `${c.name}-简历.pdf`,
+              parseStatus: 'DONE',
+              skills: c.tags,
+              parsed: {
+                summary: `${c.tags.join('/')} 方向候选人，示例解析结果`,
+                educations: [{ school: '示例大学', degree: '本科' }],
+                experiences: [{ company: '示例科技', title: '工程师', years: 3 }],
+              },
+            },
+          },
+        },
+      });
+      const stage = stageByName(job.stages, c.stage);
+      const application = await prisma.application.create({
+        data: {
+          candidateId: candidate.id,
+          jobId: job.id,
+          stageId: stage.id,
+          matchScore: c.matchScore,
+          position: ++position,
+        },
+      });
+      await prisma.activityLog.create({
+        data: {
+          actorId: hr.id,
+          actorName: hr.name,
+          action: 'application.created',
+          entityType: 'Application',
+          entityId: application.id,
+          payload: { candidate: c.name, job: job.title, stage: stage.name },
+        },
+      });
+    }
+  };
+
+  await seedApplications(backendJob, backendCandidates);
+  await seedApplications(productJob, productCandidates);
+
+  console.log(
+    `✔ 示例数据：2 个职位 / ${backendCandidates.length + productCandidates.length} 名候选人`,
+  );
 }
 
 async function main() {
   await seedRbac();
   const { tech, product } = await seedDepartmentsAndUsers();
-  await seedDemoJobs(tech.id, product.id);
+  await seedDemoData(tech.id, product.id);
 }
 
 main()
