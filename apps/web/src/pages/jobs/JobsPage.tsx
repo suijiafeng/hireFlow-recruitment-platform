@@ -1,9 +1,182 @@
-import { Card, Empty } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Space,
+  Table,
+  Tag,
+} from 'antd';
+import dayjs from 'dayjs';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { departmentsApi, jobsApi, usersApi } from '../../api';
+import { extractErrorMessage } from '../../api/client';
+import type { Job } from '../../api/types';
+import { useAuthStore } from '../../stores/auth';
+
+const STATUS_COLOR: Record<JobStatus, string> = {
+  DRAFT: 'default',
+  PENDING_APPROVAL: 'gold',
+  OPEN: 'green',
+  PAUSED: 'orange',
+  CLOSED: 'red',
+};
 
 export function JobsPage() {
+  const { message } = App.useApp();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+
+  const [page, setPage] = useState(1);
+  const [keyword, setKeyword] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form] = Form.useForm();
+
+  const jobsQuery = useQuery({
+    queryKey: ['jobs', page, keyword],
+    queryFn: () => jobsApi.list({ page, pageSize: 10, keyword: keyword || undefined }),
+  });
+  const departmentsQuery = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list });
+  const managersQuery = useQuery({
+    queryKey: ['users', 'HIRING_MANAGER'],
+    queryFn: () => usersApi.list('HIRING_MANAGER'),
+    enabled: createOpen,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: jobsApi.create,
+    onSuccess: (job) => {
+      message.success(`职位「${job.title}」已创建，默认招聘流程已生成`);
+      setCreateOpen(false);
+      form.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '创建失败')),
+  });
+
   return (
-    <Card title="职位管理">
-      <Empty description="建设中：职位列表与 JD 维护" />
+    <Card
+      title="职位管理"
+      extra={
+        <Space>
+          <Input.Search
+            placeholder="搜索职位名称"
+            allowClear
+            onSearch={(value) => {
+              setPage(1);
+              setKeyword(value.trim());
+            }}
+            style={{ width: 240 }}
+          />
+          {hasPermission(PERMISSIONS.JOB_CREATE) && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              新建职位
+            </Button>
+          )}
+        </Space>
+      }
+    >
+      <Table<Job>
+        rowKey="id"
+        loading={jobsQuery.isLoading}
+        dataSource={jobsQuery.data?.items}
+        pagination={{
+          current: page,
+          pageSize: 10,
+          total: jobsQuery.data?.total,
+          onChange: setPage,
+          showTotal: (total) => `共 ${total} 个职位`,
+        }}
+        columns={[
+          { title: '职位名称', dataIndex: 'title' },
+          { title: '部门', dataIndex: ['department', 'name'], width: 120 },
+          {
+            title: '用人经理',
+            dataIndex: ['hiringManager', 'name'],
+            width: 140,
+            render: (name: string | undefined) => name ?? '-',
+          },
+          {
+            title: '状态',
+            dataIndex: 'status',
+            width: 100,
+            render: (status: JobStatus) => (
+              <Tag color={STATUS_COLOR[status]}>{JOB_STATUS_LABEL[status]}</Tag>
+            ),
+          },
+          { title: 'HC', dataIndex: 'headcount', width: 70 },
+          {
+            title: '候选人',
+            width: 90,
+            render: (_, record) => record._count?.applications ?? 0,
+          },
+          {
+            title: '创建时间',
+            dataIndex: 'createdAt',
+            width: 120,
+            render: (v: string) => dayjs(v).format('YYYY-MM-DD'),
+          },
+          {
+            title: '操作',
+            width: 100,
+            render: (_, record) => (
+              <Button type="link" size="small" onClick={() => navigate(`/pipeline?jobId=${record.id}`)}>
+                查看看板
+              </Button>
+            ),
+          },
+        ]}
+      />
+
+      <Modal
+        title="新建职位"
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onOk={() => form.submit()}
+        confirmLoading={createMutation.isPending}
+        destroyOnHidden
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) => createMutation.mutate(values)}
+          initialValues={{ headcount: 1 }}
+        >
+          <Form.Item name="title" label="职位名称" rules={[{ required: true, min: 2 }]}>
+            <Input placeholder="如：后端工程师" />
+          </Form.Item>
+          <Form.Item name="departmentId" label="所属部门" rules={[{ required: true, message: '请选择部门' }]}>
+            <Select
+              placeholder="选择部门"
+              loading={departmentsQuery.isLoading}
+              options={departmentsQuery.data?.map((d) => ({ value: d.id, label: d.name }))}
+            />
+          </Form.Item>
+          <Form.Item name="hiringManagerId" label="用人经理">
+            <Select
+              allowClear
+              placeholder="选择用人经理（可选）"
+              loading={managersQuery.isLoading}
+              options={managersQuery.data?.map((u) => ({ value: u.id, label: u.name }))}
+            />
+          </Form.Item>
+          <Form.Item name="headcount" label="招聘人数（HC）">
+            <InputNumber min={1} max={999} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="description" label="职位描述（JD）">
+            <Input.TextArea rows={4} placeholder="岗位职责与要求（二期支持 AI 生成）" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Card>
   );
 }
