@@ -1,0 +1,76 @@
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ACTIVITY_ACTIONS } from '@hireflow/shared';
+import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateApplicationDto } from './dto/create-application.dto';
+
+const CARD_SELECT = {
+  id: true,
+  status: true,
+  matchScore: true,
+  position: true,
+  createdAt: true,
+  stageId: true,
+  candidate: { select: { id: true, name: true, tags: true, source: true } },
+} as const;
+
+@Injectable()
+export class ApplicationsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
+
+  /** 创建应聘记录（候选人投递/HR 导入），进入指定或默认首个阶段 */
+  async create(dto: CreateApplicationDto, user: JwtUser) {
+    const job = await this.prisma.job.findUnique({
+      where: { id: dto.jobId },
+      include: { stages: { orderBy: { order: 'asc' } } },
+    });
+    if (!job) throw new NotFoundException('职位不存在');
+    if (job.stages.length === 0) throw new BadRequestException('该职位尚未配置 Pipeline 阶段');
+
+    const stage = dto.stageId
+      ? job.stages.find((s) => s.id === dto.stageId)
+      : job.stages[0];
+    if (!stage) throw new BadRequestException('目标阶段不属于该职位');
+
+    const candidate = await this.prisma.candidate.findUnique({ where: { id: dto.candidateId } });
+    if (!candidate) throw new NotFoundException('候选人不存在');
+
+    try {
+      const application = await this.prisma.application.create({
+        data: {
+          candidateId: dto.candidateId,
+          jobId: dto.jobId,
+          stageId: stage.id,
+          position: await this.nextPosition(stage.id),
+        },
+        select: CARD_SELECT,
+      });
+      await this.activityLog.record(
+        user,
+        ACTIVITY_ACTIONS.APPLICATION_CREATED,
+        'Application',
+        application.id,
+        { candidate: candidate.name, job: job.title, stage: stage.name },
+      );
+      return application;
+    } catch (e: unknown) {
+      // P2002 = 唯一约束冲突（candidateId + jobId）
+      if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
+        throw new ConflictException('该候选人已应聘此职位');
+      }
+      throw e;
+    }
+  }
+
+  private async nextPosition(stageId: string): Promise<number> {
+    const last = await this.prisma.application.aggregate({
+      where: { stageId },
+      _max: { position: true },
+    });
+    return (last._max.position ?? 0) + 1;
+  }
+}
