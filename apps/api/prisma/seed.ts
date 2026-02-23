@@ -4,7 +4,12 @@
  */
 import 'dotenv/config';
 import { hashSync } from 'bcryptjs';
-import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_DEFS, RoleCode } from '@hireflow/shared';
+import {
+  DEFAULT_PIPELINE_STAGES,
+  DEFAULT_ROLE_PERMISSIONS,
+  PERMISSION_DEFS,
+  RoleCode,
+} from '@hireflow/shared';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
 
@@ -74,9 +79,50 @@ async function upsertDepartment(name: string) {
   return found ?? prisma.department.create({ data: { name } });
 }
 
+async function seedDemoJobs(techDeptId: string, productDeptId: string) {
+  if ((await prisma.job.count()) > 0) {
+    console.log('… 已存在职位数据，跳过示例职位');
+    return;
+  }
+
+  const hr = await prisma.user.findUniqueOrThrow({ where: { email: 'hr@arthr.local' } });
+  const manager = await prisma.user.findUniqueOrThrow({ where: { email: 'manager@arthr.local' } });
+
+  await prisma.job.create({
+    data: {
+      title: '后端工程师',
+      description:
+        '负责智能招聘平台核心服务研发：Pipeline 流转引擎、RBAC 权限体系、自动化工作流。技术栈 NestJS + PostgreSQL + Redis。',
+      requirement: '3 年以上后端经验；熟悉 Node.js/TypeScript；有 B 端系统或高并发经验者优先。',
+      headcount: 2,
+      status: 'OPEN',
+      departmentId: techDeptId,
+      hiringManagerId: manager.id,
+      createdById: hr.id,
+      stages: { create: DEFAULT_PIPELINE_STAGES.map((name, index) => ({ name, order: index })) },
+    },
+  });
+
+  await prisma.job.create({
+    data: {
+      title: '产品经理（B端）',
+      description: '负责 ATS 产品规划与需求落地，深度参与 AI 招聘场景设计。',
+      requirement: '3 年以上 B 端产品经验，有 HR SaaS 背景优先。',
+      headcount: 1,
+      status: 'OPEN',
+      departmentId: productDeptId,
+      createdById: hr.id,
+      stages: { create: DEFAULT_PIPELINE_STAGES.map((name, index) => ({ name, order: index })) },
+    },
+  });
+
+  console.log('✔ 示例职位：后端工程师 / 产品经理（B端）');
+}
+
 async function main() {
   await seedRbac();
-  await seedDepartmentsAndUsers();
+  const { tech, product } = await seedDepartmentsAndUsers();
+  await seedDemoJobs(tech.id, product.id);
 }
 
 main()

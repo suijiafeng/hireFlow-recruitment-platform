@@ -25,7 +25,7 @@ export class DepartmentsController {
   @ApiOperation({ summary: '部门列表' })
   list() {
     return this.prisma.department.findMany({
-      include: { _count: { select: { users: true } } },
+      include: { _count: { select: { users: true, jobs: true } } },
       orderBy: { name: 'asc' },
     });
   }
