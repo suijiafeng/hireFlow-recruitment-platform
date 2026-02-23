@@ -30,6 +30,20 @@ enum JobStatus {
   CLOSED
 }
 
+enum ApplicationStatus {
+  ACTIVE
+  REJECTED
+  WITHDRAWN
+  HIRED
+}
+
+enum ResumeParseStatus {
+  PENDING
+  PARSING
+  DONE
+  FAILED
+}
+
 model User {
   id           String      @id @default(cuid())
   email        String      @unique
@@ -107,19 +121,68 @@ model Job {
   createdById     String
   createdBy       User       @relation("JobCreatedBy", fields: [createdById], references: [id])
   stages          PipelineStage[]
+  applications    Application[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }
 
 // 每个职位可自定义的招聘阶段（Pipeline Builder）
 model PipelineStage {
-  id    String @id @default(cuid())
-  jobId String
-  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  name  String
-  order Int
+  id           String        @id @default(cuid())
+  jobId        String
+  job          Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name         String
+  order        Int
+  applications Application[]
 
   @@index([jobId])
+}
+
+model Candidate {
+  id           String        @id @default(cuid())
+  name         String
+  email        String?
+  phone        String?
+  source       String? // 来源渠道
+  tags         String[] // AI/人工标签
+  profile      Json? // 结构化画像扩展
+  resumes      Resume[]
+  applications Application[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Resume {
+  id          String            @id @default(cuid())
+  candidateId String
+  candidate   Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileKey     String? // 对象存储 key（文件上传后续接入）
+  fileName    String?
+  rawText     String?
+  parsed      Json? // AI 解析后的结构化 JSON（二期）
+  skills      String[]
+  parseStatus ResumeParseStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+}
+
+// 应聘记录：连接 Candidate 与 Job，驱动 Pipeline
+model Application {
+  id          String            @id @default(cuid())
+  candidateId String
+  candidate   Candidate         @relation(fields: [candidateId], references: [id])
+  jobId       String
+  job         Job               @relation(fields: [jobId], references: [id])
+  stageId     String
+  stage       PipelineStage     @relation(fields: [stageId], references: [id])
+  status      ApplicationStatus @default(ACTIVE)
+  matchScore  Int? // AI 匹配度分数（二期）
+  matchReport Json? // 打分依据（二期）
+  position    Float             @default(0) // 看板列内排序
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([candidateId, jobId])
+  @@index([jobId, stageId])
 }
 
 // 全流程操作日志：360° 时间轴 + 合规审计
