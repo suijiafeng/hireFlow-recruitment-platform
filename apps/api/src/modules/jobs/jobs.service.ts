@@ -29,6 +29,7 @@ export class JobsService {
         include: {
           department: { select: { id: true, name: true } },
           hiringManager: { select: { id: true, name: true } },
+          _count: { select: { applications: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -69,7 +70,8 @@ export class JobsService {
         department: { select: { id: true, name: true } },
         hiringManager: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true } },
-        stages: { orderBy: { order: 'asc' } },
+        stages: { orderBy: { order: 'asc' }, include: { _count: { select: { applications: true } } } },
+        _count: { select: { applications: true } },
       },
     });
     if (!job) throw new NotFoundException('职位不存在');
@@ -88,6 +90,7 @@ export class JobsService {
     return this.prisma.pipelineStage.findMany({
       where: { jobId },
       orderBy: { order: 'asc' },
+      include: { _count: { select: { applications: true } } },
     });
   }
 
@@ -108,6 +111,14 @@ export class JobsService {
     }
 
     const toDelete = existing.filter((s) => !incomingIds.has(s.id));
+    if (toDelete.length > 0) {
+      const blocked = await this.prisma.application.count({
+        where: { stageId: { in: toDelete.map((s) => s.id) } },
+      });
+      if (blocked > 0) {
+        throw new BadRequestException('待删除的阶段中仍有候选人，请先移出后再删除');
+      }
+    }
 
     await this.prisma.$transaction([
       ...toDelete.map((s) => this.prisma.pipelineStage.delete({ where: { id: s.id } })),
