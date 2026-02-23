@@ -1,0 +1,59 @@
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PERMISSIONS } from '@hireflow/shared';
+import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { CreateJobDto } from './dto/create-job.dto';
+import { QueryJobsDto } from './dto/query-jobs.dto';
+import { UpdateJobDto } from './dto/update-job.dto';
+import { UpdateStagesDto } from './dto/update-stages.dto';
+import { JobsService } from './jobs.service';
+
+@ApiTags('jobs')
+@ApiBearerAuth()
+@Controller('jobs')
+export class JobsController {
+  constructor(private readonly jobsService: JobsService) {}
+
+  @Get()
+  @RequirePermissions(PERMISSIONS.JOB_READ)
+  @ApiOperation({ summary: '职位分页列表' })
+  list(@Query() query: QueryJobsDto) {
+    return this.jobsService.list(query);
+  }
+
+  @Post()
+  @RequirePermissions(PERMISSIONS.JOB_CREATE)
+  @ApiOperation({ summary: '创建职位（自动生成默认 Pipeline 阶段）' })
+  create(@Body() dto: CreateJobDto, @CurrentUser() user: JwtUser) {
+    return this.jobsService.create(dto, user);
+  }
+
+  @Get(':id')
+  @RequirePermissions(PERMISSIONS.JOB_READ)
+  @ApiOperation({ summary: '职位详情（含阶段）' })
+  findOne(@Param('id') id: string) {
+    return this.jobsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @RequirePermissions(PERMISSIONS.JOB_UPDATE)
+  @ApiOperation({ summary: '更新职位' })
+  update(@Param('id') id: string, @Body() dto: UpdateJobDto, @CurrentUser() user: JwtUser) {
+    return this.jobsService.update(id, dto, user);
+  }
+
+  @Get(':id/stages')
+  @RequirePermissions(PERMISSIONS.JOB_READ)
+  @ApiOperation({ summary: '职位的 Pipeline 阶段列表' })
+  getStages(@Param('id') id: string) {
+    return this.jobsService.getStages(id);
+  }
+
+  @Put(':id/stages')
+  @RequirePermissions(PERMISSIONS.JOB_STAGES_MANAGE)
+  @ApiOperation({ summary: '全量更新 Pipeline 阶段（增删改排序）' })
+  updateStages(@Param('id') id: string, @Body() dto: UpdateStagesDto, @CurrentUser() user: JwtUser) {
+    return this.jobsService.updateStages(id, dto, user);
+  }
+}

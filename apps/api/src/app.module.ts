@@ -7,6 +7,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
 import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
+import { JobsModule } from './modules/jobs/jobs.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,6 +21,7 @@ import { PrismaModule } from './prisma/prisma.module';
     UsersModule,
     RbacModule,
     DepartmentsModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [
