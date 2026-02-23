@@ -67,7 +67,7 @@ export function LoginPage() {
           style={{ marginTop: 16 }}
           type="info"
           showIcon
-          message="开发环境测试账号"
+          title="开发环境测试账号"
           description={
             <div style={{ fontSize: 12 }}>
               admin / hr / manager / interviewer @arthr.local
