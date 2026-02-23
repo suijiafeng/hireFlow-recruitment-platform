@@ -6,6 +6,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CandidatesModule } from './modules/candidates/candidates.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { RbacModule } from './modules/rbac/rbac.module';
@@ -22,6 +23,7 @@ import { PrismaModule } from './prisma/prisma.module';
     RbacModule,
     DepartmentsModule,
     JobsModule,
+    CandidatesModule,
   ],
   controllers: [AppController],
   providers: [
