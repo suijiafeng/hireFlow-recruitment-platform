@@ -1,6 +1,6 @@
 import type { AuthUser } from '../stores/auth';
 import { http } from './client';
-import type { Department, Job, Paginated, UserBrief } from './types';
+import type { Candidate, Department, Job, Paginated, UserBrief } from './types';
 
 export const authApi = {
   login: (data: { email: string; password: string }) =>
@@ -18,6 +18,13 @@ export const jobsApi = {
     description?: string;
     headcount?: number;
   }) => http.post<Job>('/jobs', data).then((r) => r.data),
+};
+
+export const candidatesApi = {
+  list: (params: { page?: number; pageSize?: number; keyword?: string }) =>
+    http.get<Paginated<Candidate>>('/candidates', { params }).then((r) => r.data),
+  create: (data: { name: string; email?: string; phone?: string; source?: string; tags?: string[] }) =>
+    http.post<Candidate>('/candidates', data).then((r) => r.data),
 };
 
 export const departmentsApi = {
