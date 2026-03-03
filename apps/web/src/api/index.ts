@@ -1,6 +1,6 @@
 import type { AuthUser } from '../stores/auth';
 import { http } from './client';
-import type { Candidate, Department, Job, Paginated, UserBrief } from './types';
+import type { BoardCard, BoardData, Candidate, Department, Job, Paginated, UserBrief } from './types';
 
 export const authApi = {
   login: (data: { email: string; password: string }) =>
@@ -18,6 +18,12 @@ export const jobsApi = {
     description?: string;
     headcount?: number;
   }) => http.post<Job>('/jobs', data).then((r) => r.data),
+};
+
+export const boardApi = {
+  get: (jobId: string) => http.get<BoardData>(`/jobs/${jobId}/board`).then((r) => r.data),
+  moveCard: (applicationId: string, stageId: string) =>
+    http.patch<BoardCard>(`/applications/${applicationId}/stage`, { stageId }).then((r) => r.data),
 };
 
 export const candidatesApi = {

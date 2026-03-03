@@ -49,3 +49,23 @@ export interface Candidate {
   _count?: { resumes: number };
   createdAt: string;
 }
+
+export interface BoardCard {
+  id: string;
+  status: ApplicationStatus;
+  matchScore: number | null;
+  position: number;
+  createdAt: string;
+  stageId: string;
+  candidate: { id: string; name: string; tags: string[]; source: string | null };
+}
+
+export interface BoardColumn {
+  stage: { id: string; name: string; order: number };
+  applications: BoardCard[];
+}
+
+export interface BoardData {
+  job: { id: string; title: string; status: JobStatus };
+  columns: BoardColumn[];
+}
