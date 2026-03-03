@@ -196,8 +196,66 @@ async function seedDemoData(techDeptId: string, productDeptId: string) {
   await seedApplications(backendJob, backendCandidates);
   await seedApplications(productJob, productCandidates);
 
+  // 李娜：明天 14:00 一面；张伟：补一场已完成的一面与面评
+  const interviewer = await prisma.user.findUniqueOrThrow({
+    where: { email: 'interviewer@arthr.local' },
+  });
+  const lina = await prisma.application.findFirstOrThrow({
+    where: { job: { id: backendJob.id }, candidate: { name: '李娜' } },
+  });
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(14, 0, 0, 0);
+  await prisma.interview.create({
+    data: {
+      applicationId: lina.id,
+      round: 1,
+      scheduledAt: tomorrow,
+      durationMins: 60,
+      interviewers: { create: [{ userId: interviewer.id }] },
+    },
+  });
+
+  const zhangwei = await prisma.application.findFirstOrThrow({
+    where: { job: { id: backendJob.id }, candidate: { name: '张伟' } },
+  });
+  const doneInterview = await prisma.interview.create({
+    data: {
+      applicationId: zhangwei.id,
+      round: 1,
+      scheduledAt: new Date(Date.now() - 3 * 24 * 3600 * 1000),
+      durationMins: 60,
+      status: 'COMPLETED',
+      interviewers: { create: [{ userId: interviewer.id }] },
+    },
+  });
+  await prisma.evaluation.create({
+    data: {
+      interviewId: doneInterview.id,
+      interviewerId: interviewer.id,
+      conclusion: 'YES',
+      comments: '工程基础扎实，React 生态经验丰富，沟通清晰，建议进入二面。',
+      submittedAt: new Date(Date.now() - 2 * 24 * 3600 * 1000),
+      scorecard: [
+        { dimension: '技术能力', score: 4, comment: '框架原理理解到位' },
+        { dimension: '工程素养', score: 4, comment: '重视测试与代码规范' },
+        { dimension: '沟通协作', score: 5, comment: '表达结构化' },
+      ],
+    },
+  });
+  await prisma.activityLog.create({
+    data: {
+      actorId: interviewer.id,
+      actorName: interviewer.name,
+      action: 'evaluation.submitted',
+      entityType: 'Application',
+      entityId: zhangwei.id,
+      payload: { candidate: '张伟', round: 1, conclusion: 'YES' },
+    },
+  });
+
   console.log(
-    `✔ 示例数据：2 个职位 / ${backendCandidates.length + productCandidates.length} 名候选人`,
+    `✔ 示例数据：2 个职位 / ${backendCandidates.length + productCandidates.length} 名候选人 / 2 场面试`,
   );
 }
 
