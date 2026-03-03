@@ -68,6 +68,15 @@ export class CandidatesService {
           include: {
             job: { select: { id: true, title: true } },
             stage: { select: { id: true, name: true } },
+            interviews: {
+              include: {
+                interviewers: { include: { user: { select: { id: true, name: true } } } },
+                evaluations: {
+                  include: { interviewer: { select: { id: true, name: true } } },
+                },
+              },
+              orderBy: { round: 'asc' },
+            },
           },
         },
       },
