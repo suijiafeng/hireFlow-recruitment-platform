@@ -1,0 +1,94 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { App, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
+import type { Dayjs } from 'dayjs';
+import { interviewsApi, usersApi } from '../api';
+import { extractErrorMessage } from '../api/client';
+
+interface Props {
+  applicationId: string | null;
+  /** 已有面试轮次数，用于默认下一轮 */
+  existingRounds?: number;
+  onClose: () => void;
+}
+
+export function ScheduleInterviewModal({ applicationId, existingRounds = 0, onClose }: Props) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [form] = Form.useForm();
+
+  const usersQuery = useQuery({
+    queryKey: ['users', 'all'],
+    queryFn: () => usersApi.list(),
+    enabled: Boolean(applicationId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: interviewsApi.create,
+    onSuccess: () => {
+      message.success('面试已安排（二期将自动读取日历并发送会议邀请）');
+      form.resetFields();
+      onClose();
+      void queryClient.invalidateQueries({ queryKey: ['candidate-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['interviews'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '安排失败')),
+  });
+
+  return (
+    <Modal
+      title="安排面试"
+      open={Boolean(applicationId)}
+      onCancel={onClose}
+      onOk={() => form.submit()}
+      confirmLoading={createMutation.isPending}
+      destroyOnHidden
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{ round: existingRounds + 1, durationMins: 60 }}
+        onFinish={(values: {
+          round: number;
+          scheduledAt?: Dayjs;
+          durationMins?: number;
+          meetingUrl?: string;
+          interviewerIds: string[];
+        }) =>
+          createMutation.mutate({
+            applicationId: applicationId!,
+            round: values.round,
+            scheduledAt: values.scheduledAt?.toISOString(),
+            durationMins: values.durationMins,
+            meetingUrl: values.meetingUrl || undefined,
+            interviewerIds: values.interviewerIds,
+          })
+        }
+      >
+        <Form.Item name="round" label="轮次" rules={[{ required: true }]}>
+          <InputNumber min={1} max={10} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item name="scheduledAt" label="面试时间">
+          <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item name="durationMins" label="时长（分钟）">
+          <InputNumber min={15} max={480} step={15} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          name="interviewerIds"
+          label="面试官"
+          rules={[{ required: true, message: '至少指派一名面试官' }]}
+        >
+          <Select
+            mode="multiple"
+            placeholder="选择面试官"
+            loading={usersQuery.isLoading}
+            options={usersQuery.data?.map((u) => ({ value: u.id, label: u.name }))}
+          />
+        </Form.Item>
+        <Form.Item name="meetingUrl" label="会议链接（可选，二期自动生成）">
+          <Input placeholder="https://meeting.tencent.com/..." />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+}

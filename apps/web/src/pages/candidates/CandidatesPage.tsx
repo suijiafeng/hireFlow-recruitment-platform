@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { candidatesApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Candidate } from '../../api/types';
+import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { useAuthStore } from '../../stores/auth';
 
 export function CandidatesPage() {
@@ -17,6 +18,7 @@ export function CandidatesPage() {
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
   const candidatesQuery = useQuery({
@@ -69,7 +71,16 @@ export function CandidatesPage() {
           showTotal: (total) => `共 ${total} 名候选人`,
         }}
         columns={[
-          { title: '姓名', dataIndex: 'name', width: 100 },
+          {
+            title: '姓名',
+            dataIndex: 'name',
+            width: 100,
+            render: (name: string, record) => (
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetailId(record.id)}>
+                {name}
+              </Button>
+            ),
+          },
           {
             title: '联系方式',
             width: 220,
@@ -113,8 +124,19 @@ export function CandidatesPage() {
             width: 110,
             render: (v: string) => dayjs(v).format('YYYY-MM-DD'),
           },
+          {
+            title: '操作',
+            width: 80,
+            render: (_, record) => (
+              <Button type="link" size="small" onClick={() => setDetailId(record.id)}>
+                详情
+              </Button>
+            ),
+          },
         ]}
       />
+
+      <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
 
       <Modal
         title="新增候选人"

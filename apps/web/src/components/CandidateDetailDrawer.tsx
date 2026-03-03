@@ -1,0 +1,468 @@
+import { CalendarOutlined, FileTextOutlined, PlusOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  APPLICATION_STATUS_LABEL,
+  EVALUATION_CONCLUSION_LABEL,
+  INTERVIEW_STATUS_LABEL,
+  PERMISSIONS,
+  type ApplicationStatus,
+  type EvaluationConclusion,
+  type InterviewStatus,
+} from '@hireflow/shared';
+import {
+  App,
+  Button,
+  Card,
+  Descriptions,
+  Drawer,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Rate,
+  Select,
+  Space,
+  Spin,
+  Tabs,
+  Tag,
+  Timeline,
+  Typography,
+} from 'antd';
+import dayjs from 'dayjs';
+import { useState } from 'react';
+import { applicationsApi, candidatesApi, jobsApi } from '../api';
+import { extractErrorMessage } from '../api/client';
+import type { CandidateDetail, DetailApplication, Interview } from '../api/types';
+import { useAuthStore } from '../stores/auth';
+import { EvaluationModal } from './EvaluationModal';
+import { ScheduleInterviewModal } from './ScheduleInterviewModal';
+
+const ACTION_LABEL: Record<string, string> = {
+  'job.created': '创建职位',
+  'job.updated': '更新职位',
+  'job.stages_updated': '调整招聘流程',
+  'candidate.created': '录入候选人',
+  'candidate.updated': '更新候选人',
+  'resume.added': '导入简历',
+  'application.created': '加入职位流程',
+  'application.stage_changed': '阶段变更',
+  'interview.scheduled': '安排面试',
+  'evaluation.submitted': '提交面评',
+};
+
+const CONCLUSION_COLOR: Record<string, string> = {
+  STRONG_YES: 'green',
+  YES: 'cyan',
+  NO: 'orange',
+  STRONG_NO: 'red',
+};
+
+function InterviewBlock({
+  interview,
+  onEvaluate,
+  canEvaluate,
+}: {
+  interview: Interview;
+  onEvaluate: (id: string) => void;
+  canEvaluate: boolean;
+}) {
+  return (
+    <div
+      style={{
+        border: '1px solid #f0f0f0',
+        borderRadius: 6,
+        padding: '8px 12px',
+        marginTop: 8,
+        background: '#fafafa',
+      }}
+    >
+      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+        <Space size={8}>
+          <Tag color="blue">第 {interview.round} 轮</Tag>
+          <span style={{ fontSize: 12 }}>
+            {interview.scheduledAt
+              ? dayjs(interview.scheduledAt).format('MM-DD HH:mm')
+              : '待定时间'}
+          </span>
+          <Tag>{INTERVIEW_STATUS_LABEL[interview.status as InterviewStatus] ?? interview.status}</Tag>
+          <span style={{ fontSize: 12, color: '#666' }}>
+            面试官：{interview.interviewers.map((i) => i.user.name).join('、') || '-'}
+          </span>
+        </Space>
+        {canEvaluate && (
+          <Button size="small" onClick={() => onEvaluate(interview.id)}>
+            提交面评
+          </Button>
+        )}
+      </Space>
+      {interview.evaluations.map((ev) => (
+        <div key={ev.id} style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e8e8e8' }}>
+          <Space size={8} wrap>
+            <Typography.Text strong style={{ fontSize: 12 }}>
+              {ev.interviewer.name}
+            </Typography.Text>
+            {ev.conclusion && (
+              <Tag color={CONCLUSION_COLOR[ev.conclusion]}>
+                {EVALUATION_CONCLUSION_LABEL[ev.conclusion as EvaluationConclusion] ?? ev.conclusion}
+              </Tag>
+            )}
+            {ev.scorecard?.map((s) => (
+              <span key={s.dimension} style={{ fontSize: 12 }}>
+                {s.dimension} <Rate disabled value={s.score} style={{ fontSize: 10 }} />
+              </span>
+            ))}
+          </Space>
+          {ev.comments && (
+            <Typography.Paragraph style={{ fontSize: 12, margin: '4px 0 0', color: '#555' }}>
+              {ev.comments}
+            </Typography.Paragraph>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ApplicationCard({
+  application,
+  onSchedule,
+  onEvaluate,
+}: {
+  application: DetailApplication;
+  onSchedule: (id: string, rounds: number) => void;
+  onEvaluate: (id: string) => void;
+}) {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  return (
+    <Card
+      size="small"
+      style={{ marginBottom: 12 }}
+      title={
+        <Space>
+          {application.job.title}
+          <Tag color="geekblue">{application.stage.name}</Tag>
+          <Tag>{APPLICATION_STATUS_LABEL[application.status as ApplicationStatus]}</Tag>
+          {application.matchScore != null && <Tag color="green">匹配 {application.matchScore}</Tag>}
+        </Space>
+      }
+      extra={
+        hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && (
+          <Button
+            size="small"
+            icon={<CalendarOutlined />}
+            onClick={() => onSchedule(application.id, application.interviews.length)}
+          >
+            安排面试
+          </Button>
+        )
+      }
+    >
+      {application.interviews.length === 0 ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          暂无面试安排
+        </Typography.Text>
+      ) : (
+        application.interviews.map((interview) => (
+          <InterviewBlock
+            key={interview.id}
+            interview={interview}
+            onEvaluate={onEvaluate}
+            canEvaluate={hasPermission(PERMISSIONS.EVALUATION_SUBMIT)}
+          />
+        ))
+      )}
+    </Card>
+  );
+}
+
+interface Props {
+  candidateId: string | null;
+  onClose: () => void;
+}
+
+/** 360° 候选人详情（PRD 4.4.3）：结构化信息 + 应聘/面评 + 简历 + 沟通时间轴 */
+export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+
+  const [scheduleFor, setScheduleFor] = useState<{ id: string; rounds: number } | null>(null);
+  const [evaluateFor, setEvaluateFor] = useState<string | null>(null);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [resumeForm] = Form.useForm();
+  const [applyForm] = Form.useForm();
+
+  const detailQuery = useQuery({
+    queryKey: ['candidate-detail', candidateId],
+    queryFn: () => candidatesApi.get(candidateId!),
+    enabled: Boolean(candidateId),
+  });
+
+  const jobsQuery = useQuery({
+    queryKey: ['jobs', 'options'],
+    queryFn: () => jobsApi.list({ page: 1, pageSize: 100 }),
+    enabled: applyOpen,
+  });
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['candidate-detail', candidateId] });
+    void queryClient.invalidateQueries({ queryKey: ['candidates'] });
+    void queryClient.invalidateQueries({ queryKey: ['board'] });
+  };
+
+  const addResumeMutation = useMutation({
+    mutationFn: (values: { rawText: string }) => candidatesApi.addResume(candidateId!, values),
+    onSuccess: () => {
+      message.success('简历已导入（二期将自动进行 AI 解析与打分）');
+      setResumeOpen(false);
+      resumeForm.resetFields();
+      invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '导入失败')),
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: (values: { jobId: string }) =>
+      applicationsApi.create({ candidateId: candidateId!, jobId: values.jobId }),
+    onSuccess: () => {
+      message.success('已加入职位流程');
+      setApplyOpen(false);
+      applyForm.resetFields();
+      invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '操作失败')),
+  });
+
+  const detail: CandidateDetail | undefined = detailQuery.data;
+
+  return (
+    <Drawer
+      title={
+        detail ? (
+          <Space>
+            {detail.name}
+            {detail.tags.map((t) => (
+              <Tag key={t} color="blue">
+                {t}
+              </Tag>
+            ))}
+          </Space>
+        ) : (
+          '候选人详情'
+        )
+      }
+      size={760}
+      open={Boolean(candidateId)}
+      onClose={onClose}
+      destroyOnHidden
+    >
+      {detailQuery.isLoading || !detail ? (
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin />
+        </div>
+      ) : (
+        <>
+          <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
+            <Descriptions.Item label="邮箱">{detail.email ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="电话">{detail.phone ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="来源">{detail.source ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="录入时间">
+              {dayjs(detail.createdAt).format('YYYY-MM-DD HH:mm')}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <Tabs
+            defaultActiveKey="applications"
+            items={[
+              {
+                key: 'applications',
+                label: `应聘记录 (${detail.applications.length})`,
+                children: (
+                  <>
+                    {hasPermission(PERMISSIONS.APPLICATION_CREATE) && (
+                      <Button
+                        size="small"
+                        icon={<PlusOutlined />}
+                        style={{ marginBottom: 12 }}
+                        onClick={() => setApplyOpen(true)}
+                      >
+                        加入职位流程
+                      </Button>
+                    )}
+                    {detail.applications.length === 0 ? (
+                      <Empty description="尚未应聘任何职位" />
+                    ) : (
+                      detail.applications.map((application) => (
+                        <ApplicationCard
+                          key={application.id}
+                          application={application}
+                          onSchedule={(id, rounds) => setScheduleFor({ id, rounds })}
+                          onEvaluate={setEvaluateFor}
+                        />
+                      ))
+                    )}
+                  </>
+                ),
+              },
+              {
+                key: 'resumes',
+                label: `简历 (${detail.resumes.length})`,
+                children: (
+                  <>
+                    {hasPermission(PERMISSIONS.CANDIDATE_UPDATE) && (
+                      <Button
+                        size="small"
+                        icon={<FileTextOutlined />}
+                        style={{ marginBottom: 12 }}
+                        onClick={() => setResumeOpen(true)}
+                      >
+                        导入简历文本
+                      </Button>
+                    )}
+                    {detail.resumes.length === 0 ? (
+                      <Empty description="暂无简历" />
+                    ) : (
+                      detail.resumes.map((resume) => (
+                        <Card size="small" key={resume.id} style={{ marginBottom: 8 }}>
+                          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                            <Space>
+                              <FileTextOutlined />
+                              {resume.fileName ?? '未命名简历'}
+                              <Tag
+                                color={
+                                  resume.parseStatus === 'DONE'
+                                    ? 'green'
+                                    : resume.parseStatus === 'FAILED'
+                                      ? 'red'
+                                      : 'default'
+                                }
+                              >
+                                {resume.parseStatus === 'DONE'
+                                  ? '已解析'
+                                  : resume.parseStatus === 'FAILED'
+                                    ? '解析失败'
+                                    : '待解析'}
+                              </Tag>
+                            </Space>
+                            <span style={{ fontSize: 12, color: '#999' }}>
+                              {dayjs(resume.createdAt).format('YYYY-MM-DD')}
+                            </span>
+                          </Space>
+                          {resume.skills.length > 0 && (
+                            <div style={{ marginTop: 8 }}>
+                              {resume.skills.map((s) => (
+                                <Tag key={s}>{s}</Tag>
+                              ))}
+                            </div>
+                          )}
+                          {resume.parsed?.summary && (
+                            <Typography.Paragraph style={{ fontSize: 12, margin: '8px 0 0' }}>
+                              {resume.parsed.summary}
+                            </Typography.Paragraph>
+                          )}
+                          {resume.rawText && (
+                            <Typography.Paragraph
+                              type="secondary"
+                              style={{ fontSize: 12, margin: '8px 0 0' }}
+                              ellipsis={{ rows: 3, expandable: true, symbol: '展开全文' }}
+                            >
+                              {resume.rawText}
+                            </Typography.Paragraph>
+                          )}
+                        </Card>
+                      ))
+                    )}
+                  </>
+                ),
+              },
+              {
+                key: 'timeline',
+                label: `时间轴 (${detail.timeline.length})`,
+                children:
+                  detail.timeline.length === 0 ? (
+                    <Empty description="暂无操作记录" />
+                  ) : (
+                    <Timeline
+                      items={detail.timeline.map((item) => ({
+                        children: (
+                          <div>
+                            <Space size={8}>
+                              <Typography.Text strong style={{ fontSize: 13 }}>
+                                {ACTION_LABEL[item.action] ?? item.action}
+                              </Typography.Text>
+                              <span style={{ fontSize: 12, color: '#999' }}>
+                                {item.actor?.name ?? item.actorName ?? '系统'} ·{' '}
+                                {dayjs(item.createdAt).format('MM-DD HH:mm')}
+                              </span>
+                            </Space>
+                            {item.action === 'application.stage_changed' && item.payload && (
+                              <div style={{ fontSize: 12, color: '#666' }}>
+                                {String(item.payload.from)} → {String(item.payload.to)}
+                              </div>
+                            )}
+                          </div>
+                        ),
+                      }))}
+                    />
+                  ),
+              },
+            ]}
+          />
+
+          <Modal
+            title="导入简历文本"
+            open={resumeOpen}
+            onCancel={() => setResumeOpen(false)}
+            onOk={() => resumeForm.submit()}
+            confirmLoading={addResumeMutation.isPending}
+            destroyOnHidden
+          >
+            <Form
+              form={resumeForm}
+              layout="vertical"
+              onFinish={(values) => addResumeMutation.mutate(values)}
+            >
+              <Form.Item
+                name="rawText"
+                label="简历全文"
+                rules={[{ required: true, min: 20, message: '请粘贴完整简历文本（至少 20 字）' }]}
+              >
+                <Input.TextArea rows={10} placeholder="粘贴候选人简历全文（PDF 文件上传将在三期接入对象存储）" />
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          <Modal
+            title="加入职位流程"
+            open={applyOpen}
+            onCancel={() => setApplyOpen(false)}
+            onOk={() => applyForm.submit()}
+            confirmLoading={applyMutation.isPending}
+            destroyOnHidden
+          >
+            <Form form={applyForm} layout="vertical" onFinish={(values) => applyMutation.mutate(values)}>
+              <Form.Item name="jobId" label="目标职位" rules={[{ required: true, message: '请选择职位' }]}>
+                <Select
+                  placeholder="选择职位"
+                  loading={jobsQuery.isLoading}
+                  options={jobsQuery.data?.items.map((j) => ({
+                    value: j.id,
+                    label: `${j.title}（${j.department.name}）`,
+                  }))}
+                />
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          <ScheduleInterviewModal
+            applicationId={scheduleFor?.id ?? null}
+            existingRounds={scheduleFor?.rounds}
+            onClose={() => setScheduleFor(null)}
+          />
+          <EvaluationModal interviewId={evaluateFor} onClose={() => setEvaluateFor(null)} />
+        </>
+      )}
+    </Drawer>
+  );
+}
