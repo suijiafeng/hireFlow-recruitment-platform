@@ -4,6 +4,7 @@ import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { MoveStageDto } from './dto/move-stage.dto';
 
 const CARD_SELECT = {
   id: true,
@@ -64,6 +65,71 @@ export class ApplicationsService {
       }
       throw e;
     }
+  }
+
+  /** 看板数据：按阶段分组返回该职位全部流程中候选人 */
+  async board(jobId: string) {
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        stages: {
+          orderBy: { order: 'asc' },
+          include: {
+            applications: {
+              where: { status: 'ACTIVE' },
+              orderBy: { position: 'asc' },
+              select: CARD_SELECT,
+            },
+          },
+        },
+      },
+    });
+    if (!job) throw new NotFoundException('职位不存在');
+    return {
+      job: { id: job.id, title: job.title, status: job.status },
+      columns: job.stages.map((stage) => ({
+        stage: { id: stage.id, name: stage.name, order: stage.order },
+        applications: stage.applications,
+      })),
+    };
+  }
+
+  /** 移动看板卡片 = 变更应聘阶段，并写入留痕 */
+  async moveStage(id: string, dto: MoveStageDto, user: JwtUser) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { stage: true, candidate: { select: { name: true } } },
+    });
+    if (!application) throw new NotFoundException('应聘记录不存在');
+
+    const targetStage = await this.prisma.pipelineStage.findUnique({ where: { id: dto.stageId } });
+    if (!targetStage || targetStage.jobId !== application.jobId) {
+      throw new BadRequestException('目标阶段不属于该职位');
+    }
+
+    const updated = await this.prisma.application.update({
+      where: { id },
+      data: {
+        stageId: targetStage.id,
+        position: dto.position ?? (await this.nextPosition(targetStage.id)),
+      },
+      select: CARD_SELECT,
+    });
+
+    if (targetStage.id !== application.stageId) {
+      await this.activityLog.record(
+        user,
+        ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED,
+        'Application',
+        id,
+        {
+          candidate: application.candidate.name,
+          from: application.stage.name,
+          to: targetStage.name,
+        },
+      );
+    }
+    return updated;
   }
 
   private async nextPosition(stageId: string): Promise<number> {
