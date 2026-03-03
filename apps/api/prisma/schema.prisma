@@ -44,6 +44,19 @@ enum ResumeParseStatus {
   FAILED
 }
 
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+}
+
+enum EvaluationConclusion {
+  STRONG_YES
+  YES
+  NO
+  STRONG_NO
+}
+
 model User {
   id           String      @id @default(cuid())
   email        String      @unique
@@ -57,8 +70,10 @@ model User {
   updatedAt    DateTime    @updatedAt
 
   activityLogs      ActivityLog[]
-  hiringManagerJobs Job[]         @relation("JobHiringManager")
-  createdJobs       Job[]         @relation("JobCreatedBy")
+  hiringManagerJobs Job[]                  @relation("JobHiringManager")
+  createdJobs       Job[]                  @relation("JobCreatedBy")
+  interviewSlots    InterviewInterviewer[]
+  evaluations       Evaluation[]
 }
 
 model Role {
@@ -178,11 +193,53 @@ model Application {
   matchScore  Int? // AI 匹配度分数（二期）
   matchReport Json? // 打分依据（二期）
   position    Float             @default(0) // 看板列内排序
+  interviews  Interview[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   @@unique([candidateId, jobId])
   @@index([jobId, stageId])
+}
+
+model Interview {
+  id            String                 @id @default(cuid())
+  applicationId String
+  application   Application            @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  round         Int
+  scheduledAt   DateTime?
+  durationMins  Int?
+  location      String?
+  meetingUrl    String?
+  status        InterviewStatus        @default(SCHEDULED)
+  transcript    Json? // 面试 Copilot 转写（二期）
+  interviewers  InterviewInterviewer[]
+  evaluations   Evaluation[]
+  createdAt     DateTime               @default(now())
+}
+
+model InterviewInterviewer {
+  interviewId String
+  userId      String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([interviewId, userId])
+}
+
+model Evaluation {
+  id            String                @id @default(cuid())
+  interviewId   String
+  interview     Interview             @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  interviewerId String
+  interviewer   User                  @relation(fields: [interviewerId], references: [id])
+  scorecard     Json? // 结构化评分卡：[{dimension, score, comment}]
+  conclusion    EvaluationConclusion?
+  comments      String?
+  aiDraft       Json? // AI 生成的面评草稿（二期）
+  submittedAt   DateTime?
+  createdAt     DateTime              @default(now())
+
+  @@unique([interviewId, interviewerId])
 }
 
 // 全流程操作日志：360° 时间轴 + 合规审计
