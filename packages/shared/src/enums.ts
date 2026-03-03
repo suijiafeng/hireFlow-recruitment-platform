@@ -101,6 +101,19 @@ export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
   [ApplicationStatus.HIRED]: '已入职',
 };
 
+export const EVALUATION_CONCLUSION_LABEL: Record<EvaluationConclusion, string> = {
+  [EvaluationConclusion.STRONG_YES]: '强烈推荐',
+  [EvaluationConclusion.YES]: '推荐',
+  [EvaluationConclusion.NO]: '不推荐',
+  [EvaluationConclusion.STRONG_NO]: '强烈不推荐',
+};
+
+export const INTERVIEW_STATUS_LABEL: Record<InterviewStatus, string> = {
+  [InterviewStatus.SCHEDULED]: '已安排',
+  [InterviewStatus.COMPLETED]: '已完成',
+  [InterviewStatus.CANCELED]: '已取消',
+};
+
 export const ROLE_LABEL: Record<RoleCode, string> = {
   [RoleCode.ADMIN]: '系统管理员',
   [RoleCode.HR]: 'HR / 招聘专员',

@@ -15,6 +15,7 @@ export const ACTIVITY_ACTIONS = {
   STAGES_UPDATED: 'job.stages_updated',
   CANDIDATE_CREATED: 'candidate.created',
   CANDIDATE_UPDATED: 'candidate.updated',
+  RESUME_ADDED: 'resume.added',
   APPLICATION_CREATED: 'application.created',
   APPLICATION_STAGE_CHANGED: 'application.stage_changed',
   INTERVIEW_SCHEDULED: 'interview.scheduled',
