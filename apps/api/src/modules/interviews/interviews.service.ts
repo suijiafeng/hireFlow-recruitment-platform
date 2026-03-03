@@ -53,11 +53,29 @@ export class InterviewsService {
     return interview;
   }
 
-  async listByApplication(applicationId: string) {
+  /** 按应聘记录查询；不传 applicationId 时返回近期面试总览（面试管理页用） */
+  async list(applicationId?: string) {
+    if (applicationId) {
+      return this.prisma.interview.findMany({
+        where: { applicationId },
+        include: INTERVIEW_INCLUDE,
+        orderBy: { round: 'asc' },
+      });
+    }
     return this.prisma.interview.findMany({
-      where: { applicationId },
-      include: INTERVIEW_INCLUDE,
-      orderBy: { round: 'asc' },
+      include: {
+        ...INTERVIEW_INCLUDE,
+        application: {
+          select: {
+            id: true,
+            candidate: { select: { id: true, name: true } },
+            job: { select: { id: true, title: true } },
+            stage: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: [{ scheduledAt: 'desc' }],
+      take: 100,
     });
   }
 

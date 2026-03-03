@@ -4,6 +4,7 @@ import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CandidatesService } from './candidates.service';
+import { AddResumeDto } from './dto/add-resume.dto';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 
@@ -39,5 +40,12 @@ export class CandidatesController {
   @ApiOperation({ summary: '更新候选人' })
   update(@Param('id') id: string, @Body() dto: CreateCandidateDto, @CurrentUser() user: JwtUser) {
     return this.candidatesService.update(id, dto, user);
+  }
+
+  @Post(':id/resumes')
+  @RequirePermissions(PERMISSIONS.CANDIDATE_UPDATE)
+  @ApiOperation({ summary: '文本导入简历' })
+  addResume(@Param('id') id: string, @Body() dto: AddResumeDto, @CurrentUser() user: JwtUser) {
+    return this.candidatesService.addResume(id, dto, user);
   }
 }

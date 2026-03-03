@@ -4,6 +4,7 @@ import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AddResumeDto } from './dto/add-resume.dto';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 
@@ -110,5 +111,25 @@ export class CandidatesService {
       ...dto,
     });
     return candidate;
+  }
+
+  /** 文本导入一份简历（AI 解析在二期由 /resumes/:id/parse 完成） */
+  async addResume(candidateId: string, dto: AddResumeDto, user: JwtUser) {
+    const candidate = await this.prisma.candidate.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new NotFoundException('候选人不存在');
+    const resume = await this.prisma.resume.create({
+      data: {
+        candidateId,
+        rawText: dto.rawText,
+        fileName: dto.fileName ?? `${candidate.name}-简历.txt`,
+        parseStatus: 'PENDING',
+      },
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.RESUME_ADDED, 'Candidate', candidateId, {
+      resumeId: resume.id,
+      fileName: resume.fileName,
+      length: dto.rawText.length,
+    });
+    return resume;
   }
 }

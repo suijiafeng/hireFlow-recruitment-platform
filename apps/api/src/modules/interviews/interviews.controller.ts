@@ -22,9 +22,9 @@ export class InterviewsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.EVALUATION_READ)
-  @ApiOperation({ summary: '按应聘记录查询面试列表（?applicationId=）' })
-  list(@Query('applicationId') applicationId: string) {
-    return this.interviewsService.listByApplication(applicationId);
+  @ApiOperation({ summary: '面试列表（?applicationId= 过滤；缺省返回近期总览）' })
+  list(@Query('applicationId') applicationId?: string) {
+    return this.interviewsService.list(applicationId);
   }
 
   @Post(':id/evaluations')
