@@ -1,6 +1,17 @@
 import type { AuthUser } from '../stores/auth';
 import { http } from './client';
-import type { BoardCard, BoardData, Candidate, Department, Job, Paginated, UserBrief } from './types';
+import type {
+  BoardCard,
+  BoardData,
+  Candidate,
+  CandidateDetail,
+  Department,
+  Interview,
+  Job,
+  Paginated,
+  Resume,
+  UserBrief,
+} from './types';
 
 export const authApi = {
   login: (data: { email: string; password: string }) =>
@@ -31,6 +42,37 @@ export const candidatesApi = {
     http.get<Paginated<Candidate>>('/candidates', { params }).then((r) => r.data),
   create: (data: { name: string; email?: string; phone?: string; source?: string; tags?: string[] }) =>
     http.post<Candidate>('/candidates', data).then((r) => r.data),
+  get: (id: string) => http.get<CandidateDetail>(`/candidates/${id}`).then((r) => r.data),
+  addResume: (id: string, data: { rawText: string; fileName?: string }) =>
+    http.post<Resume>(`/candidates/${id}/resumes`, data).then((r) => r.data),
+};
+
+export const applicationsApi = {
+  create: (data: { candidateId: string; jobId: string }) =>
+    http.post<BoardCard>('/applications', data).then((r) => r.data),
+};
+
+export const interviewsApi = {
+  list: (applicationId?: string) =>
+    http
+      .get<Interview[]>('/interviews', { params: applicationId ? { applicationId } : undefined })
+      .then((r) => r.data),
+  create: (data: {
+    applicationId: string;
+    round: number;
+    scheduledAt?: string;
+    durationMins?: number;
+    meetingUrl?: string;
+    interviewerIds: string[];
+  }) => http.post<Interview>('/interviews', data).then((r) => r.data),
+  submitEvaluation: (
+    interviewId: string,
+    data: {
+      scorecard: Array<{ dimension: string; score: number; comment?: string }>;
+      conclusion: string;
+      comments?: string;
+    },
+  ) => http.post(`/interviews/${interviewId}/evaluations`, data).then((r) => r.data),
 };
 
 export const departmentsApi = {

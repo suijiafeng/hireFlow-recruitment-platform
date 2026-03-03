@@ -50,6 +50,66 @@ export interface Candidate {
   createdAt: string;
 }
 
+export interface Evaluation {
+  id: string;
+  interviewer: UserBrief;
+  conclusion: string | null;
+  comments: string | null;
+  scorecard: Array<{ dimension: string; score: number; comment?: string }> | null;
+  submittedAt: string | null;
+}
+
+export interface Interview {
+  id: string;
+  round: number;
+  scheduledAt: string | null;
+  durationMins: number | null;
+  meetingUrl: string | null;
+  status: string;
+  interviewers: Array<{ user: UserBrief }>;
+  evaluations: Evaluation[];
+  application?: {
+    id: string;
+    candidate: { id: string; name: string };
+    job: { id: string; title: string };
+    stage: { name: string };
+  };
+}
+
+export interface Resume {
+  id: string;
+  fileName: string | null;
+  parseStatus: string;
+  skills: string[];
+  rawText: string | null;
+  parsed: { summary?: string } | null;
+  createdAt: string;
+}
+
+export interface ActivityItem {
+  id: string;
+  action: string;
+  actorName: string | null;
+  actor: { id: string; name: string } | null;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface DetailApplication {
+  id: string;
+  job: { id: string; title: string };
+  stage: { id: string; name: string };
+  status: ApplicationStatus;
+  matchScore: number | null;
+  interviews: Interview[];
+}
+
+export interface CandidateDetail extends Candidate {
+  resumes: Resume[];
+  applications: (CandidateApplicationBrief & DetailApplication)[];
+  timeline: ActivityItem[];
+}
+
 export interface BoardCard {
   id: string;
   status: ApplicationStatus;
