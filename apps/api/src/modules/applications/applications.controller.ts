@@ -33,4 +33,11 @@ export class ApplicationsController {
   moveStage(@Param('id') id: string, @Body() dto: MoveStageDto, @CurrentUser() user: JwtUser) {
     return this.applicationsService.moveStage(id, dto, user);
   }
+
+  @Post('applications/:id/score')
+  @RequirePermissions(PERMISSIONS.APPLICATION_MOVE)
+  @ApiOperation({ summary: 'AI 岗位匹配度评分（可解释报告回写）' })
+  score(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.score(id, user);
+  }
 }

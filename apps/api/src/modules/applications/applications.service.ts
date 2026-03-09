@@ -1,7 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { MoveStageDto } from './dto/move-stage.dto';
@@ -21,6 +23,7 @@ export class ApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly ai: AiService,
   ) {}
 
   /** 创建应聘记录（候选人投递/HR 导入），进入指定或默认首个阶段 */
@@ -130,6 +133,53 @@ export class ApplicationsService {
       );
     }
     return updated;
+  }
+
+  /**
+   * AI 岗位匹配度评分：JD × 简历 → 分数 + 可解释报告，回写应聘记录。
+   */
+  async score(id: string, user: JwtUser) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: {
+        job: true,
+        candidate: { include: { resumes: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+      },
+    });
+    if (!application) throw new NotFoundException('应聘记录不存在');
+
+    const resume = application.candidate.resumes[0];
+    const resumeText =
+      resume?.rawText ??
+      (resume?.parsed ? JSON.stringify(resume.parsed) : '') ??
+      '';
+    if (!resumeText && application.candidate.tags.length === 0) {
+      throw new BadRequestException('该候选人暂无简历或标签，无法评分，请先导入简历');
+    }
+
+    const { data, meta } = await this.ai.scoreMatch({
+      jobTitle: application.job.title,
+      jobDescription: application.job.description ?? '',
+      jobRequirement: application.job.requirement ?? '',
+      resumeText,
+      candidateTags: application.candidate.tags,
+    });
+
+    const updated = await this.prisma.application.update({
+      where: { id },
+      data: {
+        matchScore: data.score,
+        matchReport: { ...data, aiMeta: meta } as unknown as Prisma.InputJsonValue,
+      },
+      select: { ...CARD_SELECT, matchReport: true },
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.APPLICATION_SCORED, 'Application', id, {
+      candidate: application.candidate.name,
+      job: application.job.title,
+      score: data.score,
+      provider: meta.provider,
+    });
+    return { ...updated, aiMeta: meta };
   }
 
   private async nextPosition(stageId: string): Promise<number> {
