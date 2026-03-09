@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
 import { SubmitEvaluationDto } from './dto/submit-evaluation.dto';
@@ -16,6 +17,7 @@ export class InterviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly ai: AiService,
   ) {}
 
   /** 安排一场面试并指派面试官（二期接入日历协同后自动生成会议链接） */
@@ -77,6 +79,30 @@ export class InterviewsService {
       orderBy: [{ scheduledAt: 'desc' }],
       take: 100,
     });
+  }
+
+  /**
+   * AI 面评草稿（面试 Copilot）：
+   * 面试官的原始记录 → 结构化评分卡草稿，返回给前端预填，最终由人修改确认。
+   */
+  async draftEvaluation(interviewId: string, notes: string) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id: interviewId },
+      include: {
+        application: {
+          include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+        },
+      },
+    });
+    if (!interview) throw new NotFoundException('面试不存在');
+
+    const { data, meta } = await this.ai.draftEvaluation({
+      candidateName: interview.application.candidate.name,
+      jobTitle: interview.application.job.title,
+      round: interview.round,
+      notes,
+    });
+    return { ...data, aiMeta: meta };
   }
 
   /** 提交/更新面评（同一面试官对同一场面试仅一份，重复提交视为修订） */
