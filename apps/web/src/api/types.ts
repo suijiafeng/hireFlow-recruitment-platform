@@ -110,10 +110,58 @@ export interface CandidateDetail extends Candidate {
   timeline: ActivityItem[];
 }
 
+export interface AiMeta {
+  provider: string;
+  degraded: boolean;
+}
+
+export interface MatchReport {
+  score: number;
+  hits: string[];
+  misses: string[];
+  highlights: string;
+  risks: string;
+  aiMeta?: AiMeta;
+}
+
+export interface JdDraft {
+  description: string;
+  requirement: string;
+  aiMeta: AiMeta;
+}
+
+export interface EvaluationDraft {
+  scorecard: Array<{ dimension: string; score: number; comment: string }>;
+  conclusion: string;
+  comments: string;
+  aiMeta: AiMeta;
+}
+
+export interface FunnelStage {
+  id: string;
+  name: string;
+  current: number;
+  reached: number;
+  conversion: number | null;
+}
+
+export interface FunnelData {
+  job: { id: string; title: string };
+  stages: FunnelStage[];
+}
+
+export interface AnalyticsOverview {
+  openJobs: number;
+  candidates: number;
+  upcomingInterviews: number;
+  hired: number;
+}
+
 export interface BoardCard {
   id: string;
   status: ApplicationStatus;
   matchScore: number | null;
+  matchReport?: MatchReport | null;
   position: number;
   createdAt: string;
   stageId: string;

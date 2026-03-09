@@ -1,12 +1,16 @@
 import type { AuthUser } from '../stores/auth';
 import { http } from './client';
 import type {
+  AnalyticsOverview,
   BoardCard,
   BoardData,
   Candidate,
   CandidateDetail,
   Department,
+  EvaluationDraft,
+  FunnelData,
   Interview,
+  JdDraft,
   Job,
   Paginated,
   Resume,
@@ -50,6 +54,23 @@ export const candidatesApi = {
 export const applicationsApi = {
   create: (data: { candidateId: string; jobId: string }) =>
     http.post<BoardCard>('/applications', data).then((r) => r.data),
+  score: (id: string) => http.post<BoardCard>(`/applications/${id}/score`).then((r) => r.data),
+};
+
+export const resumesApi = {
+  parse: (id: string) => http.post<Resume>(`/resumes/${id}/parse`).then((r) => r.data),
+};
+
+export const aiApi = {
+  generateJd: (data: { title: string; departmentName?: string; keywords?: string }) =>
+    http.post<JdDraft>('/ai/generate-jd', data).then((r) => r.data),
+};
+
+export const analyticsApi = {
+  overview: () => http.get<AnalyticsOverview>('/analytics/overview').then((r) => r.data),
+  funnel: (jobId: string) => http.get<FunnelData>(`/analytics/funnel/${jobId}`).then((r) => r.data),
+  insight: (jobId: string) =>
+    http.post<{ insight: string; aiMeta: { provider: string } }>(`/analytics/insight/${jobId}`).then((r) => r.data),
 };
 
 export const interviewsApi = {
@@ -73,6 +94,10 @@ export const interviewsApi = {
       comments?: string;
     },
   ) => http.post(`/interviews/${interviewId}/evaluations`, data).then((r) => r.data),
+  draftEvaluation: (interviewId: string, notes: string) =>
+    http
+      .post<EvaluationDraft>(`/interviews/${interviewId}/evaluation-draft`, { notes })
+      .then((r) => r.data),
 };
 
 export const departmentsApi = {
