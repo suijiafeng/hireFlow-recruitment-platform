@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AddResumeDto } from './dto/add-resume.dto';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
@@ -13,6 +14,7 @@ export class CandidatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly ai: AiService,
   ) {}
 
   async list(query: QueryCandidatesDto) {
@@ -113,7 +115,49 @@ export class CandidatesService {
     return candidate;
   }
 
-  /** 文本导入一份简历（AI 解析在二期由 /resumes/:id/parse 完成） */
+  /**
+   * AI 解析简历：结构化抽取 + 语义技能标签 + 150 字亮点风险摘要，标签合并进候选人。
+   */
+  async parseResume(resumeId: string, user: JwtUser) {
+    const resume = await this.prisma.resume.findUnique({
+      where: { id: resumeId },
+      include: { candidate: true },
+    });
+    if (!resume) throw new NotFoundException('简历不存在');
+    if (!resume.rawText) throw new BadRequestException('该简历没有可解析的文本内容');
+
+    await this.prisma.resume.update({ where: { id: resumeId }, data: { parseStatus: 'PARSING' } });
+    try {
+      const { data, meta } = await this.ai.parseResume(resume.rawText);
+      const mergedTags = [...new Set([...resume.candidate.tags, ...data.skills])].slice(0, 15);
+
+      const [updatedResume] = await this.prisma.$transaction([
+        this.prisma.resume.update({
+          where: { id: resumeId },
+          data: {
+            parsed: { ...data, aiMeta: meta } as unknown as Prisma.InputJsonValue,
+            skills: data.skills,
+            parseStatus: 'DONE',
+          },
+        }),
+        this.prisma.candidate.update({
+          where: { id: resume.candidateId },
+          data: { tags: mergedTags },
+        }),
+      ]);
+      await this.activityLog.record(user, ACTIVITY_ACTIONS.RESUME_PARSED, 'Candidate', resume.candidateId, {
+        resumeId,
+        provider: meta.provider,
+        skills: data.skills,
+      });
+      return { ...updatedResume, aiMeta: meta };
+    } catch (error) {
+      await this.prisma.resume.update({ where: { id: resumeId }, data: { parseStatus: 'FAILED' } });
+      throw error;
+    }
+  }
+
+  /** 文本导入一份简历（导入后可调用 /resumes/:id/parse 做 AI 解析） */
   async addResume(candidateId: string, dto: AddResumeDto, user: JwtUser) {
     const candidate = await this.prisma.candidate.findUnique({ where: { id: candidateId } });
     if (!candidate) throw new NotFoundException('候选人不存在');
