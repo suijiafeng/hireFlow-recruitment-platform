@@ -11,11 +11,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PERMISSIONS } from '@hireflow/shared';
 import { App, Badge, Card, Empty, Select, Space, Spin, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { boardApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { BoardCard, BoardData } from '../../api/types';
+import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { useAuthStore } from '../../stores/auth';
 
 /** 乐观更新：在本地缓存里把卡片从旧列挪到新列尾部 */
@@ -41,7 +42,15 @@ function scoreColor(score: number): string {
   return 'default';
 }
 
-function DraggableCard({ card, disabled }: { card: BoardCard; disabled: boolean }) {
+function DraggableCard({
+  card,
+  disabled,
+  onOpen,
+}: {
+  card: BoardCard;
+  disabled: boolean;
+  onOpen: (candidateId: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: card.id,
     disabled,
@@ -51,12 +60,16 @@ function DraggableCard({ card, disabled }: { card: BoardCard; disabled: boolean 
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      onClick={() => {
+        // PointerSensor 设置了 4px 启动阈值，纯点击不会触发拖拽
+        if (!isDragging) onOpen(card.candidate.id);
+      }}
       style={{
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
         opacity: isDragging ? 0.85 : 1,
         zIndex: isDragging ? 100 : undefined,
         position: 'relative',
-        cursor: disabled ? 'default' : 'grab',
+        cursor: disabled ? 'pointer' : 'grab',
       }}
     >
       <Card size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: '8px 12px' } }}>
@@ -88,10 +101,12 @@ function BoardColumnView({
   stage,
   cards,
   dragDisabled,
+  onOpen,
 }: {
   stage: { id: string; name: string };
   cards: BoardCard[];
   dragDisabled: boolean;
+  onOpen: (candidateId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
@@ -114,7 +129,7 @@ function BoardColumnView({
       </div>
       <div style={{ overflowY: 'auto', flex: 1 }}>
         {cards.map((card) => (
-          <DraggableCard key={card.id} card={card} disabled={dragDisabled} />
+          <DraggableCard key={card.id} card={card} disabled={dragDisabled} onOpen={onOpen} />
         ))}
         {cards.length === 0 && (
           <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '24px 0' }}>
@@ -132,6 +147,7 @@ export function PipelinePage() {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const [searchParams, setSearchParams] = useSearchParams();
   const jobId = searchParams.get('jobId') ?? '';
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'options'],
@@ -223,11 +239,13 @@ export function PipelinePage() {
                 stage={column.stage}
                 cards={column.applications}
                 dragDisabled={!canMove}
+                onOpen={setDetailId}
               />
             ))}
           </div>
         </DndContext>
       )}
+      <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
     </Card>
   );
 }
