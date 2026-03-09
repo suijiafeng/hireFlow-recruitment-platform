@@ -14,6 +14,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@hireflow/shared": "*",
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.4",
