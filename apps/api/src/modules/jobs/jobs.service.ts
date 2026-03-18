@@ -121,7 +121,7 @@ export class JobsService {
     }
 
     await this.prisma.$transaction([
-      ...toDelete.map((s) => this.prisma.pipelineStage.delete({ where: { id: s.id } })),
+      this.prisma.pipelineStage.deleteMany({ where: { id: { in: toDelete.map((s) => s.id) } } }),
       ...dto.stages.map((item, index) =>
         item.id
           ? this.prisma.pipelineStage.update({
