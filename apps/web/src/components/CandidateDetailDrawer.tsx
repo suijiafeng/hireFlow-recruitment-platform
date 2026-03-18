@@ -1,4 +1,4 @@
-import { CalendarOutlined, FileTextOutlined, PlusOutlined } from '@ant-design/icons';
+import { CalendarOutlined, FileTextOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   APPLICATION_STATUS_LABEL,
@@ -19,6 +19,7 @@ import {
   Form,
   Input,
   Modal,
+  Popover,
   Rate,
   Select,
   Space,
@@ -30,9 +31,9 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
-import { applicationsApi, candidatesApi, jobsApi } from '../api';
+import { applicationsApi, candidatesApi, jobsApi, resumesApi } from '../api';
 import { extractErrorMessage } from '../api/client';
-import type { CandidateDetail, DetailApplication, Interview } from '../api/types';
+import type { CandidateDetail, DetailApplication, Interview, MatchReport } from '../api/types';
 import { useAuthStore } from '../stores/auth';
 import { EvaluationModal } from './EvaluationModal';
 import { ScheduleInterviewModal } from './ScheduleInterviewModal';
@@ -44,8 +45,10 @@ const ACTION_LABEL: Record<string, string> = {
   'candidate.created': '录入候选人',
   'candidate.updated': '更新候选人',
   'resume.added': '导入简历',
+  'resume.parsed': 'AI 解析简历',
   'application.created': '加入职位流程',
   'application.stage_changed': '阶段变更',
+  'application.scored': 'AI 匹配评分',
   'interview.scheduled': '安排面试',
   'evaluation.submitted': '提交面评',
 };
@@ -56,6 +59,48 @@ const CONCLUSION_COLOR: Record<string, string> = {
   NO: 'orange',
   STRONG_NO: 'red',
 };
+
+/** 可解释的匹配度报告（AI 输出必须给出打分依据） */
+function MatchReportView({ report }: { report: MatchReport }) {
+  return (
+    <div style={{ maxWidth: 340 }}>
+      <Typography.Paragraph style={{ marginBottom: 8, fontSize: 13 }}>
+        <strong>亮点：</strong>
+        {report.highlights}
+      </Typography.Paragraph>
+      <Typography.Paragraph style={{ marginBottom: 8, fontSize: 13 }}>
+        <strong>风险：</strong>
+        {report.risks}
+      </Typography.Paragraph>
+      {report.hits.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: '#666' }}>命中要求：</span>
+          {report.hits.map((h) => (
+            <Tag key={h} color="green" style={{ fontSize: 11 }}>
+              {h}
+            </Tag>
+          ))}
+        </div>
+      )}
+      {report.misses.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: '#666' }}>缺失要求：</span>
+          {report.misses.map((m) => (
+            <Tag key={m} color="orange" style={{ fontSize: 11 }}>
+              {m}
+            </Tag>
+          ))}
+        </div>
+      )}
+      {report.aiMeta && (
+        <div style={{ fontSize: 11, color: '#999' }}>
+          来源：{report.aiMeta.provider}
+          {report.aiMeta.provider === 'mock' && '（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型）'}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function InterviewBlock({
   interview,
@@ -127,12 +172,22 @@ function ApplicationCard({
   application,
   onSchedule,
   onEvaluate,
+  onScore,
+  scoring,
 }: {
   application: DetailApplication;
   onSchedule: (id: string, rounds: number) => void;
   onEvaluate: (id: string) => void;
+  onScore: (id: string) => void;
+  scoring: boolean;
 }) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const scoreTag =
+    application.matchScore != null ? (
+      <Tag color={application.matchScore >= 85 ? 'green' : application.matchScore >= 70 ? 'blue' : 'default'}>
+        匹配 {application.matchScore}
+      </Tag>
+    ) : null;
   return (
     <Card
       size="small"
@@ -142,19 +197,37 @@ function ApplicationCard({
           {application.job.title}
           <Tag color="geekblue">{application.stage.name}</Tag>
           <Tag>{APPLICATION_STATUS_LABEL[application.status as ApplicationStatus]}</Tag>
-          {application.matchScore != null && <Tag color="green">匹配 {application.matchScore}</Tag>}
+          {application.matchReport ? (
+            <Popover title="AI 匹配报告" content={<MatchReportView report={application.matchReport} />}>
+              <span style={{ cursor: 'pointer' }}>{scoreTag}</span>
+            </Popover>
+          ) : (
+            scoreTag
+          )}
         </Space>
       }
       extra={
-        hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && (
-          <Button
-            size="small"
-            icon={<CalendarOutlined />}
-            onClick={() => onSchedule(application.id, application.interviews.length)}
-          >
-            安排面试
-          </Button>
-        )
+        <Space size={4}>
+          {hasPermission(PERMISSIONS.APPLICATION_MOVE) && (
+            <Button
+              size="small"
+              icon={<RobotOutlined />}
+              loading={scoring}
+              onClick={() => onScore(application.id)}
+            >
+              AI 评分
+            </Button>
+          )}
+          {hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && (
+            <Button
+              size="small"
+              icon={<CalendarOutlined />}
+              onClick={() => onSchedule(application.id, application.interviews.length)}
+            >
+              安排面试
+            </Button>
+          )}
+        </Space>
       }
     >
       {application.interviews.length === 0 ? (
@@ -180,7 +253,7 @@ interface Props {
   onClose: () => void;
 }
 
-/** 360° 候选人详情（PRD 4.4.3）：结构化信息 + 应聘/面评 + 简历 + 沟通时间轴 */
+/** 360° 候选人详情：结构化信息 + 应聘/面评 + 简历 + 沟通时间轴 */
 export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -232,6 +305,29 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
       invalidate();
     },
     onError: (error) => message.error(extractErrorMessage(error, '操作失败')),
+  });
+
+  const parseMutation = useMutation({
+    mutationFn: resumesApi.parse,
+    onSuccess: (resume) => {
+      message.success(
+        `简历解析完成，提取 ${resume.skills.length} 个技能标签` +
+          ((resume as { aiMeta?: { provider: string } }).aiMeta?.provider === 'mock'
+            ? '（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型语义解析）'
+            : ''),
+      );
+      invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '解析失败')),
+  });
+
+  const scoreMutation = useMutation({
+    mutationFn: applicationsApi.score,
+    onSuccess: () => {
+      message.success('AI 匹配评分完成，点击分数标签查看依据');
+      invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '评分失败')),
   });
 
   const detail: CandidateDetail | undefined = detailQuery.data;
@@ -299,6 +395,8 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                           application={application}
                           onSchedule={(id, rounds) => setScheduleFor({ id, rounds })}
                           onEvaluate={setEvaluateFor}
+                          onScore={(id) => scoreMutation.mutate(id)}
+                          scoring={scoreMutation.isPending}
                         />
                       ))
                     )}
@@ -345,9 +443,21 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                                     : '待解析'}
                               </Tag>
                             </Space>
-                            <span style={{ fontSize: 12, color: '#999' }}>
-                              {dayjs(resume.createdAt).format('YYYY-MM-DD')}
-                            </span>
+                            <Space size={8}>
+                              {resume.rawText && hasPermission(PERMISSIONS.CANDIDATE_UPDATE) && (
+                                <Button
+                                  size="small"
+                                  icon={<RobotOutlined />}
+                                  loading={parseMutation.isPending}
+                                  onClick={() => parseMutation.mutate(resume.id)}
+                                >
+                                  {resume.parseStatus === 'DONE' ? '重新解析' : 'AI 解析'}
+                                </Button>
+                              )}
+                              <span style={{ fontSize: 12, color: '#999' }}>
+                                {dayjs(resume.createdAt).format('YYYY-MM-DD')}
+                              </span>
+                            </Space>
                           </Space>
                           {resume.skills.length > 0 && (
                             <div style={{ marginTop: 8 }}>

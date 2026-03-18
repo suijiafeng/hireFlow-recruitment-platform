@@ -101,6 +101,7 @@ export interface DetailApplication {
   stage: { id: string; name: string };
   status: ApplicationStatus;
   matchScore: number | null;
+  matchReport?: MatchReport | null;
   interviews: Interview[];
 }
 
@@ -161,7 +162,6 @@ export interface BoardCard {
   id: string;
   status: ApplicationStatus;
   matchScore: number | null;
-  matchReport?: MatchReport | null;
   position: number;
   createdAt: string;
   stageId: string;

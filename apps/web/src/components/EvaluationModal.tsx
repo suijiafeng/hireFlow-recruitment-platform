@@ -1,6 +1,8 @@
+import { RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EVALUATION_CONCLUSION_LABEL, EvaluationConclusion } from '@hireflow/shared';
-import { App, Form, Input, Modal, Radio, Rate } from 'antd';
+import { App, Button, Form, Input, Modal, Radio, Rate, Typography } from 'antd';
+import { useState } from 'react';
 import { interviewsApi } from '../api';
 import { extractErrorMessage } from '../api/client';
 
@@ -11,11 +13,29 @@ interface Props {
   onClose: () => void;
 }
 
-/** 结构化评分卡面评：多面试官口径一致、可横向对比 */
+/** 结构化评分卡面评：AI 生成草稿 → 面试官修改确认 */
 export function EvaluationModal({ interviewId, onClose }: Props) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
+  const [notes, setNotes] = useState('');
+
+  const draftMutation = useMutation({
+    mutationFn: () => interviewsApi.draftEvaluation(interviewId!, notes),
+    onSuccess: (draft) => {
+      const scores: Record<string, number> = {};
+      draft.scorecard.forEach((s) => {
+        scores[s.dimension] = s.score;
+      });
+      form.setFieldsValue({ scores, conclusion: draft.conclusion, comments: draft.comments });
+      message.success(
+        draft.aiMeta.provider === 'mock'
+          ? '草稿已生成（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型）——请务必核对修改'
+          : 'AI 草稿已生成，请核对修改后提交',
+      );
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '草稿生成失败')),
+  });
 
   const submitMutation = useMutation({
     mutationFn: (values: {
@@ -34,6 +54,7 @@ export function EvaluationModal({ interviewId, onClose }: Props) {
     onSuccess: () => {
       message.success('面评已提交');
       form.resetFields();
+      setNotes('');
       onClose();
       void queryClient.invalidateQueries({ queryKey: ['candidate-detail'] });
       void queryClient.invalidateQueries({ queryKey: ['interviews'] });
@@ -50,6 +71,38 @@ export function EvaluationModal({ interviewId, onClose }: Props) {
       confirmLoading={submitMutation.isPending}
       destroyOnHidden
     >
+      <div
+        style={{
+          background: '#f6f8fa',
+          borderRadius: 8,
+          padding: '10px 12px',
+          marginBottom: 16,
+        }}
+      >
+        <Typography.Text strong style={{ fontSize: 13 }}>
+          <RobotOutlined /> 面试 Copilot
+        </Typography.Text>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+          粘贴面试记录/要点，AI 生成评分卡草稿（最终以你修改确认的为准；三期接入实时转写）
+        </Typography.Paragraph>
+        <Input.TextArea
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="如：候选人对高并发场景方案设计清晰，Redis 经验扎实，但分布式事务理解较浅…"
+        />
+        <Button
+          size="small"
+          icon={<RobotOutlined />}
+          style={{ marginTop: 8 }}
+          loading={draftMutation.isPending}
+          disabled={notes.trim().length < 10}
+          onClick={() => draftMutation.mutate()}
+        >
+          生成草稿
+        </Button>
+      </div>
+
       <Form form={form} layout="vertical" onFinish={(values) => submitMutation.mutate(values)}>
         {DEFAULT_DIMENSIONS.map((dimension) => (
           <Form.Item
@@ -70,7 +123,7 @@ export function EvaluationModal({ interviewId, onClose }: Props) {
           />
         </Form.Item>
         <Form.Item name="comments" label="评语">
-          <Input.TextArea rows={4} placeholder="优缺点、技术亮点、风险提示…（二期支持 AI 生成草稿）" />
+          <Input.TextArea rows={4} placeholder="优缺点、技术亮点、风险提示…" />
         </Form.Item>
       </Form>
     </Modal>

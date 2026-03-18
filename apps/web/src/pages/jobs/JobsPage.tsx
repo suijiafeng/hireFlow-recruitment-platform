@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
 import {
@@ -17,7 +17,7 @@ import {
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { departmentsApi, jobsApi, usersApi } from '../../api';
+import { aiApi, departmentsApi, jobsApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Job } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
@@ -62,6 +62,33 @@ export function JobsPage() {
     },
     onError: (error) => message.error(extractErrorMessage(error, '创建失败')),
   });
+
+  const generateJdMutation = useMutation({
+    mutationFn: aiApi.generateJd,
+    onSuccess: (draft) => {
+      form.setFieldsValue({ description: draft.description, requirement: draft.requirement });
+      message.success(
+        draft.aiMeta.provider === 'mock'
+          ? 'JD 草稿已生成（当前为规则引擎，配置 ANTHROPIC_API_KEY 后由大模型生成）'
+          : 'AI 已生成 JD 草稿，请检查修改',
+      );
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '生成失败')),
+  });
+
+  const handleGenerateJd = () => {
+    const title = (form.getFieldValue('title') as string | undefined)?.trim();
+    if (!title || title.length < 2) {
+      message.warning('请先填写职位名称，再让 AI 扩写 JD');
+      return;
+    }
+    const departmentId = form.getFieldValue('departmentId') as string | undefined;
+    generateJdMutation.mutate({
+      title,
+      departmentName: departmentsQuery.data?.find((d) => d.id === departmentId)?.name,
+      keywords: (form.getFieldValue('keywords') as string | undefined)?.trim() || undefined,
+    });
+  };
 
   return (
     <Card
@@ -172,8 +199,23 @@ export function JobsPage() {
           <Form.Item name="headcount" label="招聘人数（HC）">
             <InputNumber min={1} max={999} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="description" label="职位描述（JD）">
-            <Input.TextArea rows={4} placeholder="岗位职责与要求（二期支持 AI 生成）" />
+          <Form.Item name="keywords" label="核心诉求（供 AI 扩写用，可选）">
+            <Input placeholder='如："需要一个懂 React 和 Node.js 的三年经验前端"' />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 12 }}>
+            <Button
+              icon={<RobotOutlined />}
+              onClick={handleGenerateJd}
+              loading={generateJdMutation.isPending}
+            >
+              AI 生成 JD
+            </Button>
+          </Form.Item>
+          <Form.Item name="description" label="岗位职责（JD）">
+            <Input.TextArea rows={5} placeholder="可点击上方「AI 生成 JD」自动扩写，生成后可修改" />
+          </Form.Item>
+          <Form.Item name="requirement" label="任职要求">
+            <Input.TextArea rows={4} placeholder="任职要求（AI 生成后可修改）" />
           </Form.Item>
         </Form>
       </Modal>
