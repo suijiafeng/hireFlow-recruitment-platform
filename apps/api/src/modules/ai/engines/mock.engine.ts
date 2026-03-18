@@ -15,13 +15,13 @@ import type {
 const SKILL_ONTOLOGY: Array<{ pattern: RegExp; tag: string; implies?: string[] }> = [
   { pattern: /react/i, tag: 'React', implies: ['前端开发'] },
   { pattern: /vue/i, tag: 'Vue', implies: ['前端开发', 'JavaScript'] },
-  { pattern: /typescript|ts\b/i, tag: 'TypeScript' },
-  { pattern: /javascript|js\b/i, tag: 'JavaScript' },
+  { pattern: /typescript|\bts\b/i, tag: 'TypeScript' },
+  { pattern: /javascript|\bjs\b/i, tag: 'JavaScript' },
   { pattern: /node\.?js/i, tag: 'Node.js', implies: ['后端开发'] },
   { pattern: /nestjs|nest\.js/i, tag: 'NestJS', implies: ['Node.js', '后端开发'] },
   { pattern: /java\b/i, tag: 'Java', implies: ['后端开发'] },
   { pattern: /spring/i, tag: 'Spring', implies: ['Java'] },
-  { pattern: /go(lang)?\b/i, tag: 'Go', implies: ['后端开发'] },
+  { pattern: /\bgo(lang)?\b/i, tag: 'Go', implies: ['后端开发'] },
   { pattern: /python/i, tag: 'Python' },
   { pattern: /postgres|postgresql/i, tag: 'PostgreSQL', implies: ['数据库'] },
   { pattern: /mysql/i, tag: 'MySQL', implies: ['数据库'] },
@@ -40,7 +40,8 @@ const SKILL_ONTOLOGY: Array<{ pattern: RegExp; tag: string; implies?: string[] }
   { pattern: /数据分析/, tag: '数据分析' },
   { pattern: /用户研究|用研/, tag: '用户研究' },
   { pattern: /小程序/, tag: '小程序' },
-  { pattern: /ai|大模型|llm|机器学习/i, tag: 'AI/大模型' },
+  // 词边界必须写全：裸 ai/ts 会被 Email、reports 这类普通词误命中
+  { pattern: /\bai\b|大模型|\bllm\b|机器学习/i, tag: 'AI/大模型' },
 ];
 
 const POSITIVE_WORDS = /扎实|清晰|优秀|熟练|深入|出色|流畅|完整|亮眼|主导|独立|高效/g;
