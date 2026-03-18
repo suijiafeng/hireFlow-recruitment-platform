@@ -74,6 +74,7 @@ model User {
   createdJobs       Job[]                  @relation("JobCreatedBy")
   interviewSlots    InterviewInterviewer[]
   evaluations       Evaluation[]
+  notifications     Notification[]
 }
 
 model Role {
@@ -240,6 +241,20 @@ model Evaluation {
   createdAt     DateTime              @default(now())
 
   @@unique([interviewId, interviewerId])
+}
+
+// 站内通知（通知矩阵的站内信渠道；邮件/IM 通道后续接入）
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  link      String? // 前端路由，点击跳转
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
 }
 
 // 全流程操作日志：360° 时间轴 + 合规审计
