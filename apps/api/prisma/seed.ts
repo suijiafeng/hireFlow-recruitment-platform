@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import { hashSync } from 'bcryptjs';
 import {
+  ACTIVITY_ACTIONS,
   DEFAULT_PIPELINE_STAGES,
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_DEFS,
@@ -184,7 +185,7 @@ async function seedDemoData(techDeptId: string, productDeptId: string) {
         data: {
           actorId: hr.id,
           actorName: hr.name,
-          action: 'application.created',
+          action: ACTIVITY_ACTIONS.APPLICATION_CREATED,
           entityType: 'Application',
           entityId: application.id,
           payload: { candidate: c.name, job: job.title, stage: stage.name },
@@ -247,7 +248,7 @@ async function seedDemoData(techDeptId: string, productDeptId: string) {
     data: {
       actorId: interviewer.id,
       actorName: interviewer.name,
-      action: 'evaluation.submitted',
+      action: ACTIVITY_ACTIONS.EVALUATION_SUBMITTED,
       entityType: 'Application',
       entityId: zhangwei.id,
       payload: { candidate: '张伟', round: 1, conclusion: 'YES' },
