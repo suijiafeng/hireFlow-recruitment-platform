@@ -237,7 +237,7 @@ export class AnthropicAiEngine implements AiEngine {
   async funnelInsight(input: FunnelInput): Promise<string> {
     const { insight } = await this.completeJson<{ insight: string }>(
       '你是招聘数据分析师。根据漏斗数据给出 2-3 句中文诊断：指出异常/瓶颈环节（对比常见基准），并给出一条可操作建议。语气专业克制。',
-      `职位「${input.jobTitle}」当前漏斗（各阶段停留人数，从前到后）：${input.stages
+      `职位「${input.jobTitle}」当前漏斗（各阶段累计到达人数，快照口径，从前到后）：${input.stages
         .map((s) => `${s.name}=${s.count}`)
         .join('，')}`,
       INSIGHT_SCHEMA,
