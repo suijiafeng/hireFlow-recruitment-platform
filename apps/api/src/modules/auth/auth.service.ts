@@ -28,9 +28,7 @@ export class AuthService {
     }
 
     const roles = user.roles.map((ur) => ur.role.code);
-    const permissions = [
-      ...new Set(user.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.code))),
-    ];
+    const permissions = this.flattenPermissions(user.roles);
 
     const payload: JwtUser = {
       sub: user.id,
@@ -73,9 +71,13 @@ export class AuthService {
         name: ur.role.name,
         dataScope: ur.role.dataScope,
       })),
-      permissions: [
-        ...new Set(user.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.code))),
-      ],
+      permissions: this.flattenPermissions(user.roles),
     };
+  }
+
+  private flattenPermissions(
+    roles: Array<{ role: { permissions: Array<{ permission: { code: string } }> } }>,
+  ): string[] {
+    return [...new Set(roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.code)))];
   }
 }

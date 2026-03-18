@@ -149,10 +149,7 @@ export class ApplicationsService {
     if (!application) throw new NotFoundException('应聘记录不存在');
 
     const resume = application.candidate.resumes[0];
-    const resumeText =
-      resume?.rawText ??
-      (resume?.parsed ? JSON.stringify(resume.parsed) : '') ??
-      '';
+    const resumeText = resume?.rawText ?? (resume?.parsed ? JSON.stringify(resume.parsed) : '');
     if (!resumeText && application.candidate.tags.length === 0) {
       throw new BadRequestException('该候选人暂无简历或标签，无法评分，请先导入简历');
     }
