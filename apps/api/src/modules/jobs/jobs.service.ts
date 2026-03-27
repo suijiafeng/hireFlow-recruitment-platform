@@ -36,7 +36,32 @@ export class JobsService {
         take: pageSize,
       }),
     ]);
-    return { total, page, pageSize, items };
+    // HC 占用：已入职 + 已接受 Offer 的在途者
+    const usage = await this.prisma.application.groupBy({
+      by: ['jobId'],
+      where: {
+        jobId: { in: items.map((j) => j.id) },
+        OR: [{ status: 'HIRED' }, { status: 'ACTIVE', offer: { decision: 'ACCEPTED' } }],
+      },
+      _count: { _all: true },
+    });
+    const usageMap = new Map(usage.map((u) => [u.jobId, u._count._all]));
+    return {
+      total,
+      page,
+      pageSize,
+      items: items.map((job) => ({ ...job, hcUsed: usageMap.get(job.id) ?? 0 })),
+    };
+  }
+
+  /** HC 占用数：已入职 + 已接受 Offer 在途（预占/正式占用的简化口径） */
+  async hcUsed(jobId: string): Promise<number> {
+    return this.prisma.application.count({
+      where: {
+        jobId,
+        OR: [{ status: 'HIRED' }, { status: 'ACTIVE', offer: { decision: 'ACCEPTED' } }],
+      },
+    });
   }
 
   /** 创建职位并生成默认 Pipeline 阶段（骨架期直接置为 OPEN，审批流三期接入） */
