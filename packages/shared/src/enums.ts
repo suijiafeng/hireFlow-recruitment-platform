@@ -114,6 +114,19 @@ export const INTERVIEW_STATUS_LABEL: Record<InterviewStatus, string> = {
   [InterviewStatus.CANCELED]: '已取消',
 };
 
+export const OFFER_APPROVAL_STATUS_LABEL: Record<OfferApprovalStatus, string> = {
+  [OfferApprovalStatus.DRAFT]: '草稿',
+  [OfferApprovalStatus.PENDING]: '待审批',
+  [OfferApprovalStatus.APPROVED]: '已批准',
+  [OfferApprovalStatus.REJECTED]: '已驳回',
+  [OfferApprovalStatus.SENT]: '已发送',
+};
+
+export const OFFER_DECISION_LABEL: Record<OfferDecision, string> = {
+  [OfferDecision.ACCEPTED]: '已接受',
+  [OfferDecision.DECLINED]: '已拒绝',
+};
+
 export const ROLE_LABEL: Record<RoleCode, string> = {
   [RoleCode.ADMIN]: '系统管理员',
   [RoleCode.HR]: 'HR / 招聘专员',

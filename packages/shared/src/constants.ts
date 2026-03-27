@@ -22,6 +22,27 @@ export const ACTIVITY_ACTIONS = {
   APPLICATION_STAGE_CHANGED: 'application.stage_changed',
   INTERVIEW_SCHEDULED: 'interview.scheduled',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
+  OFFER_INITIATED: 'offer.initiated',
+  OFFER_APPROVED: 'offer.approved',
+  OFFER_REJECTED: 'offer.rejected',
+  OFFER_SENT: 'offer.sent',
+  OFFER_RESPONDED: 'offer.responded',
+  APPLICATION_REJECTED: 'application.rejected',
+  APPLICATION_STAGE_REVERTED: 'application.stage_reverted',
 } as const;
+
+/** 淘汰/撤回原因码（原因码强制，供漏斗分析与人才库回流） */
+export const REJECT_REASONS = [
+  '技能不符',
+  '经验不足',
+  '薪资不匹配',
+  '文化适配度低',
+  '沟通表达欠佳',
+  '稳定性存疑',
+  '候选人失联',
+  '接受了其他机会',
+  '岗位关闭',
+  '其他',
+] as const;
 
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[keyof typeof ACTIVITY_ACTIONS];
