@@ -3,6 +3,7 @@ import { ACTIVITY_ACTIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
 import { SubmitEvaluationDto } from './dto/submit-evaluation.dto';
@@ -18,6 +19,7 @@ export class InterviewsService {
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
     private readonly ai: AiService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** 安排一场面试并指派面试官（二期接入日历协同后自动生成会议链接） */
@@ -51,6 +53,13 @@ export class InterviewsService {
         scheduledAt: dto.scheduledAt ?? null,
         interviewers: interview.interviewers.map((i) => i.user.name),
       },
+    );
+    // 通知矩阵：面试确认 → 面试官（日历/IM 通道后续接入）
+    await this.notifications.push(
+      dto.interviewerIds,
+      `新面试指派：${application.candidate.name}（第 ${dto.round} 轮）`,
+      `${application.job.title}${dto.scheduledAt ? ` · ${new Date(dto.scheduledAt).toLocaleString('zh-CN')}` : ' · 时间待定'}`,
+      '/interviews',
     );
     return interview;
   }
