@@ -2,6 +2,7 @@ import type { AuthUser } from '../stores/auth';
 import { http } from './client';
 import type {
   AnalyticsOverview,
+  NotificationItem,
   BoardCard,
   BoardData,
   Candidate,
@@ -64,6 +65,21 @@ export const resumesApi = {
 export const aiApi = {
   generateJd: (data: { title: string; departmentName?: string; keywords?: string }) =>
     http.post<JdDraft>('/ai/generate-jd', data).then((r) => r.data),
+};
+
+export const notificationsApi = {
+  list: () =>
+    http
+      .get<{ items: NotificationItem[]; unread: number }>('/notifications')
+      .then((r) => r.data),
+  markRead: (id: string) =>
+    http
+      .patch<{ items: NotificationItem[]; unread: number }>(`/notifications/${id}/read`)
+      .then((r) => r.data),
+  markAllRead: () =>
+    http
+      .patch<{ items: NotificationItem[]; unread: number }>('/notifications/read-all')
+      .then((r) => r.data),
 };
 
 export const analyticsApi = {

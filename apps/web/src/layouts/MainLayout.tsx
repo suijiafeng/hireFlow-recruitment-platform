@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
+import { NotificationBell } from '../components/NotificationBell';
 import { useAuthStore } from '../stores/auth';
 
 const { Header, Sider, Content } = Layout;
@@ -67,8 +68,10 @@ export function MainLayout() {
             justifyContent: 'flex-end',
             height: 56,
             boxShadow: '0 1px 4px rgba(0,21,41,.08)',
+            gap: 16,
           }}
         >
+          <NotificationBell />
           <Dropdown
             menu={{
               items: [

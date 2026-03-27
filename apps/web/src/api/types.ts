@@ -151,6 +151,15 @@ export interface FunnelData {
   stages: FunnelStage[];
 }
 
+export interface NotificationItem {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
 export interface AnalyticsOverview {
   openJobs: number;
   candidates: number;
