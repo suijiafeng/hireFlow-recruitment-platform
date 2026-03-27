@@ -59,6 +59,21 @@ export interface FunnelInput {
   stages: Array<{ name: string; count: number }>;
 }
 
+export interface RetentionInput {
+  candidateName: string;
+  jobTitle: string;
+  tags: string[];
+  matchScore?: number | null;
+  summary?: string;
+}
+
+/** 留存预测（辅助参考，不做唯一依据） */
+export interface RetentionHint {
+  /** 0-1 的试用期留存概率 */
+  probability: number;
+  factors: string[];
+}
+
 /**
  * AI 能力引擎（模型可插拔）：
  * 同一接口下可切换真实 LLM（Anthropic）与确定性 Mock（无 key 时全链路可用）。
@@ -70,4 +85,5 @@ export interface AiEngine {
   scoreMatch(input: MatchInput): Promise<MatchResult>;
   draftEvaluation(input: EvaluationDraftInput): Promise<EvaluationDraft>;
   funnelInsight(input: FunnelInput): Promise<string>;
+  predictRetention(input: RetentionInput): Promise<RetentionHint>;
 }

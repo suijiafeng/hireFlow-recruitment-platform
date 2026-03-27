@@ -11,6 +11,8 @@ import type {
   MatchInput,
   MatchResult,
   ParsedResume,
+  RetentionHint,
+  RetentionInput,
 } from './ai-engine.interface';
 
 const JD_SCHEMA = {
@@ -98,6 +100,16 @@ const EVALUATION_DRAFT_SCHEMA = {
     comments: { type: 'string', description: '综合评语草稿，100 字左右，客观中立' },
   },
   required: ['scorecard', 'conclusion', 'comments'],
+  additionalProperties: false,
+} as const;
+
+const RETENTION_SCHEMA = {
+  type: 'object',
+  properties: {
+    probability: { type: 'number', description: '0-1 之间的试用期留存概率估计' },
+    factors: { type: 'array', items: { type: 'string' }, description: '2-4 条影响因素说明' },
+  },
+  required: ['probability', 'factors'],
   additionalProperties: false,
 } as const;
 
@@ -232,6 +244,29 @@ export class AnthropicAiEngine implements AiEngine {
       .filter((s) => ['技术能力', '工程素养', '沟通协作'].includes(s.dimension))
       .map((s) => ({ ...s, score: Math.max(1, Math.min(5, Math.round(s.score))) }));
     return draft;
+  }
+
+  async predictRetention(input: RetentionInput): Promise<RetentionHint> {
+    const result = await this.completeJson<RetentionHint>(
+      [
+        '你是招聘数据分析师。基于候选人画像估计其入职后通过试用期并留存的概率（0-1）。',
+        '这只是辅助参考：概率保持保守（0.5-0.95 区间），并给出 2-4 条可解释的影响因素。',
+        '最后一条因素固定为提醒：仅作辅助参考，录用决策以人工判断为准。',
+      ].join('\n'),
+      [
+        `候选人：${input.candidateName}`,
+        `目标职位：${input.jobTitle}`,
+        `技能标签：${input.tags.join('、') || '（无）'}`,
+        input.matchScore != null ? `岗位匹配度：${input.matchScore}/100` : '',
+        input.summary ? `画像摘要：${input.summary}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      RETENTION_SCHEMA,
+      2048,
+    );
+    result.probability = Math.max(0, Math.min(1, result.probability));
+    return result;
   }
 
   async funnelInsight(input: FunnelInput): Promise<string> {

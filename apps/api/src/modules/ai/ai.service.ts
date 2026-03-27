@@ -6,6 +6,7 @@ import type {
   FunnelInput,
   JdInput,
   MatchInput,
+  RetentionInput,
 } from './engines/ai-engine.interface';
 import { AnthropicAiEngine } from './engines/anthropic.engine';
 import { MockAiEngine } from './engines/mock.engine';
@@ -75,5 +76,9 @@ export class AiService {
 
   funnelInsight(input: FunnelInput) {
     return this.run((e) => e.funnelInsight(input));
+  }
+
+  predictRetention(input: RetentionInput) {
+    return this.run((e) => e.predictRetention(input));
   }
 }

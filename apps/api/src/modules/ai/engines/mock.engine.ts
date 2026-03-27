@@ -9,6 +9,8 @@ import type {
   MatchInput,
   MatchResult,
   ParsedResume,
+  RetentionHint,
+  RetentionInput,
 } from './ai-engine.interface';
 
 /** 技能本体（极简版 Skill Ontology）：关键词 → 标准标签 + 语义推导标签 */
@@ -182,6 +184,30 @@ export class MockAiEngine implements AiEngine {
       conclusion,
       comments: `【AI 草稿·请修改确认】第 ${input.round} 轮面试（${input.jobTitle}）记录要点：${excerpt}${input.notes.length > 80 ? '…' : ''}`,
     };
+  }
+
+  async predictRetention(input: RetentionInput): Promise<RetentionHint> {
+    let probability = 0.7;
+    const factors: string[] = [];
+    if ((input.matchScore ?? 0) >= 85) {
+      probability += 0.1;
+      factors.push('岗位匹配度高（≥85），入职后适配成本低');
+    } else if ((input.matchScore ?? 0) > 0 && (input.matchScore ?? 0) < 60) {
+      probability -= 0.1;
+      factors.push('岗位匹配度偏低，可能存在适配风险');
+    }
+    if (input.tags.some((t) => /带团队|架构|分布式|高并发/.test(t))) {
+      probability += 0.05;
+      factors.push('具备进阶能力标签，职业发展空间充足');
+    }
+    if (input.tags.length <= 2) {
+      probability -= 0.05;
+      factors.push('画像信息较少，建议入职后加强导师辅导');
+    }
+    probability = Math.max(0.5, Math.min(0.95, probability));
+    if (factors.length === 0) factors.push('画像常规，无显著风险信号');
+    factors.push('（规则引擎估算，仅作辅助参考，录用决策以人工判断为准）');
+    return { probability: Math.round(probability * 100) / 100, factors };
   }
 
   async funnelInsight(input: FunnelInput): Promise<string> {
