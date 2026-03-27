@@ -174,7 +174,39 @@ export interface BoardCard {
   position: number;
   createdAt: string;
   stageId: string;
+  stageEnteredAt: string;
+  version: number;
   candidate: { id: string; name: string; tags: string[]; source: string | null };
+}
+
+export interface OfferSalary {
+  base: number;
+  bonusMonths: number;
+  note?: string | null;
+}
+
+export interface Offer {
+  id: string;
+  salary: OfferSalary | null;
+  grade: string | null;
+  approvalStatus: string;
+  decision: string | null;
+  sentAt: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  application: {
+    id: string;
+    stageId: string;
+    candidate: { id: string; name: string; tags: string[] };
+    job: { id: string; title: string; department: { name: string } };
+  };
+}
+
+export interface RetentionHint {
+  probability: number;
+  factors: string[];
+  aiMeta?: AiMeta;
 }
 
 export interface BoardColumn {

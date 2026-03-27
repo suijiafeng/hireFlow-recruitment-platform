@@ -13,8 +13,10 @@ import type {
   Interview,
   JdDraft,
   Job,
+  Offer,
   Paginated,
   Resume,
+  RetentionHint,
   UserBrief,
 } from './types';
 
@@ -65,6 +67,25 @@ export const resumesApi = {
 export const aiApi = {
   generateJd: (data: { title: string; departmentName?: string; keywords?: string }) =>
     http.post<JdDraft>('/ai/generate-jd', data).then((r) => r.data),
+};
+
+export const offersApi = {
+  list: () => http.get<Offer[]>('/offers').then((r) => r.data),
+  create: (data: {
+    applicationId: string;
+    salaryBase: number;
+    bonusMonths?: number;
+    grade?: string;
+    note?: string;
+  }) => http.post<Offer>('/offers', data).then((r) => r.data),
+  approve: (id: string, note?: string) =>
+    http.post<Offer>(`/offers/${id}/approve`, { note }).then((r) => r.data),
+  reject: (id: string, note?: string) =>
+    http.post<Offer>(`/offers/${id}/reject`, { note }).then((r) => r.data),
+  send: (id: string) => http.post<Offer>(`/offers/${id}/send`).then((r) => r.data),
+  respond: (id: string, decision: 'ACCEPTED' | 'DECLINED') =>
+    http.post<Offer>(`/offers/${id}/respond`, { decision }).then((r) => r.data),
+  retention: (id: string) => http.post<RetentionHint>(`/offers/${id}/retention`).then((r) => r.data),
 };
 
 export const notificationsApi = {
