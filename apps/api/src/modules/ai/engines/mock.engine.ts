@@ -98,7 +98,7 @@ export class MockAiEngine implements AiEngine {
     const years = yearsMatch?.[1];
 
     const educations: ParsedResume['educations'] = [];
-    const schoolMatch = rawText.match(/([一-龥]{2,12}(?:大学|学院))/);
+    const schoolMatch = rawText.match(/([^\s，。、于毕就读]{2,12}(?:大学|学院))/);
     if (schoolMatch) {
       const degree = rawText.match(/(博士|硕士|研究生|本科|大专)/)?.[1];
       educations.push({ school: schoolMatch[1], ...(degree ? { degree } : {}) });
