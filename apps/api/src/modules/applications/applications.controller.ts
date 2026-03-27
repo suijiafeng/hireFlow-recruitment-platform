@@ -5,7 +5,7 @@ import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
-import { MoveStageDto } from './dto/move-stage.dto';
+import { MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
 
 @ApiTags('applications')
 @ApiBearerAuth()
@@ -39,5 +39,12 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'AI 岗位匹配度评分（可解释报告回写）' })
   score(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.applicationsService.score(id, user);
+  }
+
+  @Post('applications/:id/reject')
+  @RequirePermissions(PERMISSIONS.APPLICATION_MOVE)
+  @ApiOperation({ summary: '淘汰候选人（原因码强制，终态不可逆）' })
+  reject(@Param('id') id: string, @Body() dto: RejectApplicationDto, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.reject(id, dto, user);
   }
 }

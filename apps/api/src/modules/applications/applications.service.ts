@@ -6,7 +6,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
-import { MoveStageDto } from './dto/move-stage.dto';
+import { MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
 
 const CARD_SELECT = {
   id: true,
@@ -153,6 +153,56 @@ export class ApplicationsService {
       );
     }
     return updated;
+  }
+
+  /** 淘汰：原因码强制，终态 + 留痕（感谢信通道接入后在此触发延迟发送） */
+  async reject(id: string, dto: RejectApplicationDto, user: JwtUser) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+    });
+    if (!application) throw new NotFoundException('应聘记录不存在');
+    if (application.status !== 'ACTIVE') throw new BadRequestException('该应聘已不在流程中');
+
+    const updated = await this.prisma.application.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectReason: dto.reason,
+        version: { increment: 1 },
+      },
+      select: { ...CARD_SELECT, rejectReason: true },
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.APPLICATION_REJECTED, 'Application', id, {
+      candidate: application.candidate.name,
+      job: application.job.title,
+      reason: dto.reason,
+      note: dto.note ?? null,
+    });
+    return updated;
+  }
+
+  /** 按阶段名称自动移卡（自动化工作流用：Offer 接受→待入职、合同签署→已入职）；阶段不存在则跳过 */
+  async moveToStageByName(applicationId: string, stageName: string, user: JwtUser) {
+    const application = await this.prisma.application.findUniqueOrThrow({
+      where: { id: applicationId },
+      include: { stage: true, candidate: { select: { name: true } } },
+    });
+    const target = await this.prisma.pipelineStage.findFirst({
+      where: { jobId: application.jobId, name: stageName },
+    });
+    if (!target || target.id === application.stageId) return;
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: { stageId: target.id, position: await this.nextPosition(target.id) },
+    });
+    await this.activityLog.record(
+      user,
+      ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED,
+      'Application',
+      applicationId,
+      { candidate: application.candidate.name, from: application.stage.name, to: stageName, auto: true },
+    );
   }
 
   /**
