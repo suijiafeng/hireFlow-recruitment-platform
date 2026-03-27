@@ -50,6 +50,19 @@ enum InterviewStatus {
   CANCELED
 }
 
+enum OfferApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  SENT
+}
+
+enum OfferDecision {
+  ACCEPTED
+  DECLINED
+}
+
 enum EvaluationConclusion {
   STRONG_YES
   YES
@@ -190,13 +203,17 @@ model Application {
   job         Job               @relation(fields: [jobId], references: [id])
   stageId     String
   stage       PipelineStage     @relation(fields: [stageId], references: [id])
-  status      ApplicationStatus @default(ACTIVE)
-  matchScore  Int? // AI 匹配度分数（二期）
-  matchReport Json? // 打分依据（二期）
-  position    Float             @default(0) // 看板列内排序
-  interviews  Interview[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  status         ApplicationStatus @default(ACTIVE)
+  matchScore     Int? // AI 匹配度分数（二期）
+  matchReport    Json? // 打分依据（二期）
+  position       Float             @default(0) // 看板列内排序
+  stageEnteredAt DateTime          @default(now()) // 进入当前阶段时间（停留时长/SLA）
+  version        Int               @default(0) // 乐观锁：并发拖卡冲突检测
+  rejectReason   String? // 淘汰/撤回原因码（原因码强制）
+  interviews     Interview[]
+  offer          Offer?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@unique([candidateId, jobId])
   @@index([jobId, stageId])
@@ -241,6 +258,20 @@ model Evaluation {
   createdAt     DateTime              @default(now())
 
   @@unique([interviewId, interviewerId])
+}
+
+model Offer {
+  id             String              @id @default(cuid())
+  applicationId  String              @unique
+  application    Application         @relation(fields: [applicationId], references: [id])
+  salary         Json? // 敏感字段：薪资结构（RBAC salary:view 控制）
+  grade          String?
+  approvalStatus OfferApprovalStatus @default(DRAFT)
+  sentAt         DateTime?
+  respondedAt    DateTime?
+  decision       OfferDecision?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 }
 
 // 站内通知（通知矩阵的站内信渠道；邮件/IM 通道后续接入）
