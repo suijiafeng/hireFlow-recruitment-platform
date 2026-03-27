@@ -15,6 +15,8 @@ const CARD_SELECT = {
   position: true,
   createdAt: true,
   stageId: true,
+  stageEnteredAt: true,
+  version: true,
   candidate: { select: { id: true, name: true, tags: true, source: true } },
 } as const;
 
@@ -97,17 +99,30 @@ export class ApplicationsService {
     };
   }
 
-  /** 移动看板卡片 = 变更应聘阶段，并写入留痕 */
+  /**
+   * 移动看板卡片 = 变更应聘阶段（状态迁移规则）：
+   * 终态不可移动；回退必填原因；乐观锁防并发；stageEnteredAt 重置支撑停留时长统计。
+   */
   async moveStage(id: string, dto: MoveStageDto, user: JwtUser) {
     const application = await this.prisma.application.findUnique({
       where: { id },
       include: { stage: true, candidate: { select: { name: true } } },
     });
     if (!application) throw new NotFoundException('应聘记录不存在');
+    if (application.status !== 'ACTIVE') {
+      throw new BadRequestException('已淘汰/已入职的应聘记录不可再流转（终态不可逆，可重新激活生成新应聘）');
+    }
+    if (dto.expectedVersion != null && dto.expectedVersion !== application.version) {
+      throw new ConflictException('该卡片刚被他人移动过，看板已刷新，请确认后重试');
+    }
 
     const targetStage = await this.prisma.pipelineStage.findUnique({ where: { id: dto.stageId } });
     if (!targetStage || targetStage.jobId !== application.jobId) {
       throw new BadRequestException('目标阶段不属于该职位');
+    }
+    const isBackward = targetStage.order < application.stage.order;
+    if (isBackward && !dto.reason?.trim()) {
+      throw new BadRequestException('回退阶段必须填写原因（受控回退）');
     }
 
     const updated = await this.prisma.application.update({
@@ -115,6 +130,8 @@ export class ApplicationsService {
       data: {
         stageId: targetStage.id,
         position: dto.position ?? (await this.nextPosition(targetStage.id)),
+        stageEnteredAt: new Date(),
+        version: { increment: 1 },
       },
       select: CARD_SELECT,
     });
@@ -122,13 +139,16 @@ export class ApplicationsService {
     if (targetStage.id !== application.stageId) {
       await this.activityLog.record(
         user,
-        ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED,
+        isBackward
+          ? ACTIVITY_ACTIONS.APPLICATION_STAGE_REVERTED
+          : ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED,
         'Application',
         id,
         {
           candidate: application.candidate.name,
           from: application.stage.name,
           to: targetStage.name,
+          ...(isBackward ? { reason: dto.reason } : {}),
         },
       );
     }
