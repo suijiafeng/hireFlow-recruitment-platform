@@ -14,6 +14,7 @@ import { DepartmentsModule } from './modules/departments/departments.module';
 import { InterviewsModule } from './modules/interviews/interviews.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { OffersModule } from './modules/offers/offers.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -34,6 +35,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ApplicationsModule,
     InterviewsModule,
     AnalyticsModule,
+    OffersModule,
   ],
   controllers: [AppController],
   providers: [
