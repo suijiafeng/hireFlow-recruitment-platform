@@ -18,7 +18,19 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        token: {
+          borderRadius: 8,
+          colorBgLayout: '#eef1f6',
+        },
+        components: {
+          Layout: { headerBg: '#ffffff', siderBg: '#0d1b3e' },
+          Menu: { darkItemBg: '#0d1b3e', darkSubMenuItemBg: '#0a1633' },
+        },
+      }}
+    >
       <AntApp>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
