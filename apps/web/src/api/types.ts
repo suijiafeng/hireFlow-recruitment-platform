@@ -206,7 +206,59 @@ export interface Offer {
 export interface RetentionHint {
   probability: number;
   factors: string[];
-  aiMeta?: AiMeta;
+  aiMeta: AiMeta;
+}
+
+export interface ChecklistItem {
+  key: string;
+  label: string;
+  owner: 'HR' | 'IT' | 'NEW_HIRE';
+  done: boolean;
+  doneAt: string | null;
+}
+
+export interface OnboardingDocument {
+  type: string;
+  label: string;
+  fields: Record<string, string>;
+  addedAt: string;
+  ocrProvider: string;
+}
+
+export interface Contract {
+  id: string;
+  templateName: string | null;
+  variables: Record<string, unknown> | null;
+  signStatus: string;
+  evidenceNo: string | null;
+}
+
+export interface Onboarding {
+  id: string;
+  status: string;
+  checklist: ChecklistItem[];
+  documents: OnboardingDocument[] | null;
+  contract: Contract | null;
+  progress: { done: number; total: number };
+  createdAt: string;
+  application: {
+    id: string;
+    candidate: { id: string; name: string; phone: string | null; email: string | null };
+    job: { id: string; title: string; department: { name: string } };
+  };
+}
+
+export interface HelpdeskAnswer {
+  answer: string;
+  sources: Array<{ id: string; title: string }>;
+  aiMeta: AiMeta;
+}
+
+export interface TodoSummary {
+  newResumes: number;
+  myPendingEvaluations: number;
+  pendingOffers: number | null;
+  onboardingInProgress: number;
 }
 
 export interface BoardColumn {

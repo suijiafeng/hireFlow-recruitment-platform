@@ -10,13 +10,16 @@ import type {
   Department,
   EvaluationDraft,
   FunnelData,
+  HelpdeskAnswer,
   Interview,
   JdDraft,
   Job,
   Offer,
+  Onboarding,
   Paginated,
   Resume,
   RetentionHint,
+  TodoSummary,
   UserBrief,
 } from './types';
 
@@ -107,8 +110,32 @@ export const notificationsApi = {
       .then((r) => r.data),
 };
 
+export const onboardingApi = {
+  list: () => http.get<Onboarding[]>('/onboardings').then((r) => r.data),
+  get: (id: string) => http.get<Onboarding>(`/onboardings/${id}`).then((r) => r.data),
+  toggle: (id: string, key: string, done: boolean) =>
+    http.patch<Onboarding>(`/onboardings/${id}/checklist/${key}`, { done }).then((r) => r.data),
+  addDocument: (id: string, data: { type: string; rawText: string }) =>
+    http.post<Onboarding>(`/onboardings/${id}/documents`, data).then((r) => r.data),
+  createContract: (id: string) =>
+    http.post<Onboarding>(`/onboardings/${id}/contract`).then((r) => r.data),
+  sendContract: (contractId: string) =>
+    http.post<Onboarding>(`/contracts/${contractId}/send`).then((r) => r.data),
+  signContract: (contractId: string) =>
+    http.post<Onboarding>(`/contracts/${contractId}/sign`).then((r) => r.data),
+};
+
+export const helpdeskApi = {
+  ask: (question: string) => http.post<HelpdeskAnswer>('/helpdesk/ask', { question }).then((r) => r.data),
+  docs: () =>
+    http
+      .get<Array<{ id: string; title: string; tags: string[] }>>('/helpdesk/docs')
+      .then((r) => r.data),
+};
+
 export const analyticsApi = {
   overview: () => http.get<AnalyticsOverview>('/analytics/overview').then((r) => r.data),
+  todos: () => http.get<TodoSummary>('/analytics/todos').then((r) => r.data),
   funnel: (jobId: string) => http.get<FunnelData>(`/analytics/funnel/${jobId}`).then((r) => r.data),
   insight: (jobId: string) =>
     http.post<{ insight: string; aiMeta: { provider: string } }>(`/analytics/insight/${jobId}`).then((r) => r.data),
