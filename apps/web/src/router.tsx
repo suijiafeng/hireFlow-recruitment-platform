@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { InterviewsPage } from './pages/interviews/InterviewsPage';
 import { JobsPage } from './pages/jobs/JobsPage';
 import { LoginPage } from './pages/Login';
+import { OffersPage } from './pages/offers/OffersPage';
 import { PipelinePage } from './pages/pipeline/PipelinePage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: 'candidates', element: <CandidatesPage /> },
       { path: 'pipeline', element: <PipelinePage /> },
       { path: 'interviews', element: <InterviewsPage /> },
+      { path: 'offers', element: <OffersPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },
