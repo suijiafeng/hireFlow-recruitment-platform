@@ -40,8 +40,12 @@ export const jobsApi = {
 
 export const boardApi = {
   get: (jobId: string) => http.get<BoardData>(`/jobs/${jobId}/board`).then((r) => r.data),
-  moveCard: (applicationId: string, stageId: string) =>
-    http.patch<BoardCard>(`/applications/${applicationId}/stage`, { stageId }).then((r) => r.data),
+  moveCard: (
+    applicationId: string,
+    data: { stageId: string; reason?: string; expectedVersion?: number },
+  ) => http.patch<BoardCard>(`/applications/${applicationId}/stage`, data).then((r) => r.data),
+  reject: (applicationId: string, data: { reason: string; note?: string }) =>
+    http.post<BoardCard>(`/applications/${applicationId}/reject`, data).then((r) => r.data),
 };
 
 export const candidatesApi = {

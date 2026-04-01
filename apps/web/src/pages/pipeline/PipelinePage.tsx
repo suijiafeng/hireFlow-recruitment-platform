@@ -1,15 +1,19 @@
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PERMISSIONS } from '@hireflow/shared';
-import { App, Badge, Card, Empty, Select, Space, Spin, Tag, Typography } from 'antd';
+import { PERMISSIONS, STAGE_STAY_SLA } from '@hireflow/shared';
+import { App, Badge, Card, Empty, Form, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd';
+import type { AxiosError } from 'axios';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -42,6 +46,56 @@ function scoreColor(score: number): string {
   return 'default';
 }
 
+/** 阶段停留时长：超 3 天标黄、超 7 天标红 */
+function StayTag({ card }: { card: BoardCard }) {
+  const days = dayjs().diff(dayjs(card.stageEnteredAt), 'day');
+  if (days <= 0) return null;
+  const color = days > STAGE_STAY_SLA.dangerDays ? 'red' : days > STAGE_STAY_SLA.warnDays ? 'gold' : 'default';
+  return (
+    <Tag color={color} style={{ fontSize: 11, marginInlineEnd: 0 }}>
+      停留 {days} 天
+    </Tag>
+  );
+}
+
+/** 卡片纯视图：列表与 DragOverlay 复用同一渲染，保证拖拽跟手且不被列容器裁剪 */
+function CardView({ card, overlay = false }: { card: BoardCard; overlay?: boolean }) {
+  return (
+    <Card
+      size="small"
+      style={{
+        marginBottom: 8,
+        boxShadow: overlay ? '0 8px 24px rgba(15,30,70,0.18)' : undefined,
+        cursor: overlay ? 'grabbing' : undefined,
+      }}
+      styles={{ body: { padding: '8px 12px' } }}
+    >
+      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+        <Typography.Text strong>{card.candidate.name}</Typography.Text>
+        <Space size={4}>
+          {card.matchScore != null && (
+            <Tag color={scoreColor(card.matchScore)} style={{ marginInlineEnd: 0 }}>
+              匹配 {card.matchScore}
+            </Tag>
+          )}
+          <StayTag card={card} />
+        </Space>
+      </Space>
+      <div style={{ margin: '6px 0' }}>
+        {card.candidate.tags.slice(0, 3).map((tag) => (
+          <Tag key={tag} style={{ fontSize: 11 }}>
+            {tag}
+          </Tag>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: '#999', display: 'flex', justifyContent: 'space-between' }}>
+        <span>{card.candidate.source ?? '未知来源'}</span>
+        <span>{dayjs(card.createdAt).format('MM-DD')}</span>
+      </div>
+    </Card>
+  );
+}
+
 function DraggableCard({
   card,
   disabled,
@@ -51,48 +105,23 @@ function DraggableCard({
   disabled: boolean;
   onOpen: (candidateId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: card.id,
-    disabled,
-  });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id, disabled });
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       onClick={() => {
-        // PointerSensor 设置了 4px 启动阈值，纯点击不会触发拖拽
+        // PointerSensor 有 4px 启动阈值，纯点击不会触发拖拽
         if (!isDragging) onOpen(card.candidate.id);
       }}
       style={{
-        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-        opacity: isDragging ? 0.85 : 1,
-        zIndex: isDragging ? 100 : undefined,
-        position: 'relative',
+        // 拖拽由 DragOverlay 渲染跟手浮层；原卡片仅降透明度占位（修复裁剪/异常位移）
+        opacity: isDragging ? 0.3 : 1,
         cursor: disabled ? 'pointer' : 'grab',
       }}
     >
-      <Card size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: '8px 12px' } }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Typography.Text strong>{card.candidate.name}</Typography.Text>
-          {card.matchScore != null && (
-            <Tag color={scoreColor(card.matchScore)} style={{ marginInlineEnd: 0 }}>
-              匹配 {card.matchScore}
-            </Tag>
-          )}
-        </Space>
-        <div style={{ margin: '6px 0' }}>
-          {card.candidate.tags.slice(0, 3).map((tag) => (
-            <Tag key={tag} style={{ fontSize: 11 }}>
-              {tag}
-            </Tag>
-          ))}
-        </div>
-        <div style={{ fontSize: 11, color: '#999', display: 'flex', justifyContent: 'space-between' }}>
-          <span>{card.candidate.source ?? '未知来源'}</span>
-          <span>{dayjs(card.createdAt).format('MM-DD')}</span>
-        </div>
-      </Card>
+      <CardView card={card} />
     </div>
   );
 }
@@ -115,19 +144,21 @@ function BoardColumnView({
       style={{
         width: 272,
         flexShrink: 0,
-        background: isOver ? '#e6f4ff' : '#f5f5f5',
-        borderRadius: 8,
+        background: isOver ? '#dfeeff' : '#f0f2f7',
+        outline: isOver ? '2px dashed #2a78d6' : 'none',
+        outlineOffset: -2,
+        borderRadius: 10,
         padding: 8,
         transition: 'background .15s',
         display: 'flex',
         flexDirection: 'column',
-        maxHeight: 'calc(100vh - 220px)',
+        maxHeight: 'calc(100vh - 230px)',
       }}
     >
       <div style={{ padding: '4px 4px 10px', fontWeight: 600 }}>
         {stage.name} <Badge count={cards.length} color="#8c8c8c" style={{ marginLeft: 4 }} />
       </div>
-      <div style={{ overflowY: 'auto', flex: 1 }}>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 60 }}>
         {cards.map((card) => (
           <DraggableCard key={card.id} card={card} disabled={dragDisabled} onOpen={onOpen} />
         ))}
@@ -141,6 +172,15 @@ function BoardColumnView({
   );
 }
 
+interface PendingMove {
+  applicationId: string;
+  stageId: string;
+  expectedVersion: number;
+  candidateName: string;
+  fromStage: string;
+  toStage: string;
+}
+
 export function PipelinePage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -148,13 +188,15 @@ export function PipelinePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const jobId = searchParams.get('jobId') ?? '';
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [activeCard, setActiveCard] = useState<BoardCard | null>(null);
+  const [pendingRevert, setPendingRevert] = useState<PendingMove | null>(null);
+  const [revertForm] = Form.useForm();
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'options'],
     queryFn: () => jobsApi.list({ page: 1, pageSize: 100 }),
   });
 
-  // 未指定职位时默认选中第一个
   useEffect(() => {
     if (!jobId && jobsQuery.data?.items.length) {
       setSearchParams({ jobId: jobsQuery.data.items[0].id }, { replace: true });
@@ -168,8 +210,17 @@ export function PipelinePage() {
   });
 
   const moveMutation = useMutation({
-    mutationFn: (vars: { applicationId: string; stageId: string }) =>
-      boardApi.moveCard(vars.applicationId, vars.stageId),
+    mutationFn: (vars: {
+      applicationId: string;
+      stageId: string;
+      reason?: string;
+      expectedVersion?: number;
+    }) =>
+      boardApi.moveCard(vars.applicationId, {
+        stageId: vars.stageId,
+        reason: vars.reason,
+        expectedVersion: vars.expectedVersion,
+      }),
     onMutate: async ({ applicationId, stageId }) => {
       await queryClient.cancelQueries({ queryKey: ['board', jobId] });
       const previous = queryClient.getQueryData<BoardData>(['board', jobId]);
@@ -180,7 +231,12 @@ export function PipelinePage() {
     },
     onError: (error, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(['board', jobId], context.previous);
-      message.error(extractErrorMessage(error, '移动卡片失败'));
+      const status = (error as AxiosError)?.response?.status;
+      if (status === 409) {
+        message.warning('该卡片刚被他人移动，看板已自动刷新');
+      } else {
+        message.error(extractErrorMessage(error, '移动卡片失败'));
+      }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['board', jobId] }),
   });
@@ -188,16 +244,39 @@ export function PipelinePage() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const canMove = hasPermission(PERMISSIONS.APPLICATION_MOVE);
 
+  const findCard = (id: string) =>
+    boardQuery.data?.columns.flatMap((c) => c.applications).find((a) => a.id === id);
+
+  const onDragStart = (event: DragStartEvent) => {
+    setActiveCard(findCard(String(event.active.id)) ?? null);
+  };
+
   const onDragEnd = (event: DragEndEvent) => {
+    setActiveCard(null);
     const { active, over } = event;
-    if (!over) return;
+    if (!over || !boardQuery.data) return;
     const applicationId = String(active.id);
     const targetStageId = String(over.id);
-    const card = boardQuery.data?.columns
-      .flatMap((c) => c.applications)
-      .find((a) => a.id === applicationId);
+    const card = findCard(applicationId);
     if (!card || card.stageId === targetStageId) return;
-    moveMutation.mutate({ applicationId, stageId: targetStageId });
+
+    const fromCol = boardQuery.data.columns.find((c) => c.stage.id === card.stageId);
+    const toCol = boardQuery.data.columns.find((c) => c.stage.id === targetStageId);
+    if (!fromCol || !toCol) return;
+
+    // 受控回退：向后拖必须填写原因
+    if (toCol.stage.order < fromCol.stage.order) {
+      setPendingRevert({
+        applicationId,
+        stageId: targetStageId,
+        expectedVersion: card.version,
+        candidateName: card.candidate.name,
+        fromStage: fromCol.stage.name,
+        toStage: toCol.stage.name,
+      });
+      return;
+    }
+    moveMutation.mutate({ applicationId, stageId: targetStageId, expectedVersion: card.version });
   };
 
   return (
@@ -231,7 +310,13 @@ export function PipelinePage() {
           )}
         </div>
       ) : (
-        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActiveCard(null)}
+        >
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
             {boardQuery.data?.columns.map((column) => (
               <BoardColumnView
@@ -243,8 +328,61 @@ export function PipelinePage() {
               />
             ))}
           </div>
+          {/* 拖拽浮层：脱离列容器渲染，修复卡片被 overflow 裁剪/异常位移的问题 */}
+          <DragOverlay dropAnimation={null}>
+            {activeCard ? (
+              <div style={{ width: 256 }}>
+                <CardView card={activeCard} overlay />
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
+
+      <Modal
+        title="回退阶段需填写原因"
+        open={Boolean(pendingRevert)}
+        onCancel={() => {
+          setPendingRevert(null);
+          revertForm.resetFields();
+        }}
+        onOk={() => revertForm.submit()}
+        confirmLoading={moveMutation.isPending}
+        destroyOnHidden
+      >
+        {pendingRevert && (
+          <Typography.Paragraph style={{ fontSize: 13 }}>
+            将「{pendingRevert.candidateName}」从 <Tag>{pendingRevert.fromStage}</Tag> 回退到{' '}
+            <Tag>{pendingRevert.toStage}</Tag>，回退操作仅 HR 可执行且全程留痕。
+          </Typography.Paragraph>
+        )}
+        <Form
+          form={revertForm}
+          layout="vertical"
+          onFinish={(values: { reason: string }) => {
+            if (!pendingRevert) return;
+            moveMutation.mutate(
+              { ...pendingRevert, reason: values.reason },
+              {
+                onSuccess: () => {
+                  setPendingRevert(null);
+                  revertForm.resetFields();
+                  message.success('已回退并留痕');
+                },
+              },
+            );
+          }}
+        >
+          <Form.Item
+            name="reason"
+            label="回退原因"
+            rules={[{ required: true, min: 2, message: '请填写回退原因（至少 2 个字）' }]}
+          >
+            <Input.TextArea rows={3} placeholder="如：二面评价存在分歧，需重新安排一面补充考察" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
     </Card>
   );
