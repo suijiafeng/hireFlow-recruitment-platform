@@ -13,6 +13,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
 import { ApplicationsService } from '../applications/applications.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OnboardingService } from '../onboarding/onboarding.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalDto, CreateOfferDto, RespondDto } from './dto/create-offer.dto';
 
@@ -33,6 +34,7 @@ export class OffersService {
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
     private readonly ai: AiService,
+    private readonly onboarding: OnboardingService,
     private readonly applications: ApplicationsService,
     private readonly notifications: NotificationsService,
   ) {}
@@ -147,7 +149,7 @@ export class OffersService {
 
   /**
    * 录入候选人答复。接受即触发自动化工作流：
-   * 卡片自动移入「待入职」（入职单生成待入职模块接入后挂到此处）。
+   * 生成入职单（三方清单）+ 卡片自动移入「待入职」。
    */
   async respond(id: string, dto: RespondDto, user: JwtUser) {
     const offer = await this.prisma.offer.findUnique({ where: { id }, include: OFFER_INCLUDE });
@@ -166,13 +168,14 @@ export class OffersService {
     });
 
     if (dto.decision === 'ACCEPTED') {
+      await this.onboarding.createForApplication(offer.applicationId, user);
       await this.applications.moveToStageByName(offer.applicationId, '待入职', user);
       await this.checkHeadcount(offer.application.job.id, user);
       await this.notifications.pushToRole(
         RoleCode.HR,
         `Offer 已接受：${offer.application.candidate.name}`,
-        `${offer.application.job.title} · 请尽快开启入职流程`,
-        '/offers',
+        `${offer.application.job.title} · 入职单已自动创建`,
+        '/onboarding',
       );
     } else {
       await this.prisma.application.update({
