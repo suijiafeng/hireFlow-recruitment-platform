@@ -260,9 +260,60 @@ async function seedDemoData(techDeptId: string, productDeptId: string) {
   );
 }
 
+async function seedCompanyDocs() {
+  const docs = [
+    {
+      title: '办公网络与 WiFi 使用规定',
+      tags: ['WiFi', '网络', '密码'],
+      content:
+        '办公区 WiFi：员工网络 SSID 为 ART-Staff，密码为 art@2026!，每季度更换一次并由 IT 邮件通知；访客网络 SSID 为 ART-Guest，密码 guest2026。严禁将员工网络密码告知外部人员。VPN 远程接入请在 IT 服务台提交申请，审批通过后 1 个工作日内开通。',
+    },
+    {
+      title: '五险一金缴纳说明',
+      tags: ['公积金', '社保', '五险一金'],
+      content:
+        '公司按国家与本市规定为员工缴纳五险一金。住房公积金缴存比例为个人 12% + 公司 12%，以上月应发工资为基数；社保（养老/医疗/失业/工伤/生育）按本市最新基数标准执行。入职当月 15 日前报到的员工当月起缴，15 日后次月起缴。公积金账户转移请联系 HR 何欣。',
+    },
+    {
+      title: '休假制度（年假/病假/事假）',
+      tags: ['年假', '请假', '病假', '事假', '调休'],
+      content:
+        '年假：入职满 1 年 5 天，满 3 年 10 天，满 10 年 15 天，按自然年折算，当年未休完可顺延至次年 3 月底。病假：需提供医院证明，全年累计 10 天内全薪。事假：无薪，需提前 1 天在 OA 申请。申请路径：OA → 假勤 → 请假申请，直属上级审批，3 天以上需部门负责人审批。',
+    },
+    {
+      title: '差旅与报销制度',
+      tags: ['报销', '差旅', '发票'],
+      content:
+        '报销周期：每月 1-5 日提交上月单据，财务 15 日前打款。交通：市内打车凭发票实报，异地差旅高铁二等座/经济舱。住宿标准：一线城市 500 元/晚，其他城市 350 元/晚。餐补：出差期间 100 元/天。所有报销需在 OA 上传发票照片并由直属上级审批。',
+    },
+    {
+      title: '试用期与转正规定',
+      tags: ['试用期', '转正', '考核'],
+      content:
+        '试用期一般为 3 个月，表现优秀者可申请提前转正（最早满 1 个月）。试用期工资为转正工资的 100%（不打折）。转正流程：试用期满前 2 周，员工在 OA 提交转正述职，直属上级与 HRBP 评估，用人部门负责人审批。试用期内双方均可提前 3 天通知解除劳动关系。',
+    },
+    {
+      title: '考勤与办公时间',
+      tags: ['考勤', '打卡', '办公时间', '远程'],
+      content:
+        '标准工作时间为周一至周五 10:00-19:00（含 1 小时午休），弹性打卡区间 9:00-10:30。每周三为无会议日。每月可申请 4 天远程办公，需提前 1 天报备直属上级。缺卡每月可补 3 次，在 OA → 假勤 → 补卡申请中提交。',
+    },
+  ];
+  for (const doc of docs) {
+    const existing = await prisma.companyDoc.findFirst({ where: { title: doc.title } });
+    if (existing) {
+      await prisma.companyDoc.update({ where: { id: existing.id }, data: doc });
+    } else {
+      await prisma.companyDoc.create({ data: doc });
+    }
+  }
+  console.log(`✔ 制度文档：${docs.length} 篇（入职问答机器人知识库）`);
+}
+
 async function main() {
   await seedRbac();
   const { tech, product } = await seedDepartmentsAndUsers();
+  await seedCompanyDocs();
   await seedDemoData(tech.id, product.id);
 }
 

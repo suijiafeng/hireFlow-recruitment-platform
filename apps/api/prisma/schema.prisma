@@ -314,6 +314,16 @@ model Contract {
   updatedAt    DateTime           @updatedAt
 }
 
+// 公司制度文档（HR Helpdesk 的知识库来源）
+model CompanyDoc {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // 站内通知（通知矩阵的站内信渠道；邮件/IM 通道后续接入）
 model Notification {
   id        String   @id @default(cuid())

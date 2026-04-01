@@ -11,6 +11,7 @@ import { ApplicationsModule } from './modules/applications/applications.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CandidatesModule } from './modules/candidates/candidates.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
+import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { InterviewsModule } from './modules/interviews/interviews.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -38,6 +39,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AnalyticsModule,
     OffersModule,
     OnboardingModule,
+    HelpdeskModule,
   ],
   controllers: [AppController],
   providers: [
