@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PERMISSIONS } from '@hireflow/shared';
+import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -8,6 +10,31 @@ export class AnalyticsService {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
   ) {}
+
+  /** 待办事项聚合 To-Do Center */
+  async todos(user: JwtUser) {
+    const now = new Date();
+    // 待处理新简历：停留在各职位第一阶段的在途应聘
+    const newResumes = await this.prisma.application.count({
+      where: { status: 'ACTIVE', stage: { order: 0 }, job: { status: 'OPEN' } },
+    });
+    // 我的待提交面评：我被指派、面试时间已过、且我尚未提交评价
+    const myPendingEvaluations = await this.prisma.interview.count({
+      where: {
+        status: { not: 'CANCELED' },
+        scheduledAt: { lte: now },
+        interviewers: { some: { userId: user.sub } },
+        evaluations: { none: { interviewerId: user.sub } },
+      },
+    });
+    const pendingOffers = user.permissions.includes(PERMISSIONS.OFFER_APPROVE)
+      ? await this.prisma.offer.count({ where: { approvalStatus: 'PENDING' } })
+      : null;
+    const onboardingInProgress = await this.prisma.onboarding.count({
+      where: { status: 'IN_PROGRESS' },
+    });
+    return { newResumes, myPendingEvaluations, pendingOffers, onboardingInProgress };
+  }
 
   /** 大盘总览指标 */
   async overview() {

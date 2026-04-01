@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
+import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { AnalyticsService } from './analytics.service';
 
@@ -15,6 +16,12 @@ export class AnalyticsController {
   @ApiOperation({ summary: '大盘总览指标' })
   overview() {
     return this.analyticsService.overview();
+  }
+
+  @Get('todos')
+  @ApiOperation({ summary: '我的待办聚合（To-Do Center）' })
+  todos(@CurrentUser() user: JwtUser) {
+    return this.analyticsService.todos(user);
   }
 
   @Get('funnel/:jobId')
