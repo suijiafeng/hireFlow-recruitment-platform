@@ -127,6 +127,19 @@ export const OFFER_DECISION_LABEL: Record<OfferDecision, string> = {
   [OfferDecision.DECLINED]: '已拒绝',
 };
 
+export const ONBOARDING_STATUS_LABEL: Record<OnboardingStatus, string> = {
+  [OnboardingStatus.NOT_STARTED]: '未开始',
+  [OnboardingStatus.IN_PROGRESS]: '进行中',
+  [OnboardingStatus.COMPLETED]: '已完成',
+};
+
+export const CONTRACT_SIGN_STATUS_LABEL: Record<ContractSignStatus, string> = {
+  [ContractSignStatus.DRAFT]: '草稿',
+  [ContractSignStatus.SENT]: '待签署',
+  [ContractSignStatus.SIGNED]: '已签署',
+  [ContractSignStatus.ARCHIVED]: '已归档',
+};
+
 export const ROLE_LABEL: Record<RoleCode, string> = {
   [RoleCode.ADMIN]: '系统管理员',
   [RoleCode.HR]: 'HR / 招聘专员',

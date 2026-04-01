@@ -27,9 +27,39 @@ export const ACTIVITY_ACTIONS = {
   OFFER_REJECTED: 'offer.rejected',
   OFFER_SENT: 'offer.sent',
   OFFER_RESPONDED: 'offer.responded',
+  ONBOARDING_CREATED: 'onboarding.created',
+  ONBOARDING_ITEM_DONE: 'onboarding.item_done',
+  ONBOARDING_COMPLETED: 'onboarding.completed',
+  DOCUMENT_ADDED: 'onboarding.document_added',
+  CONTRACT_CREATED: 'contract.created',
+  CONTRACT_SENT: 'contract.sent',
+  CONTRACT_SIGNED: 'contract.signed',
+  WEBHOOK_FIRED: 'webhook.fired',
   APPLICATION_REJECTED: 'application.rejected',
   APPLICATION_STAGE_REVERTED: 'application.stage_reverted',
 } as const;
+
+/** 入职三方待办清单默认模板，owner: HR / IT / NEW_HIRE */
+export const DEFAULT_ONBOARDING_CHECKLIST = [
+  { key: 'hr_profile', label: '建立员工档案', owner: 'HR' },
+  { key: 'hr_workspace', label: '安排工位与门禁', owner: 'HR' },
+  { key: 'it_computer', label: '准备电脑设备', owner: 'IT' },
+  { key: 'it_email', label: '开通企业邮箱', owner: 'IT' },
+  { key: 'it_im', label: '开通内部 IM 账号', owner: 'IT' },
+  { key: 'nh_id_card', label: '上传身份证', owner: 'NEW_HIRE' },
+  { key: 'nh_bank_card', label: '上传银行卡', owner: 'NEW_HIRE' },
+  { key: 'nh_diploma', label: '上传学历证书', owner: 'NEW_HIRE' },
+  { key: 'nh_contract', label: '签署劳动合同', owner: 'NEW_HIRE' },
+] as const;
+
+/** 入职材料类型 → 自动勾选的清单项 */
+export const DOCUMENT_TYPE_META = {
+  ID_CARD: { label: '身份证', checklistKey: 'nh_id_card' },
+  BANK_CARD: { label: '银行卡', checklistKey: 'nh_bank_card' },
+  DIPLOMA: { label: '学历证书', checklistKey: 'nh_diploma' },
+} as const;
+
+export type DocumentType = keyof typeof DOCUMENT_TYPE_META;
 
 /** 阶段停留 SLA（天）：超过 warn 标黄、超过 danger 标红（后续做成可配置） */
 export const STAGE_STAY_SLA = { warnDays: 3, dangerDays: 7 } as const;
