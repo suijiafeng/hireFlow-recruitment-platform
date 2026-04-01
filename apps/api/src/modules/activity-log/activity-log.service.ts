@@ -33,6 +33,20 @@ export class ActivityLogService {
     });
   }
 
+  /** 审计日志：全局最近操作 */
+  async recent(page: number, pageSize: number) {
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.activityLog.count(),
+      this.prisma.activityLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { actor: { select: { id: true, name: true } } },
+      }),
+    ]);
+    return { total, page, pageSize, items };
+  }
+
   /** 查询某实体的时间轴（倒序） */
   async timeline(entityType: string, entityId: string, limit = 50) {
     return this.prisma.activityLog.findMany({

@@ -1,10 +1,56 @@
-import { RobotOutlined } from '@ant-design/icons';
+import {
+  CheckCircleOutlined,
+  ProfileOutlined,
+  RobotOutlined,
+  ScheduleOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { App, Button, Card, Col, Empty, Row, Select, Spin, Statistic, Tooltip, Typography } from 'antd';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { analyticsApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { FunnelStage } from '../../api/types';
+
+function StatCard({
+  title,
+  value,
+  icon,
+  color,
+  loading,
+}: {
+  title: string;
+  value: number | string;
+  icon: ReactNode;
+  color: string;
+  loading: boolean;
+}) {
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: `${color}1a`,
+            color,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 20,
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </div>
+        <Statistic title={title} value={value} loading={loading} />
+      </div>
+    </Card>
+  );
+}
 
 /* 漏斗条：单色系列（长度编码人数），文字用文本色而非系列色；每条自带 hover 提示 */
 const SERIES_BLUE = '#2a78d6';
@@ -64,6 +110,60 @@ function FunnelBar({ stage, max }: { stage: FunnelStage; max: number }) {
   );
 }
 
+const TODO_META = [
+  { key: 'newResumes' as const, label: '待处理新简历', link: '/pipeline', hint: '停留在首个阶段的候选人' },
+  { key: 'myPendingEvaluations' as const, label: '我的待提交面评', link: '/interviews', hint: '面试已过时未提交' },
+  { key: 'pendingOffers' as const, label: '待审批 Offer', link: '/offers', hint: '需要用人经理审批' },
+  { key: 'onboardingInProgress' as const, label: '进行中入职单', link: '/onboarding', hint: '三方清单未完成' },
+];
+
+/** 待办事项聚合 To-Do Center（PRD 4.1.2） */
+function TodoCenter() {
+  const navigate = useNavigate();
+  const todosQuery = useQuery({ queryKey: ['todos'], queryFn: analyticsApi.todos });
+  const data = todosQuery.data;
+  return (
+    <Card title="待办中心" size="small" style={{ marginTop: 16 }}>
+      <Row gutter={12}>
+        {TODO_META.map((meta) => {
+          const value = data?.[meta.key];
+          if (value === null) return null; // 无权限项不展示（如非审批人不显示待审批 Offer）
+          const count = value ?? 0;
+          return (
+            <Col span={6} key={meta.key}>
+              <div
+                onClick={() => navigate(meta.link)}
+                style={{
+                  border: '1px solid #eceef3',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  cursor: 'pointer',
+                  background: count > 0 ? '#fffbf0' : '#fafafa',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13 }}>{meta.label}</span>
+                  <span
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 600,
+                      color: count > 0 ? '#d48806' : 'rgba(0,0,0,0.45)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {todosQuery.isLoading ? '…' : count}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{meta.hint}</div>
+              </div>
+            </Col>
+          );
+        })}
+      </Row>
+    </Card>
+  );
+}
+
 export function DashboardPage() {
   const { message } = App.useApp();
   const [jobId, setJobId] = useState<string>();
@@ -99,26 +199,44 @@ export function DashboardPage() {
     <div>
       <Row gutter={16}>
         <Col span={6}>
-          <Card>
-            <Statistic title="招聘中职位" value={overviewQuery.data?.openJobs ?? '-'} loading={overviewQuery.isLoading} />
-          </Card>
+          <StatCard
+            title="招聘中职位"
+            value={overviewQuery.data?.openJobs ?? '-'}
+            icon={<ProfileOutlined />}
+            color="#2a78d6"
+            loading={overviewQuery.isLoading}
+          />
         </Col>
         <Col span={6}>
-          <Card>
-            <Statistic title="候选人总数" value={overviewQuery.data?.candidates ?? '-'} loading={overviewQuery.isLoading} />
-          </Card>
+          <StatCard
+            title="候选人总数"
+            value={overviewQuery.data?.candidates ?? '-'}
+            icon={<TeamOutlined />}
+            color="#1baf7a"
+            loading={overviewQuery.isLoading}
+          />
         </Col>
         <Col span={6}>
-          <Card>
-            <Statistic title="待进行面试" value={overviewQuery.data?.upcomingInterviews ?? '-'} loading={overviewQuery.isLoading} />
-          </Card>
+          <StatCard
+            title="待进行面试"
+            value={overviewQuery.data?.upcomingInterviews ?? '-'}
+            icon={<ScheduleOutlined />}
+            color="#eda100"
+            loading={overviewQuery.isLoading}
+          />
         </Col>
         <Col span={6}>
-          <Card>
-            <Statistic title="已入职" value={overviewQuery.data?.hired ?? '-'} loading={overviewQuery.isLoading} />
-          </Card>
+          <StatCard
+            title="已入职"
+            value={overviewQuery.data?.hired ?? '-'}
+            icon={<CheckCircleOutlined />}
+            color="#4a3aa7"
+            loading={overviewQuery.isLoading}
+          />
         </Col>
       </Row>
+
+      <TodoCenter />
 
       <Row gutter={16} style={{ marginTop: 16 }}>
         <Col span={14}>
