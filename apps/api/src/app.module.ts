@@ -15,6 +15,7 @@ import { InterviewsModule } from './modules/interviews/interviews.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OffersModule } from './modules/offers/offers.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -36,6 +37,7 @@ import { PrismaModule } from './prisma/prisma.module';
     InterviewsModule,
     AnalyticsModule,
     OffersModule,
+    OnboardingModule,
   ],
   controllers: [AppController],
   providers: [
