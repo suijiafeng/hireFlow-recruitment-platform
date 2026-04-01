@@ -92,7 +92,18 @@ export interface ActivityItem {
   actorName: string | null;
   actor: { id: string; name: string } | null;
   payload: Record<string, unknown> | null;
+  entityType?: string;
+  entityId?: string;
   createdAt: string;
+}
+
+export interface Role {
+  id: string;
+  code: string;
+  name: string;
+  dataScope: string;
+  permissions: Array<{ permission: { id: string; code: string; name: string; group: string } }>;
+  _count: { users: number };
 }
 
 export interface DetailApplication {

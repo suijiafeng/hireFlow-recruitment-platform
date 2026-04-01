@@ -10,6 +10,7 @@ import type {
   Department,
   EvaluationDraft,
   FunnelData,
+  ActivityItem,
   HelpdeskAnswer,
   Interview,
   JdDraft,
@@ -19,6 +20,7 @@ import type {
   Paginated,
   Resume,
   RetentionHint,
+  Role,
   TodoSummary,
   UserBrief,
 } from './types';
@@ -175,4 +177,15 @@ export const departmentsApi = {
 export const usersApi = {
   list: (role?: string) =>
     http.get<UserBrief[]>('/users', { params: role ? { role } : undefined }).then((r) => r.data),
+};
+
+export const rbacApi = {
+  roles: () => http.get<Role[]>('/roles').then((r) => r.data),
+};
+
+export const auditApi = {
+  recent: (page: number, pageSize = 20) =>
+    http
+      .get<Paginated<ActivityItem>>('/activities/recent', { params: { page, pageSize } })
+      .then((r) => r.data),
 };

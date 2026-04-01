@@ -117,7 +117,7 @@ const TODO_META = [
   { key: 'onboardingInProgress' as const, label: '进行中入职单', link: '/onboarding', hint: '三方清单未完成' },
 ];
 
-/** 待办事项聚合 To-Do Center（PRD 4.1.2） */
+/** 待办事项聚合 To-Do Center */
 function TodoCenter() {
   const navigate = useNavigate();
   const todosQuery = useQuery({ queryKey: ['todos'], queryFn: analyticsApi.todos });

@@ -50,7 +50,7 @@ function RolesTab() {
   );
 }
 
-/** 审计日志（详设 V2 页面清单：全实体操作留痕检索） */
+/** 审计日志：全实体操作留痕检索 */
 function AuditTab() {
   const [page, setPage] = useState(1);
   const auditQuery = useQuery({ queryKey: ['audit', page], queryFn: () => auditApi.recent(page) });
