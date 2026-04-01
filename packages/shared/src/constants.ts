@@ -31,6 +31,9 @@ export const ACTIVITY_ACTIONS = {
   APPLICATION_STAGE_REVERTED: 'application.stage_reverted',
 } as const;
 
+/** 阶段停留 SLA（天）：超过 warn 标黄、超过 danger 标红（后续做成可配置） */
+export const STAGE_STAY_SLA = { warnDays: 3, dangerDays: 7 } as const;
+
 /** 淘汰/撤回原因码（原因码强制，供漏斗分析与人才库回流） */
 export const REJECT_REASONS = [
   '技能不符',
