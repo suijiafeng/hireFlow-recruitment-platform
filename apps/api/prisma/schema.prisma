@@ -63,6 +63,19 @@ enum OfferDecision {
   DECLINED
 }
 
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ContractSignStatus {
+  DRAFT
+  SENT
+  SIGNED
+  ARCHIVED
+}
+
 enum EvaluationConclusion {
   STRONG_YES
   YES
@@ -212,6 +225,7 @@ model Application {
   rejectReason   String? // 淘汰/撤回原因码（原因码强制）
   interviews     Interview[]
   offer          Offer?
+  onboarding     Onboarding?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
@@ -272,6 +286,32 @@ model Offer {
   decision       OfferDecision?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+}
+
+model Onboarding {
+  id            String           @id @default(cuid())
+  applicationId String           @unique
+  application   Application      @relation(fields: [applicationId], references: [id])
+  checklist     Json? // 三方待办清单（HR/IT/新员工）
+  documents     Json? // 已收集材料
+  ocrResults    Json? // OCR 识别结果
+  status        OnboardingStatus @default(NOT_STARTED)
+  contract      Contract?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+model Contract {
+  id           String             @id @default(cuid())
+  onboardingId String             @unique
+  onboarding   Onboarding         @relation(fields: [onboardingId], references: [id])
+  templateName String?
+  variables    Json? // 模板变量填充值
+  signStatus   ContractSignStatus @default(DRAFT)
+  evidenceNo   String? // 电子签存证号
+  fileKey      String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 // 站内通知（通知矩阵的站内信渠道；邮件/IM 通道后续接入）
