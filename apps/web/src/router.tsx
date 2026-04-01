@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router';
 import { MainLayout } from './layouts/MainLayout';
 import { CandidatesPage } from './pages/candidates/CandidatesPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
+import { HelpdeskPage } from './pages/helpdesk/HelpdeskPage';
 import { InterviewsPage } from './pages/interviews/InterviewsPage';
 import { JobsPage } from './pages/jobs/JobsPage';
 import { LoginPage } from './pages/Login';
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: 'interviews', element: <InterviewsPage /> },
       { path: 'offers', element: <OffersPage /> },
       { path: 'onboarding', element: <OnboardingPage /> },
+      { path: 'helpdesk', element: <HelpdeskPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },
