@@ -6,6 +6,7 @@ import { InterviewsPage } from './pages/interviews/InterviewsPage';
 import { JobsPage } from './pages/jobs/JobsPage';
 import { LoginPage } from './pages/Login';
 import { OffersPage } from './pages/offers/OffersPage';
+import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { PipelinePage } from './pages/pipeline/PipelinePage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: 'pipeline', element: <PipelinePage /> },
       { path: 'interviews', element: <InterviewsPage /> },
       { path: 'offers', element: <OffersPage /> },
+      { path: 'onboarding', element: <OnboardingPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

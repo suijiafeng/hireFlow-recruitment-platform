@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   DashboardOutlined,
+  IdcardOutlined,
   LogoutOutlined,
   ProfileOutlined,
   ScheduleOutlined,
@@ -23,6 +24,7 @@ const MENU_ITEMS = [
   { key: '/pipeline', icon: <AppstoreOutlined />, label: '招聘看板' },
   { key: '/interviews', icon: <ScheduleOutlined />, label: '面试管理' },
   { key: '/offers', icon: <AuditOutlined />, label: 'Offer 管理' },
+  { key: '/onboarding', icon: <IdcardOutlined />, label: '入职管理' },
   { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
 ];
 
