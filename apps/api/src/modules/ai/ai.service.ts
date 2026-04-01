@@ -4,6 +4,7 @@ import type {
   AiEngine,
   EvaluationDraftInput,
   FunnelInput,
+  HelpdeskInput,
   JdInput,
   MatchInput,
   RetentionInput,
@@ -76,6 +77,10 @@ export class AiService {
 
   funnelInsight(input: FunnelInput) {
     return this.run((e) => e.funnelInsight(input));
+  }
+
+  answerQuestion(input: HelpdeskInput) {
+    return this.run((e) => e.answerQuestion(input));
   }
 
   predictRetention(input: RetentionInput) {

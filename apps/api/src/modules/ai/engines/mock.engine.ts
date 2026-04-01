@@ -4,6 +4,7 @@ import type {
   EvaluationDraft,
   EvaluationDraftInput,
   FunnelInput,
+  HelpdeskInput,
   JdDraft,
   JdInput,
   MatchInput,
@@ -184,6 +185,15 @@ export class MockAiEngine implements AiEngine {
       conclusion,
       comments: `【AI 草稿·请修改确认】第 ${input.round} 轮面试（${input.jobTitle}）记录要点：${excerpt}${input.notes.length > 80 ? '…' : ''}`,
     };
+  }
+
+  async answerQuestion(input: HelpdeskInput): Promise<string> {
+    if (input.docs.length === 0) {
+      return '抱歉，制度库中没有找到与该问题相关的内容，建议直接联系 HR（hr@arthr.local）确认。';
+    }
+    const best = input.docs[0];
+    const excerpt = best.content.replace(/\s+/g, ' ').slice(0, 220);
+    return `根据《${best.title}》：${excerpt}${best.content.length > 220 ? '……' : ''}（规则引擎按关键词检索作答，配置 ANTHROPIC_API_KEY 后可获得更准确的综合回答）`;
   }
 
   async predictRetention(input: RetentionInput): Promise<RetentionHint> {

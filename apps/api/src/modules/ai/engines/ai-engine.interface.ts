@@ -59,6 +59,11 @@ export interface FunnelInput {
   stages: Array<{ name: string; count: number }>;
 }
 
+export interface HelpdeskInput {
+  question: string;
+  docs: Array<{ title: string; content: string }>;
+}
+
 export interface RetentionInput {
   candidateName: string;
   jobTitle: string;
@@ -85,5 +90,7 @@ export interface AiEngine {
   scoreMatch(input: MatchInput): Promise<MatchResult>;
   draftEvaluation(input: EvaluationDraftInput): Promise<EvaluationDraft>;
   funnelInsight(input: FunnelInput): Promise<string>;
+  /** 入职问答（HR Helpdesk）：仅依据提供的制度文档回答 */
+  answerQuestion(input: HelpdeskInput): Promise<string>;
   predictRetention(input: RetentionInput): Promise<RetentionHint>;
 }

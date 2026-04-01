@@ -6,6 +6,7 @@ import type {
   EvaluationDraft,
   EvaluationDraftInput,
   FunnelInput,
+  HelpdeskInput,
   JdDraft,
   JdInput,
   MatchInput,
@@ -100,6 +101,15 @@ const EVALUATION_DRAFT_SCHEMA = {
     comments: { type: 'string', description: '综合评语草稿，100 字左右，客观中立' },
   },
   required: ['scorecard', 'conclusion', 'comments'],
+  additionalProperties: false,
+} as const;
+
+const ANSWER_SCHEMA = {
+  type: 'object',
+  properties: {
+    answer: { type: 'string', description: '基于文档的中文回答，简洁直接；文档无法回答时明确说明' },
+  },
+  required: ['answer'],
   additionalProperties: false,
 } as const;
 
@@ -244,6 +254,23 @@ export class AnthropicAiEngine implements AiEngine {
       .filter((s) => ['技术能力', '工程素养', '沟通协作'].includes(s.dimension))
       .map((s) => ({ ...s, score: Math.max(1, Math.min(5, Math.round(s.score))) }));
     return draft;
+  }
+
+  async answerQuestion(input: HelpdeskInput): Promise<string> {
+    const docsText =
+      input.docs.length > 0
+        ? input.docs.map((d, i) => `【文档${i + 1}·${d.title}】\n${d.content}`).join('\n\n')
+        : '（无相关文档）';
+    const { answer } = await this.completeJson<{ answer: string }>(
+      [
+        '你是公司入职问答助手（HR Helpdesk）。',
+        '只依据提供的公司制度文档回答问题，不得编造制度内容；',
+        '文档中没有答案时，明确说明并建议联系 HR。回答用中文，简洁直接。',
+      ].join('\n'),
+      `员工问题：${input.question.slice(0, 500)}\n\n可参考的制度文档：\n${docsText.slice(0, 8_000)}`,
+      ANSWER_SCHEMA,
+    );
+    return answer;
   }
 
   async predictRetention(input: RetentionInput): Promise<RetentionHint> {
