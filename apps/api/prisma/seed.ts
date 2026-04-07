@@ -56,6 +56,7 @@ async function seedDepartmentsAndUsers() {
     { email: 'hr@arthr.local', name: '何欣（HR）', role: RoleCode.HR },
     { email: 'manager@arthr.local', name: '林涛（技术总监）', role: RoleCode.HIRING_MANAGER, departmentId: tech.id },
     { email: 'interviewer@arthr.local', name: '苏晴（资深工程师）', role: RoleCode.INTERVIEWER, departmentId: tech.id },
+    { email: 'it@arthr.local', name: '陈明（IT 支持）', role: RoleCode.IT_SUPPORT },
   ];
 
   for (const u of users) {

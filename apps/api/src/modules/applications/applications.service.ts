@@ -28,6 +28,50 @@ export class ApplicationsService {
     private readonly ai: AiService,
   ) {}
 
+  /**
+   * AI 岗位匹配度评分：JD × 简历 → 分数 + 可解释报告，回写应聘记录。
+   */
+  async score(id: string, user: JwtUser) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: {
+        job: true,
+        candidate: { include: { resumes: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+      },
+    });
+    if (!application) throw new NotFoundException('应聘记录不存在');
+
+    const resume = application.candidate.resumes[0];
+    const resumeText = resume?.rawText ?? (resume?.parsed ? JSON.stringify(resume.parsed) : '');
+    if (!resumeText && application.candidate.tags.length === 0) {
+      throw new BadRequestException('该候选人暂无简历或标签，无法评分，请先导入简历');
+    }
+
+    const { data, meta } = await this.ai.scoreMatch({
+      jobTitle: application.job.title,
+      jobDescription: application.job.description ?? '',
+      jobRequirement: application.job.requirement ?? '',
+      resumeText,
+      candidateTags: application.candidate.tags,
+    });
+
+    const updated = await this.prisma.application.update({
+      where: { id },
+      data: {
+        matchScore: data.score,
+        matchReport: { ...data, aiMeta: meta } as unknown as Prisma.InputJsonValue,
+      },
+      select: { ...CARD_SELECT, matchReport: true },
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.APPLICATION_SCORED, 'Application', id, {
+      candidate: application.candidate.name,
+      job: application.job.title,
+      score: data.score,
+      provider: meta.provider,
+    });
+    return { ...updated, aiMeta: meta };
+  }
+
   /** 创建应聘记录（候选人投递/HR 导入），进入指定或默认首个阶段 */
   async create(dto: CreateApplicationDto, user: JwtUser) {
     const job = await this.prisma.job.findUnique({
@@ -120,39 +164,48 @@ export class ApplicationsService {
     if (!targetStage || targetStage.jobId !== application.jobId) {
       throw new BadRequestException('目标阶段不属于该职位');
     }
+
     const isBackward = targetStage.order < application.stage.order;
     if (isBackward && !dto.reason?.trim()) {
       throw new BadRequestException('回退阶段必须填写原因（受控回退）');
     }
 
-    const updated = await this.prisma.application.update({
-      where: { id },
+    // 无位移的拖回原列：不写库、不加版本，直接返回当前卡片
+    if (targetStage.id === application.stageId) {
+      return this.prisma.application.findUniqueOrThrow({ where: { id }, select: CARD_SELECT });
+    }
+
+    // 乐观锁落到写入条件里：读-写窗口内被他人抢先移动时，本次更新影响 0 行 → 409
+    const result = await this.prisma.application.updateMany({
+      where: {
+        id,
+        status: 'ACTIVE',
+        ...(dto.expectedVersion != null ? { version: dto.expectedVersion } : {}),
+      },
       data: {
         stageId: targetStage.id,
         position: dto.position ?? (await this.nextPosition(targetStage.id)),
         stageEnteredAt: new Date(),
         version: { increment: 1 },
       },
-      select: CARD_SELECT,
     });
-
-    if (targetStage.id !== application.stageId) {
-      await this.activityLog.record(
-        user,
-        isBackward
-          ? ACTIVITY_ACTIONS.APPLICATION_STAGE_REVERTED
-          : ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED,
-        'Application',
-        id,
-        {
-          candidate: application.candidate.name,
-          from: application.stage.name,
-          to: targetStage.name,
-          ...(isBackward ? { reason: dto.reason } : {}),
-        },
-      );
+    if (result.count === 0) {
+      throw new ConflictException('该卡片刚被他人移动过，看板已刷新，请确认后重试');
     }
-    return updated;
+
+    await this.activityLog.record(
+      user,
+      isBackward ? ACTIVITY_ACTIONS.APPLICATION_STAGE_REVERTED : ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED,
+      'Application',
+      id,
+      {
+        candidate: application.candidate.name,
+        from: application.stage.name,
+        to: targetStage.name,
+        ...(isBackward ? { reason: dto.reason } : {}),
+      },
+    );
+    return this.prisma.application.findUniqueOrThrow({ where: { id }, select: CARD_SELECT });
   }
 
   /** 淘汰：原因码强制，终态 + 留痕（感谢信通道接入后在此触发延迟发送） */
@@ -194,7 +247,13 @@ export class ApplicationsService {
     if (!target || target.id === application.stageId) return;
     await this.prisma.application.update({
       where: { id: applicationId },
-      data: { stageId: target.id, position: await this.nextPosition(target.id) },
+      data: {
+        stageId: target.id,
+        position: await this.nextPosition(target.id),
+        // 与手动移卡保持一致：重置停留时长起点并递增乐观锁版本，否则自动流转后统计与并发校验失真
+        stageEnteredAt: new Date(),
+        version: { increment: 1 },
+      },
     });
     await this.activityLog.record(
       user,
@@ -203,50 +262,6 @@ export class ApplicationsService {
       applicationId,
       { candidate: application.candidate.name, from: application.stage.name, to: stageName, auto: true },
     );
-  }
-
-  /**
-   * AI 岗位匹配度评分：JD × 简历 → 分数 + 可解释报告，回写应聘记录。
-   */
-  async score(id: string, user: JwtUser) {
-    const application = await this.prisma.application.findUnique({
-      where: { id },
-      include: {
-        job: true,
-        candidate: { include: { resumes: { orderBy: { createdAt: 'desc' }, take: 1 } } },
-      },
-    });
-    if (!application) throw new NotFoundException('应聘记录不存在');
-
-    const resume = application.candidate.resumes[0];
-    const resumeText = resume?.rawText ?? (resume?.parsed ? JSON.stringify(resume.parsed) : '');
-    if (!resumeText && application.candidate.tags.length === 0) {
-      throw new BadRequestException('该候选人暂无简历或标签，无法评分，请先导入简历');
-    }
-
-    const { data, meta } = await this.ai.scoreMatch({
-      jobTitle: application.job.title,
-      jobDescription: application.job.description ?? '',
-      jobRequirement: application.job.requirement ?? '',
-      resumeText,
-      candidateTags: application.candidate.tags,
-    });
-
-    const updated = await this.prisma.application.update({
-      where: { id },
-      data: {
-        matchScore: data.score,
-        matchReport: { ...data, aiMeta: meta } as unknown as Prisma.InputJsonValue,
-      },
-      select: { ...CARD_SELECT, matchReport: true },
-    });
-    await this.activityLog.record(user, ACTIVITY_ACTIONS.APPLICATION_SCORED, 'Application', id, {
-      candidate: application.candidate.name,
-      job: application.job.title,
-      score: data.score,
-      provider: meta.provider,
-    });
-    return { ...updated, aiMeta: meta };
   }
 
   private async nextPosition(stageId: string): Promise<number> {

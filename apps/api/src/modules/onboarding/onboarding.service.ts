@@ -91,21 +91,49 @@ export class OnboardingService {
     return onboarding;
   }
 
-  async list() {
+  /**
+   * 合同变量内嵌薪资（salaryBase/bonusMonths）：对无 salary:view 的内部用户抹除，
+   * 堵住绕过 Offer 接口脱敏的旁路（「查看薪资字段」权限）。
+   * 门户候选人看自己的合同不走此方法（portalView），矩阵允许 △自己Offer。
+   */
+  private maskContractSalary<T extends { contract: { variables: Prisma.JsonValue } | null }>(
+    onboarding: T,
+    user?: JwtUser,
+  ): T {
+    if (!user || user.permissions.includes(PERMISSIONS.SALARY_VIEW)) return onboarding;
+    if (!onboarding.contract?.variables || typeof onboarding.contract.variables !== 'object') {
+      return onboarding;
+    }
+    const vars = { ...(onboarding.contract.variables as Record<string, unknown>) };
+    delete vars.salaryBase;
+    delete vars.bonusMonths;
+    return {
+      ...onboarding,
+      contract: {
+        ...onboarding.contract,
+        variables: { ...vars, salaryMasked: true } as Prisma.JsonValue,
+      },
+    };
+  }
+
+  async list(user?: JwtUser) {
     const items = await this.prisma.onboarding.findMany({
       include: ONBOARDING_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });
-    return items.map((o) => ({ ...o, progress: this.progressOf(o.checklist) }));
+    return items.map((o) => ({
+      ...this.maskContractSalary(o, user),
+      progress: this.progressOf(o.checklist),
+    }));
   }
 
-  async get(id: string) {
+  async get(id: string, user?: JwtUser) {
     const onboarding = await this.prisma.onboarding.findUnique({
       where: { id },
       include: ONBOARDING_INCLUDE,
     });
     if (!onboarding) throw new NotFoundException('入职单不存在');
-    return { ...onboarding, progress: this.progressOf(onboarding.checklist) };
+    return { ...this.maskContractSalary(onboarding, user), progress: this.progressOf(onboarding.checklist) };
   }
 
   /**
@@ -115,6 +143,9 @@ export class OnboardingService {
    */
   async toggleItem(id: string, key: string, done: boolean, user: JwtUser) {
     const onboarding = await this.get(id);
+    if (onboarding.status === 'COMPLETED') {
+      throw new BadRequestException('入职已闭环（候选人已 HIRED），清单不可再修改');
+    }
     const checklist = onboarding.checklist as unknown as ChecklistItem[];
     const item = checklist.find((i) => i.key === key);
     if (!item) throw new NotFoundException('清单项不存在');
@@ -131,12 +162,15 @@ export class OnboardingService {
       done,
     });
     await this.completeIfReady(id, user);
-    return this.get(id);
+    return this.get(id, user);
   }
 
   /** 收集入职材料：文本 → OCR 抽取字段 → 入档并自动勾选对应清单项 */
   async addDocument(id: string, dto: AddDocumentDto, user: JwtUser) {
     const onboarding = await this.get(id);
+    if (onboarding.status === 'COMPLETED') {
+      throw new BadRequestException('入职已闭环，材料不可再变更（如需更正请联系管理员）');
+    }
     const meta = DOCUMENT_TYPE_META[dto.type];
     const fields = await this.ocr.parse(dto.type, dto.rawText);
     if (Object.keys(fields).length === 0) {
@@ -164,7 +198,7 @@ export class OnboardingService {
     });
     // 自动化：材料入档即勾选对应新员工待办
     await this.toggleItem(id, meta.checklistKey, true, user);
-    return this.get(id);
+    return this.get(id, user);
   }
 
   /** 生成劳动合同：模板变量自动填充 */
@@ -200,7 +234,7 @@ export class OnboardingService {
       template: contract.templateName,
       candidate: application.candidate.name,
     });
-    return this.get(id);
+    return this.get(id, user);
   }
 
   /** 发送合同至电子签服务商 */
@@ -225,7 +259,7 @@ export class OnboardingService {
       contract.onboarding.applicationId,
       { provider: this.esign.name, providerRef },
     );
-    return this.get(contract.onboardingId);
+    return this.get(contract.onboardingId, user);
   }
 
   /**
@@ -270,7 +304,7 @@ export class OnboardingService {
       },
       user,
     );
-    return this.get(contract.onboardingId);
+    return this.get(contract.onboardingId, user);
   }
 
   /** 清单全部完成 + 合同已签署 → 入职闭环：HIRED + 移入「已入职」 */

@@ -14,16 +14,16 @@ export class OnboardingController {
 
   @Get('onboardings')
   @RequirePermissions(PERMISSIONS.ONBOARDING_READ)
-  @ApiOperation({ summary: '入职单列表（含清单进度）' })
-  list() {
-    return this.onboardingService.list();
+  @ApiOperation({ summary: '入职单列表（含清单进度；合同薪资按 salary:view 脱敏）' })
+  list(@CurrentUser() user: JwtUser) {
+    return this.onboardingService.list(user);
   }
 
   @Get('onboardings/:id')
   @RequirePermissions(PERMISSIONS.ONBOARDING_READ)
-  @ApiOperation({ summary: '入职单详情（清单/材料/合同）' })
-  get(@Param('id') id: string) {
-    return this.onboardingService.get(id);
+  @ApiOperation({ summary: '入职单详情（清单/材料/合同；合同薪资按 salary:view 脱敏）' })
+  get(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.onboardingService.get(id, user);
   }
 
   @Patch('onboardings/:id/checklist/:key')
