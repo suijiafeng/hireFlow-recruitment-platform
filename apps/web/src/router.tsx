@@ -9,10 +9,13 @@ import { LoginPage } from './pages/Login';
 import { OffersPage } from './pages/offers/OffersPage';
 import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { PipelinePage } from './pages/pipeline/PipelinePage';
+import { OfferPortalPage } from './pages/portal/OfferPortalPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  // 候选人免登录门户（链接即凭证，不走 MainLayout 鉴权）
+  { path: '/portal/offer/:token', element: <OfferPortalPage /> },
   {
     path: '/',
     element: <MainLayout />,
