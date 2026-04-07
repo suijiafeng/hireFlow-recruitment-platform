@@ -41,6 +41,18 @@ export const jobsApi = {
     description?: string;
     headcount?: number;
   }) => http.post<Job>('/jobs', data).then((r) => r.data),
+  update: (
+    id: string,
+    data: Partial<{
+      title: string;
+      departmentId: string;
+      hiringManagerId: string;
+      description: string;
+      requirement: string;
+      headcount: number;
+      status: string;
+    }>,
+  ) => http.patch<Job>(`/jobs/${id}`, data).then((r) => r.data),
 };
 
 export const boardApi = {

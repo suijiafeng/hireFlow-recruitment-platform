@@ -39,6 +39,7 @@ export function JobsPage() {
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Job | null>(null);
   const [form] = Form.useForm();
 
   const jobsQuery = useQuery({
@@ -62,6 +63,31 @@ export function JobsPage() {
     },
     onError: (error) => message.error(extractErrorMessage(error, '创建失败')),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; values: Parameters<typeof jobsApi.update>[1] }) =>
+      jobsApi.update(vars.id, vars.values),
+    onSuccess: (job) => {
+      message.success(`职位「${job.title}」已更新`);
+      setEditing(null);
+      form.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const openEdit = (job: Job) => {
+    setEditing(job);
+    form.setFieldsValue({
+      title: job.title,
+      departmentId: job.department.id,
+      hiringManagerId: job.hiringManager?.id,
+      headcount: job.headcount,
+      description: job.description ?? undefined,
+      requirement: job.requirement ?? undefined,
+      status: job.status,
+    });
+  };
 
   const generateJdMutation = useMutation({
     mutationFn: aiApi.generateJd,
@@ -154,30 +180,55 @@ export function JobsPage() {
           },
           {
             title: '操作',
-            width: 100,
+            width: 150,
             render: (_, record) => (
-              <Button type="link" size="small" onClick={() => navigate(`/pipeline?jobId=${record.id}`)}>
-                查看看板
-              </Button>
+              <Space size={0}>
+                <Button type="link" size="small" onClick={() => navigate(`/pipeline?jobId=${record.id}`)}>
+                  查看看板
+                </Button>
+                {hasPermission(PERMISSIONS.JOB_UPDATE) && (
+                  <Button type="link" size="small" onClick={() => openEdit(record)}>
+                    编辑
+                  </Button>
+                )}
+              </Space>
             ),
           },
         ]}
       />
 
       <Modal
-        title="新建职位"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        title={editing ? `编辑职位：${editing.title}` : '新建职位'}
+        open={createOpen || editing != null}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditing(null);
+          form.resetFields();
+        }}
         onOk={() => form.submit()}
-        confirmLoading={createMutation.isPending}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
         destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
-          onFinish={(values) => createMutation.mutate(values)}
+          onFinish={(values) =>
+            editing
+              ? updateMutation.mutate({ id: editing.id, values })
+              : createMutation.mutate(values)
+          }
           initialValues={{ headcount: 1 }}
         >
+          {editing && (
+            <Form.Item name="status" label="职位状态">
+              <Select
+                options={Object.entries(JOB_STATUS_LABEL).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="title" label="职位名称" rules={[{ required: true, min: 2 }]}>
             <Input placeholder="如：后端工程师" />
           </Form.Item>
