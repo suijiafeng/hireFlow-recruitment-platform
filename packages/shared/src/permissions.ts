@@ -23,6 +23,8 @@ export const PERMISSIONS = {
   SALARY_VIEW: 'salary:view',
 
   ONBOARDING_UPLOAD: 'onboarding:upload',
+  ONBOARDING_READ: 'onboarding:read',
+  ONBOARDING_MANAGE: 'onboarding:manage',
 
   DASHBOARD_VIEW: 'dashboard:view',
   USER_MANAGE: 'user:manage',
@@ -48,6 +50,8 @@ export const PERMISSION_DEFS: Array<{ code: PermissionCode; name: string; group:
   { code: PERMISSIONS.OFFER_APPROVE, name: '审批 Offer', group: 'Offer' },
   { code: PERMISSIONS.SALARY_VIEW, name: '查看薪资字段', group: 'Offer' },
   { code: PERMISSIONS.ONBOARDING_UPLOAD, name: '上传入职材料', group: '入职' },
+  { code: PERMISSIONS.ONBOARDING_READ, name: '查看入职单', group: '入职' },
+  { code: PERMISSIONS.ONBOARDING_MANAGE, name: '管理入职流程（清单/合同）', group: '入职' },
   { code: PERMISSIONS.DASHBOARD_VIEW, name: '查看数据大盘', group: '全局' },
   { code: PERMISSIONS.USER_MANAGE, name: '用户管理', group: '系统' },
   { code: PERMISSIONS.CONFIG_MANAGE, name: '系统配置', group: '系统' },
@@ -85,6 +89,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
       PERMISSIONS.OFFER_INITIATE,
       PERMISSIONS.SALARY_VIEW,
       PERMISSIONS.ONBOARDING_UPLOAD,
+      PERMISSIONS.ONBOARDING_READ,
+      PERMISSIONS.ONBOARDING_MANAGE,
       PERMISSIONS.DASHBOARD_VIEW,
     ],
   },
@@ -99,6 +105,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
       PERMISSIONS.EVALUATION_READ,
       PERMISSIONS.OFFER_APPROVE,
       PERMISSIONS.SALARY_VIEW,
+      PERMISSIONS.ONBOARDING_READ,
       PERMISSIONS.DASHBOARD_VIEW,
     ],
   },
@@ -115,11 +122,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
   [RoleCode.NEW_HIRE]: {
     name: '新员工',
     dataScope: DataScope.OWN,
-    permissions: [PERMISSIONS.ONBOARDING_UPLOAD],
+    permissions: [PERMISSIONS.ONBOARDING_READ, PERMISSIONS.ONBOARDING_UPLOAD],
   },
   [RoleCode.IT_SUPPORT]: {
     name: 'IT / 行政',
     dataScope: DataScope.ASSIGNED,
-    permissions: [],
+    // 仅可见入职单并勾选 owner=IT 的待办（勾选范围在服务层按角色约束）
+    permissions: [PERMISSIONS.ONBOARDING_READ],
   },
 };

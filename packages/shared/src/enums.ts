@@ -66,6 +66,8 @@ export enum OfferApprovalStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   SENT = 'SENT',
+  /** 到期未答复自动失效，可续期一次回到 SENT */
+  EXPIRED = 'EXPIRED',
 }
 
 export enum OfferDecision {
@@ -120,6 +122,7 @@ export const OFFER_APPROVAL_STATUS_LABEL: Record<OfferApprovalStatus, string> = 
   [OfferApprovalStatus.APPROVED]: '已批准',
   [OfferApprovalStatus.REJECTED]: '已驳回',
   [OfferApprovalStatus.SENT]: '已发送',
+  [OfferApprovalStatus.EXPIRED]: '已失效',
 };
 
 export const OFFER_DECISION_LABEL: Record<OfferDecision, string> = {

@@ -27,6 +27,10 @@ export const ACTIVITY_ACTIONS = {
   OFFER_REJECTED: 'offer.rejected',
   OFFER_SENT: 'offer.sent',
   OFFER_RESPONDED: 'offer.responded',
+  OFFER_RESUBMITTED: 'offer.resubmitted',
+  OFFER_EXTENDED: 'offer.extended',
+  OFFER_EXPIRED: 'offer.expired',
+  APPLICATION_WITHDRAWN: 'application.withdrawn',
   ONBOARDING_CREATED: 'onboarding.created',
   ONBOARDING_ITEM_DONE: 'onboarding.item_done',
   ONBOARDING_COMPLETED: 'onboarding.completed',
@@ -60,6 +64,19 @@ export const DOCUMENT_TYPE_META = {
 } as const;
 
 export type DocumentType = keyof typeof DOCUMENT_TYPE_META;
+
+/** Offer 答复有效期（工作日）：到期失效、可续期一次 */
+export const OFFER_VALID_BUSINESS_DAYS = 5;
+
+/** 候选人拒绝 Offer 原因码（原因码强制） */
+export const OFFER_DECLINE_REASONS = [
+  '薪资不符合预期',
+  '接受了其他机会',
+  '职业规划调整',
+  '工作地点/通勤',
+  '家庭原因',
+  '其他',
+] as const;
 
 /** 阶段停留 SLA（天）：超过 warn 标黄、超过 danger 标红（后续做成可配置） */
 export const STAGE_STAY_SLA = { warnDays: 3, dangerDays: 7 } as const;
