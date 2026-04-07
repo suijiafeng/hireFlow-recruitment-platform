@@ -70,6 +70,10 @@ export const candidatesApi = {
     http.get<Paginated<Candidate>>('/candidates', { params }).then((r) => r.data),
   create: (data: { name: string; email?: string; phone?: string; source?: string; tags?: string[] }) =>
     http.post<Candidate>('/candidates', data).then((r) => r.data),
+  update: (
+    id: string,
+    data: Partial<{ name: string; email: string; phone: string; source: string; tags: string[] }>,
+  ) => http.patch<Candidate>(`/candidates/${id}`, data).then((r) => r.data),
   get: (id: string) => http.get<CandidateDetail>(`/candidates/${id}`).then((r) => r.data),
   addResume: (id: string, data: { rawText: string; fileName?: string }) =>
     http.post<Resume>(`/candidates/${id}/resumes`, data).then((r) => r.data),

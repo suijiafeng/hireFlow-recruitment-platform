@@ -18,6 +18,7 @@ export function CandidatesPage() {
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Candidate | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
@@ -36,6 +37,29 @@ export function CandidatesPage() {
     },
     onError: (error) => message.error(extractErrorMessage(error, '录入失败')),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; values: Parameters<typeof candidatesApi.update>[1] }) =>
+      candidatesApi.update(vars.id, vars.values),
+    onSuccess: (candidate) => {
+      message.success(`候选人「${candidate.name}」资料已更新`);
+      setEditing(null);
+      form.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ['candidates'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const openEdit = (candidate: Candidate) => {
+    setEditing(candidate);
+    form.setFieldsValue({
+      name: candidate.name,
+      email: candidate.email ?? undefined,
+      phone: candidate.phone ?? undefined,
+      source: candidate.source ?? undefined,
+      tags: candidate.tags,
+    });
+  };
 
   return (
     <Card
@@ -126,11 +150,18 @@ export function CandidatesPage() {
           },
           {
             title: '操作',
-            width: 80,
+            width: 130,
             render: (_, record) => (
-              <Button type="link" size="small" onClick={() => setDetailId(record.id)}>
-                详情
-              </Button>
+              <Space size={0}>
+                <Button type="link" size="small" onClick={() => setDetailId(record.id)}>
+                  详情
+                </Button>
+                {hasPermission(PERMISSIONS.CANDIDATE_UPDATE) && (
+                  <Button type="link" size="small" onClick={() => openEdit(record)}>
+                    编辑
+                  </Button>
+                )}
+              </Space>
             ),
           },
         ]}
@@ -139,14 +170,26 @@ export function CandidatesPage() {
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
 
       <Modal
-        title="新增候选人"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        title={editing ? `编辑候选人：${editing.name}` : '新增候选人'}
+        open={createOpen || editing != null}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditing(null);
+          form.resetFields();
+        }}
         onOk={() => form.submit()}
-        confirmLoading={createMutation.isPending}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" onFinish={(values) => createMutation.mutate(values)}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) =>
+            editing
+              ? updateMutation.mutate({ id: editing.id, values })
+              : createMutation.mutate(values)
+          }
+        >
           <Form.Item name="name" label="姓名" rules={[{ required: true, min: 1 }]}>
             <Input />
           </Form.Item>
