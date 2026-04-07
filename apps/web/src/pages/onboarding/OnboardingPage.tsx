@@ -1,4 +1,4 @@
-import { FileProtectOutlined, PlusOutlined } from '@ant-design/icons';
+import { FileProtectOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CONTRACT_SIGN_STATUS_LABEL,
@@ -46,10 +46,12 @@ const SIGN_STEP: Record<string, number> = { DRAFT: 1, SENT: 2, SIGNED: 3, ARCHIV
 function ChecklistGroup({
   onboarding,
   owner,
+  canToggle,
   onToggle,
 }: {
   onboarding: Onboarding;
   owner: ChecklistItem['owner'];
+  canToggle: boolean;
   onToggle: (key: string, done: boolean) => void;
 }) {
   const items = onboarding.checklist.filter((i) => i.owner === owner);
@@ -58,7 +60,7 @@ function ChecklistGroup({
       <Space orientation="vertical" size={6} style={{ width: '100%' }}>
         {items.map((item) => (
           <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Checkbox checked={item.done} onChange={(e) => onToggle(item.key, e.target.checked)}>
+            <Checkbox checked={item.done} disabled={!canToggle} onChange={(e) => onToggle(item.key, e.target.checked)}>
               <span style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? '#999' : undefined }}>
                 {item.label}
               </span>
@@ -74,11 +76,42 @@ function ChecklistGroup({
 }
 
 function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const roles = useAuthStore((s) => s.user?.roles ?? []);
   const [docOpen, setDocOpen] = useState(false);
   const [docForm] = Form.useForm();
+
+  const canManage = hasPermission(PERMISSIONS.ONBOARDING_MANAGE);
+  /** 与服务端一致的勾选范围：MANAGE 全量；IT 勾 IT 项；新员工勾自己项 */
+  const canToggleOwner = (owner: ChecklistItem['owner']) =>
+    canManage ||
+    (owner === 'IT' && roles.includes('IT_SUPPORT')) ||
+    (owner === 'NEW_HIRE' && roles.includes('NEW_HIRE'));
+
+  /** 生成/复制新员工免登录资料填报链接（H5） */
+  const copyPortalLink = async (onboardingId: string) => {
+    try {
+      const { token } = await onboardingApi.portalLink(onboardingId);
+      const url = `${window.location.origin}/portal/onboarding/${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        message.success('新员工链接已复制，请通过邮件/IM 发送');
+      } catch {
+        modal.info({
+          title: '新员工资料填报链接',
+          content: (
+            <Typography.Text copyable style={{ wordBreak: 'break-all' }}>
+              {url}
+            </Typography.Text>
+          ),
+        });
+      }
+    } catch (error) {
+      message.error(extractErrorMessage(error, '获取链接失败'));
+    }
+  };
 
   const detailQuery = useQuery({
     queryKey: ['onboarding', id],
@@ -145,6 +178,16 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               style={{ marginBottom: 16 }}
             />
           )}
+          {canManage && (
+            <Button
+              size="small"
+              icon={<LinkOutlined />}
+              style={{ marginBottom: 12 }}
+              onClick={() => void copyPortalLink(detail.id)}
+            >
+              复制新员工资料填报链接（免登录 H5）
+            </Button>
+          )}
           <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
             <Descriptions.Item label="职位">
               {detail.application.job.title}（{detail.application.job.department.name}）
@@ -168,6 +211,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               key={owner}
               onboarding={detail}
               owner={owner}
+              canToggle={canToggleOwner(owner)}
               onToggle={(key, done) =>
                 run(() => onboardingApi.toggle(detail.id, key, done), done ? '已完成' : '已取消勾选')
               }
@@ -212,7 +256,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               style={{ marginBottom: 16 }}
             />
             {!contract ? (
-              hasPermission(PERMISSIONS.OFFER_INITIATE) ? (
+              canManage ? (
                 <Button type="primary" onClick={() => run(() => onboardingApi.createContract(detail.id), '合同已生成（模板变量自动填充）')}>
                   生成劳动合同
                 </Button>
@@ -240,19 +284,19 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                   )}
                 </Descriptions>
                 <Space>
-                  {contract.signStatus === 'DRAFT' && hasPermission(PERMISSIONS.OFFER_INITIATE) && (
-                    <Button type="primary" onClick={() => run(() => onboardingApi.sendContract(contract.id), '已发送至电子签服务商')}>
+                  {contract.signStatus === 'DRAFT' && canManage && (
+                    <Button type="primary" onClick={() => run(() => onboardingApi.sendContract(contract.id), '已发送至电子签服务商（新员工可在 H5 链接中签署）')}>
                       发送签署
                     </Button>
                   )}
-                  {contract.signStatus === 'SENT' && (
+                  {contract.signStatus === 'SENT' && canManage && (
                     <Button
                       type="primary"
                       onClick={() =>
                         run(() => onboardingApi.signContract(contract.id), '签署完成：已存证、通知 IT 开账号')
                       }
                     >
-                      完成签署（模拟回调）
+                      完成签署（代签/模拟回调）
                     </Button>
                   )}
                   {contract.signStatus === 'SIGNED' && (
