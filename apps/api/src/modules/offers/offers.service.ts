@@ -277,7 +277,10 @@ export class OffersService {
       // 议价/重提中：老链接不展示已撤回的薪资方案
       return { ...base, preparing: true as const };
     }
-    const onboardingPortalToken: string | null = null;
+    let onboardingPortalToken: string | null = null;
+    if (offer.decision === 'ACCEPTED') {
+      onboardingPortalToken = await this.onboarding.portalTokenOf(offer.applicationId);
+    }
     return {
       ...base,
       preparing: false as const,
@@ -343,7 +346,8 @@ export class OffersService {
 
     let onboardingPortalToken: string | null = null;
     if (decision === 'ACCEPTED') {
-      await this.onboarding.createForApplication(offer.applicationId, actor);
+      const onboarding = await this.onboarding.createForApplication(offer.applicationId, actor);
+      onboardingPortalToken = await this.onboarding.ensurePortalToken(onboarding.id);
       await this.applications.moveToStageByName(offer.applicationId, '待入职', actor);
       await this.checkHeadcount(offer.application.job.id, actor);
       await this.notifications.pushToRole(

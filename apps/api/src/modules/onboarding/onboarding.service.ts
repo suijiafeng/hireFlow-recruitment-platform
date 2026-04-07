@@ -1,11 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ACTIVITY_ACTIONS,
   DEFAULT_ONBOARDING_CHECKLIST,
   DOCUMENT_TYPE_META,
+  PERMISSIONS,
+  RoleCode,
   type DocumentType,
 } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import { candidateActor, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ApplicationsService } from '../applications/applications.service';
@@ -71,6 +74,7 @@ export class OnboardingService {
         status: 'IN_PROGRESS',
         checklist: checklist as unknown as Prisma.InputJsonValue,
         documents: [] as unknown as Prisma.InputJsonValue,
+        portalToken: newPortalToken(), // 新员工免登录 H5 资料收集入口
       },
       include: ONBOARDING_INCLUDE,
     });
@@ -104,12 +108,17 @@ export class OnboardingService {
     return { ...onboarding, progress: this.progressOf(onboarding.checklist) };
   }
 
-  /** 勾选/取消三方待办（HR / IT / 新员工，进度可视） */
+  /**
+   * 勾选/取消三方待办（HR / IT / 新员工，进度可视）。
+   * 勾选范围按角色约束：ONBOARDING_MANAGE 全量；
+   * IT 仅 owner=IT；新员工（含门户候选人身份）仅 owner=NEW_HIRE。
+   */
   async toggleItem(id: string, key: string, done: boolean, user: JwtUser) {
     const onboarding = await this.get(id);
     const checklist = onboarding.checklist as unknown as ChecklistItem[];
     const item = checklist.find((i) => i.key === key);
     if (!item) throw new NotFoundException('清单项不存在');
+    this.assertCanToggle(user, item);
     item.done = done;
     item.doneAt = done ? new Date().toISOString() : null;
 
@@ -285,6 +294,104 @@ export class OnboardingService {
     ]);
     await this.applications.moveToStageByName(onboarding.applicationId, '已入职', user);
     await this.activityLog.record(user, ACTIVITY_ACTIONS.ONBOARDING_COMPLETED, 'Application', onboarding.applicationId, {});
+  }
+
+  private static readonly ROLE_TOGGLE_OWNER: Partial<Record<string, ChecklistItem['owner']>> = {
+    [RoleCode.IT_SUPPORT]: 'IT',
+    [RoleCode.NEW_HIRE]: 'NEW_HIRE',
+    [RoleCode.CANDIDATE]: 'NEW_HIRE', // 门户免登录操作以候选人身份进入，等同新员工待办
+  };
+
+  private assertCanToggle(user: JwtUser, item: ChecklistItem) {
+    if (user.permissions.includes(PERMISSIONS.ONBOARDING_MANAGE)) return;
+    const allowed = user.roles
+      .map((r) => OnboardingService.ROLE_TOGGLE_OWNER[r])
+      .filter((o): o is ChecklistItem['owner'] => Boolean(o));
+    if (!allowed.includes(item.owner)) {
+      throw new ForbiddenException(`「${item.label}」由 ${item.owner} 负责，当前角色不可勾选`);
+    }
+  }
+
+  // ---------- 新员工免登录门户（H5 资料收集 + 电子签） ----------
+
+  /** 确保入职单有门户令牌（老数据补发），返回令牌供前端拼 /portal/onboarding/:token */
+  async ensurePortalToken(id: string): Promise<string> {
+    const onboarding = await this.prisma.onboarding.findUnique({
+      where: { id },
+      select: { id: true, portalToken: true },
+    });
+    if (!onboarding) throw new NotFoundException('入职单不存在');
+    if (onboarding.portalToken) return onboarding.portalToken;
+    const token = newPortalToken();
+    await this.prisma.onboarding.update({ where: { id }, data: { portalToken: token } });
+    return token;
+  }
+
+  /** 按应聘记录查门户令牌（Offer 门户接受后引导新员工进入资料收集） */
+  async portalTokenOf(applicationId: string): Promise<string | null> {
+    const onboarding = await this.prisma.onboarding.findUnique({
+      where: { applicationId },
+      select: { portalToken: true },
+    });
+    return onboarding?.portalToken ?? null;
+  }
+
+  /** 新员工视角的入职单（不暴露内部 id 之外的敏感信息；材料仅回显已识别字段） */
+  async portalView(token: string) {
+    const onboarding = await this.findByToken(token);
+    const documents = ((onboarding.documents as unknown as DocumentRecord[] | null) ?? []).map((d) => ({
+      type: d.type,
+      label: d.label,
+      fields: d.fields,
+      addedAt: d.addedAt,
+    }));
+    return {
+      company: 'ART 科技有限公司',
+      candidateName: onboarding.application.candidate.name,
+      jobTitle: onboarding.application.job.title,
+      department: onboarding.application.job.department.name,
+      status: onboarding.status,
+      checklist: onboarding.checklist as unknown as ChecklistItem[],
+      documents,
+      contract: onboarding.contract
+        ? {
+            templateName: onboarding.contract.templateName,
+            signStatus: onboarding.contract.signStatus,
+            variables: onboarding.contract.variables,
+            evidenceNo: onboarding.contract.evidenceNo,
+          }
+        : null,
+      progress: this.progressOf(onboarding.checklist),
+    };
+  }
+
+  /** 新员工在门户提交材料（OCR 入档 + 自动勾选对应待办） */
+  async portalAddDocument(token: string, dto: AddDocumentDto) {
+    const onboarding = await this.findByToken(token);
+    await this.addDocument(onboarding.id, dto, candidateActor(onboarding.application.candidate.name));
+    return this.portalView(token);
+  }
+
+  /** 新员工在门户签署劳动合同（电子签 mock；真实服务商接入后走回调） */
+  async portalSignContract(token: string) {
+    const onboarding = await this.findByToken(token);
+    if (!onboarding.contract) throw new BadRequestException('合同尚未生成，请等待 HR 操作');
+    if (onboarding.contract.signStatus !== 'SENT') {
+      throw new BadRequestException(
+        onboarding.contract.signStatus === 'DRAFT' ? '合同尚未发送，请等待 HR 操作' : '合同已完成签署',
+      );
+    }
+    await this.signContract(onboarding.contract.id, candidateActor(onboarding.application.candidate.name));
+    return this.portalView(token);
+  }
+
+  private async findByToken(token: string) {
+    const onboarding = await this.prisma.onboarding.findUnique({
+      where: { portalToken: token },
+      include: ONBOARDING_INCLUDE,
+    });
+    if (!onboarding) throw new NotFoundException('链接无效或已失效，请联系 HR');
+    return onboarding;
   }
 
   private async findContract(contractId: string) {
