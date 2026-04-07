@@ -16,7 +16,9 @@ import type {
   JdDraft,
   Job,
   Offer,
+  OfferPortalView,
   Onboarding,
+  OnboardingPortalView,
   Paginated,
   Resume,
   RetentionHint,
@@ -107,10 +109,31 @@ export const offersApi = {
     http.post<Offer>(`/offers/${id}/approve`, { note }).then((r) => r.data),
   reject: (id: string, note?: string) =>
     http.post<Offer>(`/offers/${id}/reject`, { note }).then((r) => r.data),
+  resubmit: (
+    id: string,
+    data: { salaryBase: number; bonusMonths?: number; grade?: string; note?: string },
+  ) => http.post<Offer>(`/offers/${id}/resubmit`, data).then((r) => r.data),
   send: (id: string) => http.post<Offer>(`/offers/${id}/send`).then((r) => r.data),
-  respond: (id: string, decision: 'ACCEPTED' | 'DECLINED') =>
-    http.post<Offer>(`/offers/${id}/respond`, { decision }).then((r) => r.data),
+  extend: (id: string) => http.post<Offer>(`/offers/${id}/extend`).then((r) => r.data),
+  portalLink: (id: string) =>
+    http.post<{ token: string }>(`/offers/${id}/portal-link`).then((r) => r.data),
+  respond: (id: string, decision: 'ACCEPTED' | 'DECLINED', reason?: string) =>
+    http.post<Offer>(`/offers/${id}/respond`, { decision, reason }).then((r) => r.data),
   retention: (id: string) => http.post<RetentionHint>(`/offers/${id}/retention`).then((r) => r.data),
+};
+
+/** 候选人/新员工免登录门户（链接即凭证，不带 JWT） */
+export const portalApi = {
+  offerView: (token: string) =>
+    http.get<OfferPortalView>(`/portal/offers/${token}`).then((r) => r.data),
+  offerRespond: (token: string, decision: 'ACCEPTED' | 'DECLINED', reason?: string) =>
+    http.post<OfferPortalView>(`/portal/offers/${token}/respond`, { decision, reason }).then((r) => r.data),
+  onboardingView: (token: string) =>
+    http.get<OnboardingPortalView>(`/portal/onboardings/${token}`).then((r) => r.data),
+  onboardingAddDocument: (token: string, data: { type: string; rawText: string }) =>
+    http.post<OnboardingPortalView>(`/portal/onboardings/${token}/documents`, data).then((r) => r.data),
+  onboardingSignContract: (token: string) =>
+    http.post<OnboardingPortalView>(`/portal/onboardings/${token}/contract/sign`).then((r) => r.data),
 };
 
 export const notificationsApi = {
@@ -141,6 +164,8 @@ export const onboardingApi = {
     http.post<Onboarding>(`/contracts/${contractId}/send`).then((r) => r.data),
   signContract: (contractId: string) =>
     http.post<Onboarding>(`/contracts/${contractId}/sign`).then((r) => r.data),
+  portalLink: (id: string) =>
+    http.post<{ token: string }>(`/onboardings/${id}/portal-link`).then((r) => r.data),
 };
 
 export const helpdeskApi = {

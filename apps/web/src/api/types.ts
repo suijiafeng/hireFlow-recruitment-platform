@@ -201,8 +201,13 @@ export interface Offer {
   salary: OfferSalary | null;
   grade: string | null;
   approvalStatus: string;
+  approvalNote: string | null;
   decision: string | null;
+  decisionReason: string | null;
   sentAt: string | null;
+  expiresAt: string | null;
+  extendedOnce: boolean;
+  portalToken: string | null;
   respondedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -257,6 +262,45 @@ export interface Onboarding {
     candidate: { id: string; name: string; phone: string | null; email: string | null };
     job: { id: string; title: string; department: { name: string } };
   };
+}
+
+/** 候选人免登录 Offer 门户视图（/portal/offer/:token） */
+export interface OfferPortalView {
+  company: string;
+  candidateName: string;
+  jobTitle: string;
+  department: string;
+  status: string;
+  decision: string | null;
+  decisionReason: string | null;
+  respondedAt: string | null;
+  declineReasons: readonly string[];
+  /** 议价/重提中：老链接不展示已撤回的薪资方案 */
+  preparing: boolean;
+  salary?: OfferSalary | null;
+  grade?: string | null;
+  sentAt?: string | null;
+  expiresAt?: string | null;
+  extendedOnce?: boolean;
+  onboardingPortalToken?: string | null;
+}
+
+/** 新员工免登录入职门户视图（/portal/onboarding/:token） */
+export interface OnboardingPortalView {
+  company: string;
+  candidateName: string;
+  jobTitle: string;
+  department: string;
+  status: string;
+  checklist: ChecklistItem[];
+  documents: Array<{ type: string; label: string; fields: Record<string, string>; addedAt: string }>;
+  contract: {
+    templateName: string | null;
+    signStatus: string;
+    variables: Record<string, unknown> | null;
+    evidenceNo: string | null;
+  } | null;
+  progress: { done: number; total: number };
 }
 
 export interface HelpdeskAnswer {
