@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router';
-import { MainLayout } from './layouts/MainLayout';
+import { firstVisiblePath, MainLayout } from './layouts/MainLayout';
+import { useAuthStore } from './stores/auth';
 import { CandidatesPage } from './pages/candidates/CandidatesPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { HelpdeskPage } from './pages/helpdesk/HelpdeskPage';
@@ -13,6 +14,12 @@ import { OfferPortalPage } from './pages/portal/OfferPortalPage';
 import { OnboardingPortalPage } from './pages/portal/OnboardingPortalPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 
+/** 首页按权限落到第一个可见菜单（面试官/IT 无数据大盘权限，不能硬跳 /dashboard） */
+function HomeRedirect() {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  return <Navigate to={firstVisiblePath(hasPermission)} replace />;
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   // 候选人/新员工免登录门户（链接即凭证，不走 MainLayout 鉴权）
@@ -22,7 +29,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <MainLayout />,
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { index: true, element: <HomeRedirect /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'jobs', element: <JobsPage /> },
       { path: 'candidates', element: <CandidatesPage /> },

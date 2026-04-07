@@ -12,8 +12,9 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { ROLE_LABEL, type RoleCode } from '@hireflow/shared';
+import { PERMISSIONS, ROLE_LABEL, type RoleCode } from '@hireflow/shared';
 import { Avatar, Dropdown, Layout, Menu, Space, Tag, Typography } from 'antd';
+import { useMemo } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { NotificationBell } from '../components/NotificationBell';
 import { useAuthStore } from '../stores/auth';
@@ -32,38 +33,75 @@ const PAGE_TITLES: Record<string, string> = {
   '/settings': '系统设置',
 };
 
-const MENU_ITEMS = [
+/** 菜单项与所需权限码（任一命中即可见；不配 perms = 全员可见）——按钮级权限约定 */
+const MENU_DEFS: Array<{
+  label: string;
+  children: Array<{ key: string; icon: React.ReactNode; label: string; perms?: string[] }>;
+}> = [
   {
-    type: 'group' as const,
     label: '招聘',
     children: [
-      { key: '/dashboard', icon: <DashboardOutlined />, label: '数据大盘' },
-      { key: '/jobs', icon: <ProfileOutlined />, label: '职位管理' },
-      { key: '/candidates', icon: <TeamOutlined />, label: '候选人' },
-      { key: '/pipeline', icon: <AppstoreOutlined />, label: '招聘看板' },
-      { key: '/interviews', icon: <ScheduleOutlined />, label: '面试管理' },
+      { key: '/dashboard', icon: <DashboardOutlined />, label: '数据大盘', perms: [PERMISSIONS.DASHBOARD_VIEW] },
+      { key: '/jobs', icon: <ProfileOutlined />, label: '职位管理', perms: [PERMISSIONS.JOB_READ] },
+      { key: '/candidates', icon: <TeamOutlined />, label: '候选人', perms: [PERMISSIONS.CANDIDATE_READ] },
+      { key: '/pipeline', icon: <AppstoreOutlined />, label: '招聘看板', perms: [PERMISSIONS.JOB_READ] },
+      {
+        key: '/interviews',
+        icon: <ScheduleOutlined />,
+        label: '面试管理',
+        perms: [PERMISSIONS.INTERVIEW_SCHEDULE, PERMISSIONS.EVALUATION_SUBMIT],
+      },
     ],
   },
   {
-    type: 'group' as const,
     label: '录用与入职',
     children: [
-      { key: '/offers', icon: <AuditOutlined />, label: '录用管理' },
-      { key: '/onboarding', icon: <IdcardOutlined />, label: '入职管理' },
+      {
+        key: '/offers',
+        icon: <AuditOutlined />,
+        label: '录用管理',
+        perms: [PERMISSIONS.OFFER_INITIATE, PERMISSIONS.OFFER_APPROVE],
+      },
+      { key: '/onboarding', icon: <IdcardOutlined />, label: '入职管理', perms: [PERMISSIONS.ONBOARDING_READ] },
       { key: '/helpdesk', icon: <CommentOutlined />, label: '入职问答' },
     ],
   },
   {
-    type: 'group' as const,
     label: '系统',
-    children: [{ key: '/settings', icon: <SettingOutlined />, label: '系统设置' }],
+    children: [
+      {
+        key: '/settings',
+        icon: <SettingOutlined />,
+        label: '系统设置',
+        perms: [PERMISSIONS.USER_MANAGE, PERMISSIONS.CONFIG_MANAGE],
+      },
+    ],
   },
 ];
+
+/** 登录后的首页 = 第一个有权限看的菜单项（面试官 → 候选人，IT → 入职管理），全不可见则兜底入职问答 */
+export function firstVisiblePath(hasPermission: (p: string) => boolean): string {
+  const paths = MENU_DEFS.flatMap((group) => group.children);
+  return paths.find((item) => !item.perms || item.perms.some((p) => hasPermission(p)))?.key ?? '/helpdesk';
+}
 
 export function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { token, user, logout } = useAuthStore();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+
+  const menuItems = useMemo(
+    () =>
+      MENU_DEFS.map((group) => ({
+        type: 'group' as const,
+        label: group.label,
+        children: group.children
+          .filter((item) => !item.perms || item.perms.some((p) => hasPermission(p)))
+          .map(({ perms: _perms, ...item }) => item),
+      })).filter((group) => group.children.length > 0),
+    [hasPermission],
+  );
 
   if (!token) return <Navigate to="/login" replace />;
 
@@ -106,7 +144,7 @@ export function MainLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={selectedKey ? [selectedKey] : []}
-          items={MENU_ITEMS}
+          items={menuItems}
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: 'none' }}
         />
