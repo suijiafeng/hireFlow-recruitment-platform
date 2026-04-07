@@ -10,12 +10,14 @@ import { OffersPage } from './pages/offers/OffersPage';
 import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { PipelinePage } from './pages/pipeline/PipelinePage';
 import { OfferPortalPage } from './pages/portal/OfferPortalPage';
+import { OnboardingPortalPage } from './pages/portal/OnboardingPortalPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
-  // 候选人免登录门户（链接即凭证，不走 MainLayout 鉴权）
+  // 候选人/新员工免登录门户（链接即凭证，不走 MainLayout 鉴权）
   { path: '/portal/offer/:token', element: <OfferPortalPage /> },
+  { path: '/portal/onboarding/:token', element: <OnboardingPortalPage /> },
   {
     path: '/',
     element: <MainLayout />,
