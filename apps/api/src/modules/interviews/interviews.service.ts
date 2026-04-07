@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -62,6 +62,40 @@ export class InterviewsService {
       '/interviews',
     );
     return interview;
+  }
+
+  /** 取消面试：仅未开始的场次；通知被指派面试官，留痕后状态终结 */
+  async cancel(id: string, user: JwtUser) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id },
+      include: {
+        interviewers: true,
+        application: { include: { candidate: { select: { name: true } } } },
+      },
+    });
+    if (!interview) throw new NotFoundException('面试不存在');
+    if (interview.status !== 'SCHEDULED') {
+      throw new BadRequestException('仅已安排未进行的面试可取消');
+    }
+    const updated = await this.prisma.interview.update({
+      where: { id },
+      data: { status: 'CANCELED' },
+      include: INTERVIEW_INCLUDE,
+    });
+    await this.activityLog.record(
+      user,
+      ACTIVITY_ACTIONS.INTERVIEW_CANCELED,
+      'Application',
+      interview.applicationId,
+      { candidate: interview.application.candidate.name, round: interview.round },
+    );
+    await this.notifications.push(
+      interview.interviewers.map((i) => i.userId),
+      `面试已取消：${interview.application.candidate.name}（第 ${interview.round} 轮）`,
+      undefined,
+      '/interviews',
+    );
+    return updated;
   }
 
   /** 按应聘记录查询；不传 applicationId 时返回近期面试总览（面试管理页用） */

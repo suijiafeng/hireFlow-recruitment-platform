@@ -28,6 +28,13 @@ export class InterviewsController {
     return this.interviewsService.list(applicationId);
   }
 
+  @Post(':id/cancel')
+  @RequirePermissions(PERMISSIONS.INTERVIEW_SCHEDULE)
+  @ApiOperation({ summary: '取消面试（仅未开始场次，通知面试官）' })
+  cancel(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.interviewsService.cancel(id, user);
+  }
+
   @Post(':id/evaluation-draft')
   @RequirePermissions(PERMISSIONS.EVALUATION_SUBMIT)
   @ApiOperation({ summary: 'AI 生成面评草稿（不落库，供表单预填后人工确认）' })

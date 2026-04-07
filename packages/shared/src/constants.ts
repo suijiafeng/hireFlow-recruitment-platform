@@ -21,6 +21,7 @@ export const ACTIVITY_ACTIONS = {
   APPLICATION_SCORED: 'application.scored',
   APPLICATION_STAGE_CHANGED: 'application.stage_changed',
   INTERVIEW_SCHEDULED: 'interview.scheduled',
+  INTERVIEW_CANCELED: 'interview.canceled',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
   OFFER_INITIATED: 'offer.initiated',
   OFFER_APPROVED: 'offer.approved',

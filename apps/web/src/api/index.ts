@@ -184,6 +184,8 @@ export const interviewsApi = {
     http
       .post<EvaluationDraft>(`/interviews/${interviewId}/evaluation-draft`, { notes })
       .then((r) => r.data),
+  cancel: (interviewId: string) =>
+    http.post<Interview>(`/interviews/${interviewId}/cancel`).then((r) => r.data),
 };
 
 export const departmentsApi = {

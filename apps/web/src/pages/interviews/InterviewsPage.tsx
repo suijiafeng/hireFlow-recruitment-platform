@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   EVALUATION_CONCLUSION_LABEL,
   INTERVIEW_STATUS_LABEL,
@@ -6,10 +6,11 @@ import {
   type EvaluationConclusion,
   type InterviewStatus,
 } from '@hireflow/shared';
-import { Button, Card, Space, Table, Tag } from 'antd';
+import { App, Button, Card, Popconfirm, Space, Table, Tag } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { interviewsApi } from '../../api';
+import { extractErrorMessage } from '../../api/client';
 import type { Interview } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { EvaluationModal } from '../../components/EvaluationModal';
@@ -23,6 +24,8 @@ const CONCLUSION_COLOR: Record<string, string> = {
 };
 
 export function InterviewsPage() {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const [evaluateFor, setEvaluateFor] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -30,6 +33,15 @@ export function InterviewsPage() {
   const interviewsQuery = useQuery({
     queryKey: ['interviews', 'all'],
     queryFn: () => interviewsApi.list(),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: interviewsApi.cancel,
+    onSuccess: () => {
+      message.success('面试已取消，已通知面试官');
+      void queryClient.invalidateQueries({ queryKey: ['interviews'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '取消失败')),
   });
 
   return (
@@ -95,13 +107,27 @@ export function InterviewsPage() {
           },
           {
             title: '操作',
-            width: 100,
-            render: (_, r) =>
-              hasPermission(PERMISSIONS.EVALUATION_SUBMIT) && (
-                <Button type="link" size="small" onClick={() => setEvaluateFor(r.id)}>
-                  提交面评
-                </Button>
-              ),
+            width: 160,
+            render: (_, r) => (
+              <Space size={0}>
+                {hasPermission(PERMISSIONS.EVALUATION_SUBMIT) && (
+                  <Button type="link" size="small" onClick={() => setEvaluateFor(r.id)}>
+                    提交面评
+                  </Button>
+                )}
+                {hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && r.status === 'SCHEDULED' && (
+                  <Popconfirm
+                    title="确认取消这场面试？"
+                    description="将通知全部被指派面试官"
+                    onConfirm={() => cancelMutation.mutate(r.id)}
+                  >
+                    <Button type="link" size="small" danger>
+                      取消
+                    </Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            ),
           },
         ]}
       />
