@@ -56,6 +56,7 @@ enum OfferApprovalStatus {
   APPROVED
   REJECTED
   SENT
+  EXPIRED // 到期未答复自动失效，可续期一次回到 SENT
 }
 
 enum OfferDecision {
@@ -281,9 +282,14 @@ model Offer {
   salary         Json? // 敏感字段：薪资结构（RBAC salary:view 控制）
   grade          String?
   approvalStatus OfferApprovalStatus @default(DRAFT)
+  approvalNote   String? // 审批意见（驳回带意见退回 HR 修改重提）
   sentAt         DateTime?
+  expiresAt      DateTime? // 答复截止（发送时 +5 个工作日）
+  extendedOnce   Boolean             @default(false) // 有效期仅可续期一次
+  portalToken    String?             @unique // 候选人免登录 H5 令牌
   respondedAt    DateTime?
   decision       OfferDecision?
+  decisionReason String? // 候选人拒绝原因码
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
@@ -296,6 +302,7 @@ model Onboarding {
   documents     Json? // 已收集材料
   ocrResults    Json? // OCR 识别结果
   status        OnboardingStatus @default(NOT_STARTED)
+  portalToken   String?          @unique // 新员工免登录 H5 令牌
   contract      Contract?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
