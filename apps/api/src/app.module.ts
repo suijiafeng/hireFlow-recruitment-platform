@@ -18,6 +18,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OffersModule } from './modules/offers/offers.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -26,8 +27,10 @@ import { PrismaModule } from './prisma/prisma.module';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     ActivityLogModule,
-    AiModule,
     NotificationsModule,
+    StorageModule,
+    AiModule,
+    AnalyticsModule,
     AuthModule,
     UsersModule,
     RbacModule,
@@ -36,7 +39,6 @@ import { PrismaModule } from './prisma/prisma.module';
     CandidatesModule,
     ApplicationsModule,
     InterviewsModule,
-    AnalyticsModule,
     OffersModule,
     OnboardingModule,
     HelpdeskModule,
