@@ -1,4 +1,4 @@
-import { FileProtectOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons';
+import { FileProtectOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CONTRACT_SIGN_STATUS_LABEL,
@@ -27,6 +27,7 @@ import {
   Table,
   Tag,
   Typography,
+  Upload,
 } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
@@ -81,6 +82,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const roles = useAuthStore((s) => s.user?.roles ?? []);
   const [docOpen, setDocOpen] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
   const [docForm] = Form.useForm();
 
   const canManage = hasPermission(PERMISSIONS.ONBOARDING_MANAGE);
@@ -135,10 +137,18 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
   };
 
   const addDocMutation = useMutation({
-    mutationFn: (values: { type: string; rawText: string }) => onboardingApi.addDocument(id!, values),
-    onSuccess: () => {
-      message.success('材料已入档，OCR 字段已抽取，对应待办自动勾选');
+    mutationFn: (values: { type: string; rawText?: string }) =>
+      docFile
+        ? onboardingApi.addDocumentFile(id!, { ...values, file: docFile })
+        : onboardingApi.addDocument(id!, values as { type: string; rawText: string }),
+    onSuccess: (_data, values) => {
+      if (docFile && !values.rawText) {
+        message.warning('图片已留档；未提供文字层，材料标记「待人工核对」，请核对后手动勾选待办');
+      } else {
+        message.success('材料已入档，OCR 字段已抽取，对应待办自动勾选');
+      }
       setDocOpen(false);
+      setDocFile(null);
       docForm.resetFields();
       invalidate();
     },
@@ -230,16 +240,40 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无材料（提交后 OCR 自动抽取字段）" />
           ) : (
             detail.documents.map((doc) => (
-              <Card size="small" key={doc.type} style={{ marginBottom: 8 }} title={doc.label}>
-                <Descriptions size="small" column={2}>
-                  {Object.entries(doc.fields).map(([k, v]) => (
-                    <Descriptions.Item key={k} label={k}>
-                      {v}
-                    </Descriptions.Item>
-                  ))}
-                </Descriptions>
+              <Card
+                size="small"
+                key={doc.type}
+                style={{ marginBottom: 8 }}
+                title={
+                  <Space size={8}>
+                    {doc.label}
+                    {doc.needsReview && <Tag color="gold">待人工核对</Tag>}
+                  </Space>
+                }
+                extra={
+                  doc.fileUrl ? (
+                    <Button size="small" type="link" onClick={() => window.open(doc.fileUrl!, '_blank')}>
+                      查看原件
+                    </Button>
+                  ) : null
+                }
+              >
+                {Object.keys(doc.fields).length > 0 ? (
+                  <Descriptions size="small" column={2}>
+                    {Object.entries(doc.fields).map(([k, v]) => (
+                      <Descriptions.Item key={k} label={k}>
+                        {v}
+                      </Descriptions.Item>
+                    ))}
+                  </Descriptions>
+                ) : (
+                  <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                    仅上传了图片、未识别出字段（低置信度阻断）：请打开原件人工核对，确认无误后手动勾选对应待办
+                  </Typography.Text>
+                )}
                 <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
                   识别引擎：{doc.ocrProvider} · {dayjs(doc.addedAt).format('YYYY-MM-DD HH:mm')}
+                  {doc.fileName ? ` · ${doc.fileName}` : ''}
                 </div>
               </Card>
             ))
@@ -310,9 +344,12 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
           </Card>
 
           <Modal
-            title="提交入职材料（文本模拟拍照上传）"
+            title="提交入职材料"
             open={docOpen}
-            onCancel={() => setDocOpen(false)}
+            onCancel={() => {
+              setDocOpen(false);
+              setDocFile(null);
+            }}
             onOk={() => docForm.submit()}
             confirmLoading={addDocMutation.isPending}
             destroyOnHidden
@@ -327,11 +364,24 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                   }))}
                 />
               </Form.Item>
+              <Form.Item label="证件照片（可选）" extra="原件入对象存储留档；接入云 OCR 前图片不识图，纯图片将标记「待人工核对」">
+                <Upload
+                  accept="image/*,.pdf"
+                  maxCount={1}
+                  beforeUpload={(file) => {
+                    setDocFile(file as unknown as File);
+                    return false;
+                  }}
+                  onRemove={() => setDocFile(null)}
+                >
+                  <Button icon={<UploadOutlined />}>选择图片/PDF（≤10MB）</Button>
+                </Upload>
+              </Form.Item>
               <Form.Item
                 name="rawText"
-                label="材料内容"
-                rules={[{ required: true, min: 6, message: '请输入材料文本' }]}
-                extra="三期为文本模拟：粘贴证件上的文字，OCR 引擎自动抽取关键字段；图片上传接云 OCR 后启用"
+                label="材料文字内容"
+                rules={docFile ? [{ min: 6, message: '材料内容过短' }] : [{ required: true, min: 6, message: '请输入材料文本' }]}
+                extra="粘贴证件上的文字，OCR 引擎自动抽取关键字段并勾选待办；只传图片可留空"
               >
                 <Input.TextArea rows={4} placeholder="如：姓名：杨帆 公民身份号码 110105199305124533 住址：…" />
               </Form.Item>

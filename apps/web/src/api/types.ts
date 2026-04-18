@@ -240,6 +240,9 @@ export interface OnboardingDocument {
   fields: Record<string, string>;
   addedAt: string;
   ocrProvider: string;
+  fileName?: string | null;
+  fileUrl?: string | null; // 原件预签名预览链接（10 分钟有效）
+  needsReview?: boolean; // 未识别出字段：待人工核对（低置信度阻断）
 }
 
 export interface Contract {
@@ -294,7 +297,14 @@ export interface OnboardingPortalView {
   department: string;
   status: string;
   checklist: ChecklistItem[];
-  documents: Array<{ type: string; label: string; fields: Record<string, string>; addedAt: string }>;
+  documents: Array<{
+    type: string;
+    label: string;
+    fields: Record<string, string>;
+    addedAt: string;
+    needsReview?: boolean;
+    fileUrl?: string | null;
+  }>;
   contract: {
     templateName: string | null;
     signStatus: string;

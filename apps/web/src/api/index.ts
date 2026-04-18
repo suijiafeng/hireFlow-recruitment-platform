@@ -140,6 +140,15 @@ export const portalApi = {
     http.get<OnboardingPortalView>(`/portal/onboardings/${token}`).then((r) => r.data),
   onboardingAddDocument: (token: string, data: { type: string; rawText: string }) =>
     http.post<OnboardingPortalView>(`/portal/onboardings/${token}/documents`, data).then((r) => r.data),
+  onboardingAddDocumentFile: (token: string, data: { type: string; rawText?: string; file?: File }) => {
+    const form = new FormData();
+    form.append('type', data.type);
+    if (data.rawText) form.append('rawText', data.rawText);
+    if (data.file) form.append('file', data.file);
+    return http
+      .post<OnboardingPortalView>(`/portal/onboardings/${token}/documents/file`, form)
+      .then((r) => r.data);
+  },
   onboardingSignContract: (token: string) =>
     http.post<OnboardingPortalView>(`/portal/onboardings/${token}/contract/sign`).then((r) => r.data),
 };
@@ -166,6 +175,13 @@ export const onboardingApi = {
     http.patch<Onboarding>(`/onboardings/${id}/checklist/${key}`, { done }).then((r) => r.data),
   addDocument: (id: string, data: { type: string; rawText: string }) =>
     http.post<Onboarding>(`/onboardings/${id}/documents`, data).then((r) => r.data),
+  addDocumentFile: (id: string, data: { type: string; rawText?: string; file?: File }) => {
+    const form = new FormData();
+    form.append('type', data.type);
+    if (data.rawText) form.append('rawText', data.rawText);
+    if (data.file) form.append('file', data.file);
+    return http.post<Onboarding>(`/onboardings/${id}/documents/file`, form).then((r) => r.data);
+  },
   createContract: (id: string) =>
     http.post<Onboarding>(`/onboardings/${id}/contract`).then((r) => r.data),
   sendContract: (contractId: string) =>

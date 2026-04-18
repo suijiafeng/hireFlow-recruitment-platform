@@ -1,4 +1,10 @@
-import { CheckCircleFilled, EditOutlined, FileProtectOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  CameraOutlined,
+  CheckCircleFilled,
+  EditOutlined,
+  FileProtectOutlined,
+  PlusOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOCUMENT_TYPE_META, CONTRACT_SIGN_STATUS_LABEL, type ContractSignStatus } from '@hireflow/shared';
 import {
@@ -16,6 +22,7 @@ import {
   Spin,
   Tag,
   Typography,
+  Upload,
 } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
@@ -36,7 +43,8 @@ export function OnboardingPortalPage() {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const [docOpen, setDocOpen] = useState(false);
-  const [docForm] = Form.useForm<{ type: string; rawText: string }>();
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docForm] = Form.useForm<{ type: string; rawText?: string }>();
 
   const viewQuery = useQuery({
     queryKey: ['portal-onboarding', token],
@@ -46,12 +54,20 @@ export function OnboardingPortalPage() {
   });
 
   const addDocMutation = useMutation({
-    mutationFn: (values: { type: string; rawText: string }) => portalApi.onboardingAddDocument(token, values),
-    onSuccess: (data) => {
+    mutationFn: (values: { type: string; rawText?: string }) =>
+      docFile
+        ? portalApi.onboardingAddDocumentFile(token, { ...values, file: docFile })
+        : portalApi.onboardingAddDocument(token, values as { type: string; rawText: string }),
+    onSuccess: (data, values) => {
       queryClient.setQueryData(['portal-onboarding', token], data);
       setDocOpen(false);
+      setDocFile(null);
       docForm.resetFields();
-      message.success('材料已提交，系统已自动识别关键信息');
+      if (docFile && !values.rawText) {
+        message.success('照片已提交，HR 将人工核对后确认');
+      } else {
+        message.success('材料已提交，系统已自动识别关键信息');
+      }
     },
     onError: (error) => message.error(extractErrorMessage(error, '提交失败，请检查内容后重试')),
   });
@@ -228,7 +244,10 @@ export function OnboardingPortalPage() {
           <Modal
             title="提交证件材料"
             open={docOpen}
-            onCancel={() => setDocOpen(false)}
+            onCancel={() => {
+              setDocOpen(false);
+              setDocFile(null);
+            }}
             onOk={() => docForm.submit()}
             confirmLoading={addDocMutation.isPending}
             destroyOnHidden
@@ -243,11 +262,26 @@ export function OnboardingPortalPage() {
                   }))}
                 />
               </Form.Item>
+              <Form.Item label="拍照/选择图片" extra="照片将安全存档；如未填写下方文字，HR 将人工核对照片内容">
+                <Upload
+                  accept="image/*"
+                  maxCount={1}
+                  beforeUpload={(file) => {
+                    setDocFile(file as unknown as File);
+                    return false;
+                  }}
+                  onRemove={() => setDocFile(null)}
+                >
+                  <Button icon={<CameraOutlined />} block>
+                    拍照或从相册选择
+                  </Button>
+                </Upload>
+              </Form.Item>
               <Form.Item
                 name="rawText"
-                label="材料内容"
-                rules={[{ required: true, min: 6, message: '请输入材料文本' }]}
-                extra="当前为演示：粘贴证件上的文字，系统自动识别关键字段；正式环境为拍照上传"
+                label="证件文字内容"
+                rules={docFile ? [{ min: 6, message: '内容过短' }] : [{ required: true, min: 6, message: '请输入材料文本' }]}
+                extra="粘贴证件上的文字可立即自动识别；只传照片则由 HR 人工核对"
               >
                 <Input.TextArea rows={4} placeholder="如：姓名：杨帆 公民身份号码 110105199305124533 住址：…" />
               </Form.Item>

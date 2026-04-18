@@ -70,7 +70,7 @@ export function LoginPage() {
           title="开发环境测试账号"
           description={
             <div style={{ fontSize: 12 }}>
-              admin / hr / manager / interviewer @arthr.local
+              admin / hr / manager / interviewer / it @arthr.local
               <br />
               统一密码：Admin@123456
             </div>
