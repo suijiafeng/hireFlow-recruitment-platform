@@ -28,9 +28,9 @@ export class CandidatesController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.CANDIDATE_READ)
-  @ApiOperation({ summary: '候选人分页列表' })
-  list(@Query() query: QueryCandidatesDto) {
-    return this.candidatesService.list(query);
+  @ApiOperation({ summary: '候选人分页列表（面试官视角联系方式脱敏）' })
+  list(@Query() query: QueryCandidatesDto, @CurrentUser() user: JwtUser) {
+    return this.candidatesService.list(query, user);
   }
 
   @Post()
@@ -42,9 +42,9 @@ export class CandidatesController {
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CANDIDATE_READ)
-  @ApiOperation({ summary: '360° 候选人详情（含应聘/时间轴）' })
-  findOne(@Param('id') id: string) {
-    return this.candidatesService.findOne(id);
+  @ApiOperation({ summary: '360° 候选人详情（含应聘/面评/时间轴）' })
+  findOne(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.candidatesService.findOne(id, user);
   }
 
   @Patch(':id')

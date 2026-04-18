@@ -1,5 +1,12 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ACTIVITY_ACTIONS } from '@hireflow/shared';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
+import { departmentScopeOf, isAssignedScope } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -21,18 +28,63 @@ export class CandidatesService {
     private readonly storage: StorageService,
   ) {}
 
-  async list(query: QueryCandidatesDto) {
+  /**
+   * 去偏见/字段级脱敏：纯面试官视角默认看不到候选人联系方式；
+   * 管理员/HR/用人经理不受影响。
+   */
+  private shouldMaskContact(user: JwtUser): boolean {
+    const privileged: string[] = [RoleCode.ADMIN, RoleCode.HR, RoleCode.HIRING_MANAGER];
+    return (
+      user.roles.includes(RoleCode.INTERVIEWER) && !user.roles.some((r) => privileged.includes(r))
+    );
+  }
+
+  private maskContact<T extends { email?: string | null; phone?: string | null }>(
+    candidate: T,
+    user: JwtUser,
+  ): T {
+    if (!this.shouldMaskContact(user)) return candidate;
+    return {
+      ...candidate,
+      email: candidate.email ? '（已脱敏）' : null,
+      phone: candidate.phone ? '（已脱敏）' : null,
+    };
+  }
+
+  /**
+   * 数据行级范围：
+   * 用人经理 = 投递过本部门职位的候选人；面试官 = 被指派面试的候选人。
+   */
+  private candidateScopeWhere(user: JwtUser): Prisma.CandidateWhereInput {
+    const deptScope = departmentScopeOf(user);
+    if (deptScope) {
+      return { applications: { some: { job: { departmentId: deptScope } } } };
+    }
+    if (isAssignedScope(user)) {
+      return {
+        applications: {
+          some: { interviews: { some: { interviewers: { some: { userId: user.sub } } } } },
+        },
+      };
+    }
+    return {};
+  }
+
+  async list(query: QueryCandidatesDto, user: JwtUser) {
     const { page = 1, pageSize = 20, keyword } = query;
-    const where: Prisma.CandidateWhereInput = keyword
-      ? {
-          OR: [
-            { name: { contains: keyword, mode: 'insensitive' } },
-            { email: { contains: keyword, mode: 'insensitive' } },
-            { phone: { contains: keyword } },
-            { tags: { has: keyword } },
-          ],
-        }
-      : {};
+    const where: Prisma.CandidateWhereInput = {
+      ...this.candidateScopeWhere(user),
+      ...(keyword
+        ? {
+            OR: [
+              { name: { contains: keyword, mode: 'insensitive' } },
+              { email: { contains: keyword, mode: 'insensitive' } },
+              { phone: { contains: keyword } },
+              { tags: { has: keyword } },
+            ],
+          }
+        : {}),
+    };
     const [total, items] = await this.prisma.$transaction([
       this.prisma.candidate.count({ where }),
       this.prisma.candidate.findMany({
@@ -51,7 +103,7 @@ export class CandidatesService {
         take: pageSize,
       }),
     ]);
-    return { total, page, pageSize, items };
+    return { total, page, pageSize, items: items.map((c) => this.maskContact(c, user)) };
   }
 
   async create(dto: CreateCandidateDto, user: JwtUser) {
@@ -66,7 +118,18 @@ export class CandidatesService {
   }
 
   /** 360° 候选人详情：结构化信息 + 应聘记录 + 时间轴 */
-  async findOne(id: string) {
+  async findOne(id: string, user: JwtUser) {
+    // 行级范围校验：范围外的候选人按不可见处理（403），后端兜底前端过滤
+    const scopeWhere = this.candidateScopeWhere(user);
+    if (Object.keys(scopeWhere).length > 0) {
+      const inScope = await this.prisma.candidate.findFirst({
+        where: { id, ...scopeWhere },
+        select: { id: true },
+      });
+      if (!inScope) {
+        throw new ForbiddenException('该候选人不在您的数据范围内（本部门/仅被指派）');
+      }
+    }
     const candidate = await this.prisma.candidate.findUnique({
       where: { id },
       include: {
@@ -106,7 +169,7 @@ export class CandidatesService {
       include: { actor: { select: { id: true, name: true } } },
     });
 
-    return { ...candidate, timeline };
+    return { ...this.maskContact(candidate, user), timeline };
   }
 
   async update(id: string, dto: Partial<CreateCandidateDto>, user: JwtUser) {
