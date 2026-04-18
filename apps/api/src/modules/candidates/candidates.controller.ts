@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
@@ -47,5 +59,18 @@ export class CandidatesController {
   @ApiOperation({ summary: '文本导入简历' })
   addResume(@Param('id') id: string, @Body() dto: AddResumeDto, @CurrentUser() user: JwtUser) {
     return this.candidatesService.addResume(id, dto, user);
+  }
+
+  @Post(':id/resumes/file')
+  @RequirePermissions(PERMISSIONS.CANDIDATE_UPDATE)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiOperation({ summary: '上传简历原件（PDF/文本自动抽取文字进入解析链路，原件入对象存储）' })
+  addResumeFile(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!file) throw new BadRequestException('请选择要上传的简历文件');
+    return this.candidatesService.addResumeFile(id, file, user);
   }
 }

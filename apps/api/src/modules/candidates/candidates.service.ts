@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
+import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AddResumeDto } from './dto/add-resume.dto';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
@@ -11,10 +12,13 @@ import { QueryCandidatesDto } from './dto/query-candidates.dto';
 
 @Injectable()
 export class CandidatesService {
+  private readonly logger = new Logger(CandidatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
     private readonly ai: AiService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(query: QueryCandidatesDto) {
@@ -175,5 +179,71 @@ export class CandidatesService {
       length: dto.rawText.length,
     });
     return resume;
+  }
+
+  /**
+   * 上传简历原件：原件入对象存储留档，PDF/文本自动抽取文字进入既有 AI 解析链路；
+   * 抽不出文字的格式（扫描件/Word）留档后由 HR 粘贴文本补充（人工兜底）。
+   */
+  async addResumeFile(candidateId: string, file: Express.Multer.File, user: JwtUser) {
+    const candidate = await this.prisma.candidate.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new NotFoundException('候选人不存在');
+
+    const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8'); // multer 中文名乱码修正
+    const fileKey = this.storage.objectKey(`resumes/${candidateId}`, fileName);
+    await this.storage.put(fileKey, file.buffer, file.mimetype);
+
+    const rawText = await this.extractText(file.buffer, file.mimetype, fileName);
+    const resume = await this.prisma.resume.create({
+      data: {
+        candidateId,
+        fileKey,
+        fileName,
+        rawText,
+        parseStatus: 'PENDING',
+      },
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.RESUME_ADDED, 'Candidate', candidateId, {
+      resumeId: resume.id,
+      fileName,
+      size: file.size,
+      textExtracted: Boolean(rawText),
+    });
+    return { ...resume, textExtracted: Boolean(rawText) };
+  }
+
+  /** 简历原件预览链接（预签名，10 分钟有效） */
+  async resumeFileUrl(resumeId: string) {
+    const resume = await this.prisma.resume.findUnique({
+      where: { id: resumeId },
+      select: { fileKey: true, fileName: true },
+    });
+    if (!resume) throw new NotFoundException('简历不存在');
+    if (!resume.fileKey) throw new NotFoundException('该简历为文本导入，无原件文件');
+    return { url: await this.storage.presignedGetUrl(resume.fileKey, resume.fileName ?? undefined) };
+  }
+
+  /** PDF / 纯文本抽取文字；其余格式返回 null（留档不解析） */
+  private async extractText(buffer: Buffer, mimetype: string, fileName: string): Promise<string | null> {
+    try {
+      if (mimetype === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+        const { PDFParse } = await import('pdf-parse');
+        const parser = new PDFParse({ data: new Uint8Array(buffer) });
+        try {
+          const result = await parser.getText();
+          const text = result.text?.trim();
+          return text ? text.slice(0, 50_000) : null;
+        } finally {
+          await parser.destroy();
+        }
+      }
+      if (mimetype.startsWith('text/') || /\.(txt|md|markdown)$/i.test(fileName)) {
+        const text = buffer.toString('utf8').trim();
+        return text ? text.slice(0, 50_000) : null;
+      }
+    } catch (error) {
+      this.logger.warn(`简历文字抽取失败（${fileName}）：${error instanceof Error ? error.message : error}`);
+    }
+    return null;
   }
 }
