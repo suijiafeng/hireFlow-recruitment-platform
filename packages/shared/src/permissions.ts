@@ -112,7 +112,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
   [RoleCode.INTERVIEWER]: {
     name: '面试官',
     dataScope: DataScope.ASSIGNED,
-    permissions: [PERMISSIONS.CANDIDATE_READ, PERMISSIONS.EVALUATION_SUBMIT],
+    // evaluation:read 用于「我的面试」列表；行级范围（仅被指派）在查询层收紧
+    permissions: [PERMISSIONS.CANDIDATE_READ, PERMISSIONS.EVALUATION_READ, PERMISSIONS.EVALUATION_SUBMIT],
   },
   [RoleCode.CANDIDATE]: {
     name: '候选人',
