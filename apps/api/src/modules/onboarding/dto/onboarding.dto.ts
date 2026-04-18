@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class ToggleChecklistDto {
   @ApiProperty({ description: '是否完成' })
@@ -12,10 +12,12 @@ export class AddDocumentDto {
   @IsIn(['ID_CARD', 'BANK_CARD', 'DIPLOMA'])
   type: 'ID_CARD' | 'BANK_CARD' | 'DIPLOMA';
 
-  @ApiProperty({
-    description: '材料文本内容（三期先粘贴文本模拟拍照，OCR 抽取关键字段；后续接图片上传）',
+  @ApiPropertyOptional({
+    description:
+      '材料文字内容（OCR 文字层）。可与图片同传；只传图片时（mock OCR 无法识图）材料标记「待人工核对」，不自动勾选待办（低置信度阻断）',
   })
+  @IsOptional()
   @IsString()
   @MinLength(6, { message: '材料内容过短' })
-  rawText: string;
+  rawText?: string;
 }

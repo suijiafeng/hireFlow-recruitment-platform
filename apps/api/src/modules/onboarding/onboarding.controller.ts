@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
@@ -40,9 +41,22 @@ export class OnboardingController {
 
   @Post('onboardings/:id/documents')
   @RequirePermissions(PERMISSIONS.ONBOARDING_UPLOAD)
-  @ApiOperation({ summary: '提交入职材料（OCR 抽取字段并入档）' })
+  @ApiOperation({ summary: '提交入职材料（文本 OCR 抽取字段并入档）' })
   addDocument(@Param('id') id: string, @Body() dto: AddDocumentDto, @CurrentUser() user: JwtUser) {
     return this.onboardingService.addDocument(id, dto, user);
+  }
+
+  @Post('onboardings/:id/documents/file')
+  @RequirePermissions(PERMISSIONS.ONBOARDING_UPLOAD)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiOperation({ summary: '提交入职材料（图片原件入对象存储；可附文字层走 OCR）' })
+  addDocumentFile(
+    @Param('id') id: string,
+    @Body() dto: AddDocumentDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.onboardingService.addDocument(id, dto, user, file);
   }
 
   @Post('onboardings/:id/portal-link')

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { AddDocumentDto } from './dto/onboarding.dto';
@@ -24,6 +25,17 @@ export class OnboardingPortalController {
   @ApiOperation({ summary: '新员工提交材料（OCR 识别核对 + 自动勾选待办）' })
   addDocument(@Param('token') token: string, @Body() dto: AddDocumentDto) {
     return this.onboardingService.portalAddDocument(token, dto);
+  }
+
+  @Post(':token/documents/file')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiOperation({ summary: '新员工拍照上传材料（图片留档；可附文字走 OCR，纯图片转人工核对）' })
+  addDocumentFile(
+    @Param('token') token: string,
+    @Body() dto: AddDocumentDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.onboardingService.portalAddDocument(token, dto, file);
   }
 
   @Post(':token/contract/sign')

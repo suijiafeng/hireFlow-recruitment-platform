@@ -12,6 +12,8 @@ import { candidateActor, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ApplicationsService } from '../applications/applications.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AddDocumentDto } from './dto/onboarding.dto';
 import { MockEsignProvider, type EsignProvider } from './providers/esign.provider';
@@ -32,6 +34,9 @@ interface DocumentRecord {
   fields: Record<string, string>;
   addedAt: string;
   ocrProvider: string;
+  fileKey?: string | null; // 原件对象存储 key（拍照上传）
+  fileName?: string | null;
+  needsReview?: boolean; // 未识别出字段（如只传图片）：待人工核对，不自动勾选待办
 }
 
 const ONBOARDING_INCLUDE = {
@@ -56,6 +61,8 @@ export class OnboardingService {
     private readonly activityLog: ActivityLogService,
     private readonly applications: ApplicationsService,
     private readonly webhook: WebhookService,
+    private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Offer 接受后自动创建入职单 */
@@ -116,15 +123,29 @@ export class OnboardingService {
     };
   }
 
+  /** 材料列表补预签名预览链接（原件在对象存储；无文件/存储不可用时 fileUrl=null） */
+  private async withDocUrls<T extends { documents: Prisma.JsonValue }>(onboarding: T): Promise<T> {
+    const docs = (onboarding.documents as unknown as DocumentRecord[] | null) ?? [];
+    const enriched = await Promise.all(
+      docs.map(async (d) => ({
+        ...d,
+        fileUrl: await this.storage.tryPresignedGetUrl(d.fileKey, d.fileName ?? undefined),
+      })),
+    );
+    return { ...onboarding, documents: enriched as unknown as Prisma.JsonValue };
+  }
+
   async list(user?: JwtUser) {
     const items = await this.prisma.onboarding.findMany({
       include: ONBOARDING_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });
-    return items.map((o) => ({
-      ...this.maskContractSalary(o, user),
-      progress: this.progressOf(o.checklist),
-    }));
+    return Promise.all(
+      items.map(async (o) => ({
+        ...(await this.withDocUrls(this.maskContractSalary(o, user))),
+        progress: this.progressOf(o.checklist),
+      })),
+    );
   }
 
   async get(id: string, user?: JwtUser) {
@@ -133,7 +154,10 @@ export class OnboardingService {
       include: ONBOARDING_INCLUDE,
     });
     if (!onboarding) throw new NotFoundException('入职单不存在');
-    return { ...this.maskContractSalary(onboarding, user), progress: this.progressOf(onboarding.checklist) };
+    return {
+      ...(await this.withDocUrls(this.maskContractSalary(onboarding, user))),
+      progress: this.progressOf(onboarding.checklist),
+    };
   }
 
   /**
@@ -165,17 +189,30 @@ export class OnboardingService {
     return this.get(id, user);
   }
 
-  /** 收集入职材料：文本 → OCR 抽取字段 → 入档并自动勾选对应清单项 */
-  async addDocument(id: string, dto: AddDocumentDto, user: JwtUser) {
+  /**
+   * 收集入职材料：图片原件入对象存储留档；文字层走 OCR 抽取字段并自动勾选对应待办；
+   * 只有图片没有可识别字段时标记「待人工核对」，不自动流转并通知 HR（低置信度阻断）。
+   */
+  async addDocument(id: string, dto: AddDocumentDto, user: JwtUser, file?: Express.Multer.File) {
     const onboarding = await this.get(id);
     if (onboarding.status === 'COMPLETED') {
       throw new BadRequestException('入职已闭环，材料不可再变更（如需更正请联系管理员）');
     }
     const meta = DOCUMENT_TYPE_META[dto.type];
-    const fields = await this.ocr.parse(dto.type, dto.rawText);
-    if (Object.keys(fields).length === 0) {
+
+    let fileKey: string | null = null;
+    let fileName: string | null = null;
+    if (file) {
+      fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      fileKey = this.storage.objectKey(`onboarding/${id}/${dto.type}`, fileName);
+      await this.storage.put(fileKey, file.buffer, file.mimetype);
+    }
+
+    const fields = dto.rawText ? await this.ocr.parse(dto.type, dto.rawText) : {};
+    if (!file && Object.keys(fields).length === 0) {
       throw new BadRequestException('未能从材料中识别出关键字段，请检查内容');
     }
+    const needsReview = Object.keys(fields).length === 0;
 
     const documents = (onboarding.documents as unknown as DocumentRecord[] | null) ?? [];
     const record: DocumentRecord = {
@@ -184,6 +221,9 @@ export class OnboardingService {
       fields,
       addedAt: new Date().toISOString(),
       ocrProvider: this.ocr.name,
+      fileKey,
+      fileName,
+      needsReview,
     };
     const next = [...documents.filter((d) => d.type !== dto.type), record];
 
@@ -195,9 +235,22 @@ export class OnboardingService {
       type: meta.label,
       fields: Object.keys(fields),
       provider: this.ocr.name,
+      file: fileName,
+      needsReview,
     });
-    // 自动化：材料入档即勾选对应新员工待办
-    await this.toggleItem(id, meta.checklistKey, true, user);
+
+    if (needsReview) {
+      // 低置信度不自动流转，强提示 HR 人工核对
+      await this.notifications.pushToRole(
+        RoleCode.HR,
+        `入职材料待人工核对：${onboarding.application.candidate.name}`,
+        `「${meta.label}」仅上传了图片、未识别出字段，请核对后手动勾选对应待办`,
+        '/onboarding',
+      );
+    } else {
+      // 自动化：材料入档即勾选对应新员工待办
+      await this.toggleItem(id, meta.checklistKey, true, user);
+    }
     return this.get(id, user);
   }
 
@@ -373,12 +426,16 @@ export class OnboardingService {
   /** 新员工视角的入职单（不暴露内部 id 之外的敏感信息；材料仅回显已识别字段） */
   async portalView(token: string) {
     const onboarding = await this.findByToken(token);
-    const documents = ((onboarding.documents as unknown as DocumentRecord[] | null) ?? []).map((d) => ({
-      type: d.type,
-      label: d.label,
-      fields: d.fields,
-      addedAt: d.addedAt,
-    }));
+    const documents = await Promise.all(
+      ((onboarding.documents as unknown as DocumentRecord[] | null) ?? []).map(async (d) => ({
+        type: d.type,
+        label: d.label,
+        fields: d.fields,
+        addedAt: d.addedAt,
+        needsReview: d.needsReview ?? false,
+        fileUrl: await this.storage.tryPresignedGetUrl(d.fileKey, d.fileName ?? undefined),
+      })),
+    );
     return {
       company: 'ART 科技有限公司',
       candidateName: onboarding.application.candidate.name,
@@ -399,10 +456,10 @@ export class OnboardingService {
     };
   }
 
-  /** 新员工在门户提交材料（OCR 入档 + 自动勾选对应待办） */
-  async portalAddDocument(token: string, dto: AddDocumentDto) {
+  /** 新员工在门户提交材料（拍照/文字，OCR 入档 + 自动勾选对应待办） */
+  async portalAddDocument(token: string, dto: AddDocumentDto, file?: Express.Multer.File) {
     const onboarding = await this.findByToken(token);
-    await this.addDocument(onboarding.id, dto, candidateActor(onboarding.application.candidate.name));
+    await this.addDocument(onboarding.id, dto, candidateActor(onboarding.application.candidate.name), file);
     return this.portalView(token);
   }
 
