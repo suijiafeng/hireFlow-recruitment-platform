@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
+import { departmentScopeOf, isAssignedScope } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -99,15 +101,25 @@ export class InterviewsService {
   }
 
   /** 按应聘记录查询；不传 applicationId 时返回近期面试总览（面试管理页用） */
-  async list(applicationId?: string) {
+  async list(applicationId?: string, user?: JwtUser) {
+    // 数据行级权限：面试官仅被指派的面试；用人经理仅本部门
+    const scopeWhere: Prisma.InterviewWhereInput = {};
+    if (user && isAssignedScope(user)) {
+      scopeWhere.interviewers = { some: { userId: user.sub } };
+    }
+    const deptScope = user ? departmentScopeOf(user) : null;
+    if (deptScope) {
+      scopeWhere.application = { job: { departmentId: deptScope } };
+    }
     if (applicationId) {
       return this.prisma.interview.findMany({
-        where: { applicationId },
+        where: { applicationId, ...scopeWhere },
         include: INTERVIEW_INCLUDE,
         orderBy: { round: 'asc' },
       });
     }
     return this.prisma.interview.findMany({
+      where: scopeWhere,
       include: {
         ...INTERVIEW_INCLUDE,
         application: {

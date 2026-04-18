@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS, DEFAULT_PIPELINE_STAGES } from '@hireflow/shared';
+import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -16,11 +17,14 @@ export class JobsService {
     private readonly activityLog: ActivityLogService,
   ) {}
 
-  async list(query: QueryJobsDto) {
+  async list(query: QueryJobsDto, user?: JwtUser) {
     const { page = 1, pageSize = 20, keyword, status } = query;
+    // 数据行级权限：用人经理仅本部门职位
+    const deptScope = user ? departmentScopeOf(user) : null;
     const where: Prisma.JobWhereInput = {
       ...(keyword ? { title: { contains: keyword, mode: 'insensitive' } } : {}),
       ...(status ? { status } : {}),
+      ...(deptScope ? { departmentId: deptScope } : {}),
     };
     const [total, items] = await this.prisma.$transaction([
       this.prisma.job.count({ where }),

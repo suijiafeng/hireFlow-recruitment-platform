@@ -18,8 +18,8 @@ export class JobsController {
   @Get()
   @RequirePermissions(PERMISSIONS.JOB_READ)
   @ApiOperation({ summary: '职位分页列表' })
-  list(@Query() query: QueryJobsDto) {
-    return this.jobsService.list(query);
+  list(@Query() query: QueryJobsDto, @CurrentUser() user: JwtUser) {
+    return this.jobsService.list(query, user);
   }
 
   @Post()

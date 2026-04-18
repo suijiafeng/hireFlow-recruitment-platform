@@ -1,5 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ACTIVITY_ACTIONS } from '@hireflow/shared';
+import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -117,7 +124,18 @@ export class ApplicationsService {
   }
 
   /** 看板数据：按阶段分组返回该职位全部流程中候选人 */
-  async board(jobId: string) {
+  async board(jobId: string, user?: JwtUser) {
+    // 数据行级权限：用人经理仅可打开本部门职位的看板
+    if (user) {
+      const deptScope = departmentScopeOf(user);
+      if (deptScope) {
+        const owned = await this.prisma.job.findFirst({
+          where: { id: jobId, departmentId: deptScope },
+          select: { id: true },
+        });
+        if (!owned) throw new ForbiddenException('仅可查看本部门职位的看板（数据范围：本部门）');
+      }
+    }
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
       include: {

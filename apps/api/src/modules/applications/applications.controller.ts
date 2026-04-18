@@ -23,8 +23,8 @@ export class ApplicationsController {
   @Get('jobs/:jobId/board')
   @RequirePermissions(PERMISSIONS.CANDIDATE_READ)
   @ApiOperation({ summary: '职位看板数据（按阶段分组）' })
-  board(@Param('jobId') jobId: string) {
-    return this.applicationsService.board(jobId);
+  board(@Param('jobId') jobId: string, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.board(jobId, user);
   }
 
   @Patch('applications/:id/stage')

@@ -7,6 +7,7 @@ import {
   RoleCode,
   type DocumentType,
 } from '@hireflow/shared';
+import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { candidateActor, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
@@ -136,7 +137,10 @@ export class OnboardingService {
   }
 
   async list(user?: JwtUser) {
+    // 数据行级权限：用人经理仅本部门职位的入职单
+    const deptScope = user ? departmentScopeOf(user) : null;
     const items = await this.prisma.onboarding.findMany({
+      where: deptScope ? { application: { job: { departmentId: deptScope } } } : undefined,
       include: ONBOARDING_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });

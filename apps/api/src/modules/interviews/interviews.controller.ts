@@ -24,8 +24,8 @@ export class InterviewsController {
   @Get()
   @RequirePermissions(PERMISSIONS.EVALUATION_READ)
   @ApiOperation({ summary: '面试列表（?applicationId= 过滤；缺省返回近期总览）' })
-  list(@Query('applicationId') applicationId?: string) {
-    return this.interviewsService.list(applicationId);
+  list(@Query('applicationId') applicationId: string | undefined, @CurrentUser() user: JwtUser) {
+    return this.interviewsService.list(applicationId, user);
   }
 
   @Post(':id/cancel')

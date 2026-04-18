@@ -12,6 +12,7 @@ import {
   PERMISSIONS,
   RoleCode,
 } from '@hireflow/shared';
+import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { addBusinessDays, candidateActor, newPortalToken } from '../../common/portal';
 import type { Offer, Prisma } from '../../generated/prisma/client';
@@ -62,7 +63,10 @@ export class OffersService {
 
   async list(user: JwtUser) {
     this.ensureCanRead(user);
+    // 数据行级权限：用人经理仅本部门职位的 Offer
+    const deptScope = departmentScopeOf(user);
     const offers = await this.prisma.offer.findMany({
+      where: deptScope ? { application: { job: { departmentId: deptScope } } } : undefined,
       include: OFFER_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });
@@ -119,6 +123,15 @@ export class OffersService {
     }
     if (!approve && !dto.note?.trim()) {
       throw new BadRequestException('驳回必须填写审批意见，供 HR 修改重提');
+    }
+    // 数据行级权限：用人经理仅可审批本部门职位的 Offer
+    const deptScope = departmentScopeOf(user);
+    if (deptScope) {
+      const owned = await this.prisma.job.findFirst({
+        where: { id: offer.application.job.id, departmentId: deptScope },
+        select: { id: true },
+      });
+      if (!owned) throw new ForbiddenException('仅可审批本部门职位的 Offer（数据范围：本部门）');
     }
     const updated = await this.prisma.offer.update({
       where: { id },
