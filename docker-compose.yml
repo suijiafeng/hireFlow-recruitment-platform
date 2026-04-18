@@ -25,5 +25,21 @@ services:
     ports:
       - '6379:6379'
 
+  # 本地开发用对象存储（简历/合同/证件文件，二三期接入）。
+  # MinIO 社区版镜像已停更，tag 钉死；生产环境请换云 OSS 或其他 S3 兼容服务。
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: hireflow-minio
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: arthr
+      MINIO_ROOT_PASSWORD: arthr_dev_password
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - miniodata:/data
+
 volumes:
   pgdata:
+  miniodata:
