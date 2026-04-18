@@ -133,11 +133,13 @@ export class OffersService {
       });
       if (!owned) throw new ForbiddenException('仅可审批本部门职位的 Offer（数据范围：本部门）');
     }
-    const updated = await this.prisma.offer.update({
-      where: { id },
+    // 状态前置条件进写入条件：并发重复审批只成功一次
+    const result = await this.prisma.offer.updateMany({
+      where: { id, approvalStatus: 'PENDING' },
       data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', approvalNote: dto.note ?? null },
-      include: OFFER_INCLUDE,
     });
+    if (result.count === 0) throw new ConflictException('该 Offer 刚被他人处理，请刷新');
+    const updated = await this.findOrThrow(id);
     await this.activityLog.record(
       user,
       approve ? ACTIVITY_ACTIONS.OFFER_APPROVED : ACTIVITY_ACTIONS.OFFER_REJECTED,
@@ -197,16 +199,17 @@ export class OffersService {
       throw new BadRequestException('仅已批准的 Offer 可发送');
     }
     const expiresAt = addBusinessDays(new Date(), OFFER_VALID_BUSINESS_DAYS);
-    const updated = await this.prisma.offer.update({
-      where: { id },
+    const result = await this.prisma.offer.updateMany({
+      where: { id, approvalStatus: 'APPROVED' },
       data: {
         approvalStatus: 'SENT',
         sentAt: new Date(),
         expiresAt,
         portalToken: offer.portalToken ?? newPortalToken(),
       },
-      include: OFFER_INCLUDE,
     });
+    if (result.count === 0) throw new ConflictException('该 Offer 刚被他人处理，请刷新');
+    const updated = await this.findOrThrow(id);
     await this.activityLog.record(user, ACTIVITY_ACTIONS.OFFER_SENT, 'Application', offer.applicationId, {
       candidate: offer.application.candidate.name,
       expiresAt: expiresAt.toISOString(),
@@ -342,15 +345,17 @@ export class OffersService {
       throw new BadRequestException('拒绝 Offer 必须选择原因码');
     }
 
-    const updated = await this.prisma.offer.update({
-      where: { id: offerId },
+    // 并发双答复（如 HR 代录与候选人门户同时提交）只允许一个成功
+    const result = await this.prisma.offer.updateMany({
+      where: { id: offerId, approvalStatus: 'SENT', decision: null },
       data: {
         decision,
         respondedAt: new Date(),
         decisionReason: decision === 'DECLINED' ? reason : null,
       },
-      include: OFFER_INCLUDE,
     });
+    if (result.count === 0) throw new ConflictException('该 Offer 刚被答复过，请刷新查看');
+    const updated = await this.findOrThrow(offerId);
     await this.activityLog.record(actor, ACTIVITY_ACTIONS.OFFER_RESPONDED, 'Application', offer.applicationId, {
       candidate: offer.application.candidate.name,
       decision,

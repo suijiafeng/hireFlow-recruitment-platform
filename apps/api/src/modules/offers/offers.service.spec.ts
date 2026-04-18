@@ -46,6 +46,8 @@ function makeService(offer: Record<string, unknown>) {
     offer: {
       findUnique: jest.fn().mockResolvedValue(offer),
       update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...offer, ...data })),
+      // 并发加固后 approve/send 走写入条件（updateMany where 状态前置）
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     application: {
       count: jest.fn().mockResolvedValue(0),
@@ -87,13 +89,14 @@ describe('OffersService 状态机守卫', () => {
     await expect(service.resubmit('o1', { salaryBase: 28000 }, HR)).rejects.toThrow('仅被驳回的');
   });
 
-  it('发送时生成门户令牌与 5 个工作日答复期', async () => {
+  it('发送时生成门户令牌与 5 个工作日答复期（写入条件带状态前置）', async () => {
     const { service, prisma } = makeService(makeOffer({ approvalStatus: 'APPROVED', portalToken: null, expiresAt: null }));
     await service.send('o1', HR);
-    const data = prisma.offer.update.mock.calls[0][0].data;
-    expect(data.approvalStatus).toBe('SENT');
-    expect(data.portalToken).toBeTruthy();
-    expect(data.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    const call = prisma.offer.updateMany.mock.calls[0][0];
+    expect(call.where.approvalStatus).toBe('APPROVED');
+    expect(call.data.approvalStatus).toBe('SENT');
+    expect(call.data.portalToken).toBeTruthy();
+    expect(call.data.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
   it('拒绝答复必须带原因码', async () => {
