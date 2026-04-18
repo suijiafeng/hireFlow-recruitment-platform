@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
+import { widestScope } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -37,6 +38,7 @@ export class AuthService {
       roles,
       permissions,
       departmentId: user.departmentId,
+      dataScope: widestScope(user.roles.map((ur) => ur.role.dataScope)),
     };
 
     return {
