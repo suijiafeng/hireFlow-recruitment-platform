@@ -1,4 +1,11 @@
-import { CalendarOutlined, FileTextOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
+import {
+  CalendarOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+  PaperClipOutlined,
+  PlusOutlined,
+  RobotOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   APPLICATION_STATUS_LABEL,
@@ -28,6 +35,7 @@ import {
   Tag,
   Timeline,
   Typography,
+  Upload,
 } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
@@ -262,6 +270,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
   const [scheduleFor, setScheduleFor] = useState<{ id: string; rounds: number } | null>(null);
   const [evaluateFor, setEvaluateFor] = useState<string | null>(null);
   const [resumeOpen, setResumeOpen] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [resumeForm] = Form.useForm();
   const [applyForm] = Form.useForm();
@@ -287,12 +296,29 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
   const addResumeMutation = useMutation({
     mutationFn: (values: { rawText: string }) => candidatesApi.addResume(candidateId!, values),
     onSuccess: () => {
-      message.success('简历已导入（二期将自动进行 AI 解析与打分）');
+      message.success('简历已导入，可点击「AI 解析」提取结构化信息');
       setResumeOpen(false);
       resumeForm.resetFields();
       invalidate();
     },
     onError: (error) => message.error(extractErrorMessage(error, '导入失败')),
+  });
+
+  const uploadResumeMutation = useMutation({
+    mutationFn: (file: File) => candidatesApi.addResumeFile(candidateId!, file),
+    onSuccess: (resume) => {
+      setResumeOpen(false);
+      setResumeFile(null);
+      resumeForm.resetFields();
+      invalidate();
+      if (resume.textExtracted) {
+        message.success('原件已留档，文字抽取成功，正在自动进行 AI 解析…');
+        parseMutation.mutate(resume.id);
+      } else {
+        message.warning('原件已留档，但未能抽取文字（扫描件/图片），请补充粘贴文本后再解析');
+      }
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '上传失败')),
   });
 
   const applyMutation = useMutation({
@@ -444,6 +470,22 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                               </Tag>
                             </Space>
                             <Space size={8}>
+                              {resume.fileKey && (
+                                <Button
+                                  size="small"
+                                  icon={<PaperClipOutlined />}
+                                  onClick={() =>
+                                    resumesApi
+                                      .fileUrl(resume.id)
+                                      .then(({ url }) => window.open(url, '_blank'))
+                                      .catch((error) =>
+                                        message.error(extractErrorMessage(error, '获取原件链接失败')),
+                                      )
+                                  }
+                                >
+                                  原件
+                                </Button>
+                              )}
                               {resume.rawText && hasPermission(PERMISSIONS.CANDIDATE_UPDATE) && (
                                 <Button
                                   size="small"
@@ -521,24 +563,52 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
           />
 
           <Modal
-            title="导入简历文本"
+            title="导入简历"
             open={resumeOpen}
-            onCancel={() => setResumeOpen(false)}
-            onOk={() => resumeForm.submit()}
-            confirmLoading={addResumeMutation.isPending}
+            onCancel={() => {
+              setResumeOpen(false);
+              setResumeFile(null);
+            }}
+            onOk={() => {
+              if (resumeFile) uploadResumeMutation.mutate(resumeFile);
+              else resumeForm.submit();
+            }}
+            okText={resumeFile ? '上传原件' : '导入文本'}
+            confirmLoading={addResumeMutation.isPending || uploadResumeMutation.isPending}
             destroyOnHidden
           >
+            <Upload.Dragger
+              accept=".pdf,.txt,.md"
+              maxCount={1}
+              beforeUpload={(file) => {
+                setResumeFile(file as unknown as File);
+                return false; // 不自动上传，点确定统一提交
+              }}
+              onRemove={() => setResumeFile(null)}
+              style={{ marginBottom: 16 }}
+            >
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">点击或拖入简历原件（PDF / 文本，≤10MB）</p>
+              <p className="ant-upload-hint" style={{ fontSize: 12 }}>
+                原件入对象存储留档；PDF 自动抽取文字并进入 AI 解析
+              </p>
+            </Upload.Dragger>
             <Form
               form={resumeForm}
               layout="vertical"
               onFinish={(values) => addResumeMutation.mutate(values)}
+              style={{ marginTop: 16 }}
             >
               <Form.Item
                 name="rawText"
-                label="简历全文"
-                rules={[{ required: true, min: 20, message: '请粘贴完整简历文本（至少 20 字）' }]}
+                label="或直接粘贴简历全文"
+                rules={
+                  resumeFile ? [] : [{ required: true, min: 20, message: '请粘贴完整简历文本（至少 20 字）' }]
+                }
               >
-                <Input.TextArea rows={10} placeholder="粘贴候选人简历全文（PDF 文件上传将在三期接入对象存储）" />
+                <Input.TextArea rows={6} placeholder="粘贴候选人简历全文（与文件上传二选一）" disabled={Boolean(resumeFile)} />
               </Form.Item>
             </Form>
           </Modal>

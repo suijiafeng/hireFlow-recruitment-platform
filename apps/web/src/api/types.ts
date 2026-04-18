@@ -79,6 +79,7 @@ export interface Interview {
 export interface Resume {
   id: string;
   fileName: string | null;
+  fileKey: string | null;
   parseStatus: string;
   skills: string[];
   rawText: string | null;

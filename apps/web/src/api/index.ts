@@ -79,6 +79,13 @@ export const candidatesApi = {
   get: (id: string) => http.get<CandidateDetail>(`/candidates/${id}`).then((r) => r.data),
   addResume: (id: string, data: { rawText: string; fileName?: string }) =>
     http.post<Resume>(`/candidates/${id}/resumes`, data).then((r) => r.data),
+  addResumeFile: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return http
+      .post<Resume & { textExtracted: boolean }>(`/candidates/${id}/resumes/file`, form)
+      .then((r) => r.data);
+  },
 };
 
 export const applicationsApi = {
@@ -89,6 +96,7 @@ export const applicationsApi = {
 
 export const resumesApi = {
   parse: (id: string) => http.post<Resume>(`/resumes/${id}/parse`).then((r) => r.data),
+  fileUrl: (id: string) => http.get<{ url: string }>(`/resumes/${id}/file-url`).then((r) => r.data),
 };
 
 export const aiApi = {
