@@ -20,12 +20,15 @@ function StatCard({
   icon,
   color,
   loading,
+  extra,
 }: {
   title: string;
   value: number | string;
   icon: ReactNode;
   color: string;
   loading: boolean;
+  /** 数值下方的补充说明（如「另有 N 个满编暂停」），避免"招聘中 0"看起来像坏数据 */
+  extra?: string;
 }) {
   return (
     <Card>
@@ -46,7 +49,10 @@ function StatCard({
         >
           {icon}
         </div>
-        <Statistic title={title} value={value} loading={loading} />
+        <div>
+          <Statistic title={title} value={value} loading={loading} />
+          {extra && <div style={{ fontSize: 11, color: '#d48806', marginTop: 2 }}>{extra}</div>}
+        </div>
       </div>
     </Card>
   );
@@ -114,6 +120,8 @@ const TODO_META = [
   { key: 'newResumes' as const, label: '待处理新简历', link: '/pipeline', hint: '停留在首个阶段的候选人' },
   { key: 'myPendingEvaluations' as const, label: '我的待提交面评', link: '/interviews', hint: '面试已过时未提交' },
   { key: 'pendingOffers' as const, label: '待审批 Offer', link: '/offers', hint: '需要用人经理审批' },
+  { key: 'rejectedOffers' as const, label: '被驳回待重提', link: '/offers', hint: 'Offer 方案需修改后重新提交' },
+  { key: 'offersDue' as const, label: 'Offer 到期待处理', link: '/offers', hint: '24h 内到期或已失效可续期' },
   { key: 'onboardingInProgress' as const, label: '进行中入职单', link: '/onboarding', hint: '三方清单未完成' },
   { key: 'docsNeedReview' as const, label: '材料待人工核对', link: '/onboarding', hint: '仅图片未识别字段（低置信度）' },
 ];
@@ -206,6 +214,11 @@ export function DashboardPage() {
             icon={<ProfileOutlined />}
             color="#2a78d6"
             loading={overviewQuery.isLoading}
+            extra={
+              overviewQuery.data?.pausedJobs
+                ? `另有 ${overviewQuery.data.pausedJobs} 个职位满编暂停`
+                : undefined
+            }
           />
         </Col>
         <Col span={6}>

@@ -33,6 +33,7 @@ import dayjs from 'dayjs';
 import { useState } from 'react';
 import { onboardingApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
+import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { ChecklistItem, Onboarding } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
 
@@ -395,7 +396,15 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
 
 export function OnboardingPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
-  const listQuery = useQuery({ queryKey: ['onboardings'], queryFn: onboardingApi.list });
+  const listQuery = useQuery({ queryKey: ['onboardings'], queryFn: onboardingApi.list, retry: false });
+
+  if (listQuery.isError) {
+    return (
+      <Card title="入职管理">
+        <QueryErrorResult error={listQuery.error} />
+      </Card>
+    );
+  }
 
   return (
     <Card title="入职管理" styles={{ body: { paddingTop: 8 } }}>

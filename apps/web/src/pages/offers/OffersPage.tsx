@@ -40,6 +40,7 @@ import dayjs from 'dayjs';
 import { useState } from 'react';
 import { offersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
+import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { Offer, RetentionHint } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
 
@@ -270,7 +271,7 @@ export function OffersPage() {
   const [resubmitTarget, setResubmitTarget] = useState<Offer | null>(null);
   const [declineTarget, setDeclineTarget] = useState<Offer | null>(null);
 
-  const offersQuery = useQuery({ queryKey: ['offers'], queryFn: offersApi.list });
+  const offersQuery = useQuery({ queryKey: ['offers'], queryFn: offersApi.list, retry: false });
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['offers'] });
@@ -316,6 +317,10 @@ export function OffersPage() {
 
   return (
     <Card title="录用管理" styles={{ body: { paddingTop: 8 } }}>
+      {offersQuery.isError ? (
+        <QueryErrorResult error={offersQuery.error} />
+      ) : (
+        <>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
         流程：HR 发起 → 用人经理审批（驳回带意见可修改重提）→ HR 发送（候选人免登录链接，5 个工作日答复期，可续期一次）→
         候选人在线答复或 HR 代录；接受后自动生成入职单并移卡「待入职」
@@ -479,6 +484,8 @@ export function OffersPage() {
       <RejectApprovalModal offer={rejectTarget} onClose={() => setRejectTarget(null)} onDone={invalidate} />
       <ResubmitModal offer={resubmitTarget} onClose={() => setResubmitTarget(null)} onDone={invalidate} />
       <DeclineEntryModal offer={declineTarget} onClose={() => setDeclineTarget(null)} onDone={invalidate} />
+        </>
+      )}
     </Card>
   );
 }

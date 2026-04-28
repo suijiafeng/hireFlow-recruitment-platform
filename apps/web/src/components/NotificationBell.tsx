@@ -69,7 +69,12 @@ export function NotificationBell() {
                       </span>
                     </div>
                     {item.body && (
-                      <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>{item.body}</div>
+                      <Typography.Paragraph
+                        style={{ fontSize: 12, color: '#777', margin: '2px 0 0' }}
+                        ellipsis={{ rows: 2, tooltip: item.body }}
+                      >
+                        {item.body}
+                      </Typography.Paragraph>
                     )}
                   </div>
                 </List.Item>

@@ -174,6 +174,7 @@ export interface NotificationItem {
 
 export interface AnalyticsOverview {
   openJobs: number;
+  pausedJobs: number;
   candidates: number;
   upcomingInterviews: number;
   hired: number;
@@ -324,6 +325,8 @@ export interface TodoSummary {
   newResumes: number;
   myPendingEvaluations: number;
   pendingOffers: number | null;
+  rejectedOffers: number | null;
+  offersDue: number | null;
   onboardingInProgress: number;
   docsNeedReview: number;
 }

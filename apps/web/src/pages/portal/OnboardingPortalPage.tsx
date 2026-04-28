@@ -19,6 +19,7 @@ import {
   Progress,
   Result,
   Select,
+  Space,
   Spin,
   Tag,
   Typography,
@@ -157,17 +158,50 @@ export function OnboardingPortalPage() {
           {view.documents.length > 0 && (
             <Card size="small" title="已提交的材料" style={{ marginBottom: 12 }}>
               {view.documents.map((doc) => (
-                <Card size="small" key={doc.type} style={{ marginBottom: 8 }} title={doc.label} type="inner">
-                  <Descriptions size="small" column={1}>
-                    {Object.entries(doc.fields).map(([k, v]) => (
-                      <Descriptions.Item key={k} label={k}>
-                        {v}
-                      </Descriptions.Item>
-                    ))}
-                  </Descriptions>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                    请核对识别结果，如有误请重新提交同类型材料覆盖
-                  </Typography.Text>
+                <Card
+                  size="small"
+                  key={doc.type}
+                  style={{ marginBottom: 8 }}
+                  type="inner"
+                  title={
+                    <Space size={6}>
+                      {doc.label}
+                      {doc.needsReview && <Tag color="gold">已收到，人工核对中</Tag>}
+                    </Space>
+                  }
+                >
+                  {doc.fileUrl && (
+                    <img
+                      src={doc.fileUrl}
+                      alt={`${doc.label}照片`}
+                      style={{
+                        maxWidth: 120,
+                        maxHeight: 80,
+                        borderRadius: 6,
+                        border: '1px solid #eee',
+                        marginBottom: 8,
+                        display: 'block',
+                      }}
+                    />
+                  )}
+                  {Object.keys(doc.fields).length > 0 ? (
+                    <>
+                      <Descriptions size="small" column={1}>
+                        {Object.entries(doc.fields).map(([k, v]) => (
+                          <Descriptions.Item key={k} label={k}>
+                            {v}
+                          </Descriptions.Item>
+                        ))}
+                      </Descriptions>
+                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                        请核对识别结果，如有误请重新提交同类型材料覆盖
+                      </Typography.Text>
+                    </>
+                  ) : (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      照片已成功上传，HR 核对后会为您勾选对应事项，无需重复提交
+                    </Typography.Text>
+                  )}
                 </Card>
               ))}
             </Card>

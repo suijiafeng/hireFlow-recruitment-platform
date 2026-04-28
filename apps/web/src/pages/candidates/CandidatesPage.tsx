@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PERMISSIONS } from '@hireflow/shared';
-import { App, Button, Card, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
+import { App, Button, Card, Form, Input, Modal, Select, Space, Table, Tag, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { candidatesApi } from '../../api';
@@ -119,13 +119,19 @@ export function CandidatesPage() {
           {
             title: '技能标签',
             dataIndex: 'tags',
+            // 标签收纳：最多展示 4 个，其余折叠为 +N（悬停查看全部），避免撑高行
             render: (tags: string[]) => (
               <>
-                {tags.map((tag) => (
+                {tags.slice(0, 4).map((tag) => (
                   <Tag key={tag} color="blue">
                     {tag}
                   </Tag>
                 ))}
+                {tags.length > 4 && (
+                  <Tooltip title={tags.slice(4).join('、')}>
+                    <Tag>+{tags.length - 4}</Tag>
+                  </Tooltip>
+                )}
               </>
             ),
           },
