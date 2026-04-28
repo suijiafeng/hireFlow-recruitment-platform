@@ -336,6 +336,69 @@ export interface BoardColumn {
   applications: BoardCard[];
 }
 
+/** 数据洞察报表 */
+export interface InsightsData {
+  tth: {
+    medianDays: number | null;
+    hiredCount: number;
+    byJob: Array<{ jobTitle: string; medianDays: number | null; hired: number }>;
+  };
+  offer: {
+    sent: number;
+    accepted: number;
+    acceptRate: number | null;
+    renegeCount: number;
+    renegeRate: number | null;
+  };
+  channels: Array<{
+    source: string;
+    applied: number;
+    interviewed: number;
+    offered: number;
+    accepted: number;
+    hired: number;
+    interviewRate: number | null;
+    hireRate: number | null;
+  }>;
+  interviewers: Array<{
+    name: string;
+    evaluations: number;
+    onTimeRate: number | null;
+    passRate: number | null;
+    passRateDeviation: number | null;
+  }>;
+  overallPassRate: number | null;
+  stageStay: Array<{ stage: string; samples: number; p50Days: number | null; p90Days: number | null }>;
+}
+
+/** 人才库唤醒推荐（历史候选人 × 新职位 AI 重新打分） */
+export interface TalentPoolRecommendation {
+  candidate: { id: string; name: string; tags: string[]; source: string | null };
+  score: number;
+  hits: string[];
+  highlights: string;
+  aiMeta: AiMeta;
+  lastApplication: {
+    jobTitle: string;
+    status: string;
+    rejectReason: string | null;
+    updatedAt: string;
+  } | null;
+}
+
+export interface TalentPoolScanResult {
+  job: { id: string; title: string };
+  scanned: number;
+  recommendations: TalentPoolRecommendation[];
+}
+
+/** 批量操作结果（部分失败不回滚，错误报告模式） */
+export interface BatchResult {
+  total: number;
+  succeeded: number;
+  failed: Array<{ id: string; candidate: string | null; error: string }>;
+}
+
 export interface BoardData {
   job: { id: string; title: string; status: JobStatus };
   columns: BoardColumn[];

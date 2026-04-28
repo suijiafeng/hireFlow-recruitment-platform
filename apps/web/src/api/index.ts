@@ -3,6 +3,7 @@ import { http } from './client';
 import type {
   AnalyticsOverview,
   NotificationItem,
+  BatchResult,
   BoardCard,
   BoardData,
   Candidate,
@@ -12,6 +13,7 @@ import type {
   FunnelData,
   ActivityItem,
   HelpdeskAnswer,
+  InsightsData,
   Interview,
   JdDraft,
   Job,
@@ -23,6 +25,7 @@ import type {
   Resume,
   RetentionHint,
   Role,
+  TalentPoolScanResult,
   TodoSummary,
   UserBrief,
 } from './types';
@@ -55,6 +58,10 @@ export const jobsApi = {
       status: string;
     }>,
   ) => http.patch<Job>(`/jobs/${id}`, data).then((r) => r.data),
+  talentPoolScan: (jobId: string) =>
+    http.post<TalentPoolScanResult>(`/jobs/${jobId}/talent-pool/scan`).then((r) => r.data),
+  talentPoolActivate: (jobId: string, candidateId: string) =>
+    http.post<BoardCard>(`/jobs/${jobId}/talent-pool/activate`, { candidateId }).then((r) => r.data),
 };
 
 export const boardApi = {
@@ -65,6 +72,10 @@ export const boardApi = {
   ) => http.patch<BoardCard>(`/applications/${applicationId}/stage`, data).then((r) => r.data),
   reject: (applicationId: string, data: { reason: string; note?: string }) =>
     http.post<BoardCard>(`/applications/${applicationId}/reject`, data).then((r) => r.data),
+  batchReject: (data: { ids: string[]; reason: string; note?: string }) =>
+    http.post<BatchResult>('/applications/batch/reject', data).then((r) => r.data),
+  batchMove: (data: { ids: string[]; stageId: string; reason?: string }) =>
+    http.post<BatchResult>('/applications/batch/move', data).then((r) => r.data),
 };
 
 export const candidatesApi = {
@@ -206,6 +217,7 @@ export const analyticsApi = {
   funnel: (jobId: string) => http.get<FunnelData>(`/analytics/funnel/${jobId}`).then((r) => r.data),
   insight: (jobId: string) =>
     http.post<{ insight: string; aiMeta: { provider: string } }>(`/analytics/insight/${jobId}`).then((r) => r.data),
+  insights: () => http.get<InsightsData>('/analytics/insights').then((r) => r.data),
 };
 
 export const interviewsApi = {
