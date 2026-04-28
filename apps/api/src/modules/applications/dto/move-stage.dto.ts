@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { REJECT_REASONS } from '@hireflow/shared';
 
 export class MoveStageDto {
@@ -35,4 +46,35 @@ export class RejectApplicationDto {
   @IsString()
   @MaxLength(300)
   note?: string;
+}
+
+/** 批量淘汰（单次上限 100 防误操作） */
+export class BatchRejectDto extends RejectApplicationDto {
+  @ApiProperty({ description: '应聘记录 id 列表', type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  ids: string[];
+}
+
+/** 批量移动阶段（同一职位内；含回退卡时 reason 必填，与单卡规则一致） */
+export class BatchMoveDto {
+  @ApiProperty({ description: '应聘记录 id 列表', type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  ids: string[];
+
+  @ApiProperty({ description: '目标阶段 id' })
+  @IsString()
+  stageId: string;
+
+  @ApiPropertyOptional({ description: '回退原因（批量中含回退卡时必填，应用于全部回退卡）' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  reason?: string;
 }

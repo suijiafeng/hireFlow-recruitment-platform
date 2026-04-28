@@ -15,3 +15,4 @@ apps/api/src/generated/
 coverage/
 .vite/
 .replay
+.claude

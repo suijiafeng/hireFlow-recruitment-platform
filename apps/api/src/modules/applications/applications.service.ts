@@ -13,7 +13,14 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
-import { MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
+import { BatchMoveDto, BatchRejectDto, MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
+
+/** 批量操作结果：部分失败不回滚（错误报告模式） */
+export interface BatchResult {
+  total: number;
+  succeeded: number;
+  failed: Array<{ id: string; candidate: string | null; error: string }>;
+}
 
 const CARD_SELECT = {
   id: true,
@@ -287,6 +294,45 @@ export class ApplicationsService {
       note: dto.note ?? null,
     });
     return updated;
+  }
+
+  /**
+   * 批量淘汰：逐条复用单卡守卫（终态检查/原因码/留痕），
+   * 部分失败不回滚，返回成败明细供前端展示错误报告。
+   */
+  async batchReject(dto: BatchRejectDto, user: JwtUser): Promise<BatchResult> {
+    return this.runBatch(dto.ids, (id) => this.reject(id, { reason: dto.reason, note: dto.note }, user));
+  }
+
+  /** 批量移动阶段：逐条复用 moveStage 全部守卫（同职位/回退原因/自动化接管列拦截/乐观锁） */
+  async batchMove(dto: BatchMoveDto, user: JwtUser): Promise<BatchResult> {
+    return this.runBatch(dto.ids, (id) =>
+      this.moveStage(id, { stageId: dto.stageId, reason: dto.reason }, user),
+    );
+  }
+
+  /** 顺序执行保证列内 position 分配与留痕顺序稳定；单次上限已由 DTO 约束（≤100） */
+  private async runBatch(ids: string[], op: (id: string) => Promise<unknown>): Promise<BatchResult> {
+    const uniqueIds = [...new Set(ids)];
+    const failed: BatchResult['failed'] = [];
+    let succeeded = 0;
+    for (const id of uniqueIds) {
+      try {
+        await op(id);
+        succeeded += 1;
+      } catch (error) {
+        const candidate = await this.prisma.application
+          .findUnique({ where: { id }, select: { candidate: { select: { name: true } } } })
+          .then((a) => a?.candidate.name ?? null)
+          .catch(() => null);
+        failed.push({
+          id,
+          candidate,
+          error: error instanceof Error ? error.message : '未知错误',
+        });
+      }
+    }
+    return { total: uniqueIds.length, succeeded, failed };
   }
 
   /** 按阶段名称自动移卡（自动化工作流用：发起 Offer→Offer、接受→待入职、签约→已入职）；阶段不存在或需回退则跳过 */

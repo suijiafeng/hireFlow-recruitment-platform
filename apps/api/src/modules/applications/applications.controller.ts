@@ -5,7 +5,7 @@ import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
-import { MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
+import { BatchMoveDto, BatchRejectDto, MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
 
 @ApiTags('applications')
 @ApiBearerAuth()
@@ -39,6 +39,21 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'AI 岗位匹配度评分（可解释报告回写）' })
   score(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.applicationsService.score(id, user);
+  }
+
+  // 批量路由必须声明在 :id 参数路由之前（Nest 按声明顺序匹配，否则 "batch" 会被当作 :id）
+  @Post('applications/batch/reject')
+  @RequirePermissions(PERMISSIONS.APPLICATION_MOVE)
+  @ApiOperation({ summary: '批量淘汰（≤100 条，返回成败明细）' })
+  batchReject(@Body() dto: BatchRejectDto, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.batchReject(dto, user);
+  }
+
+  @Post('applications/batch/move')
+  @RequirePermissions(PERMISSIONS.APPLICATION_MOVE)
+  @ApiOperation({ summary: '批量移动阶段（≤100 条，返回成败明细）' })
+  batchMove(@Body() dto: BatchMoveDto, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.batchMove(dto, user);
   }
 
   @Post('applications/:id/reject')
