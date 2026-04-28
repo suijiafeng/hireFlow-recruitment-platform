@@ -325,6 +325,7 @@ export interface TodoSummary {
   myPendingEvaluations: number;
   pendingOffers: number | null;
   onboardingInProgress: number;
+  docsNeedReview: number;
 }
 
 export interface BoardColumn {

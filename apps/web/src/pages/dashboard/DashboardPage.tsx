@@ -115,6 +115,7 @@ const TODO_META = [
   { key: 'myPendingEvaluations' as const, label: '我的待提交面评', link: '/interviews', hint: '面试已过时未提交' },
   { key: 'pendingOffers' as const, label: '待审批 Offer', link: '/offers', hint: '需要用人经理审批' },
   { key: 'onboardingInProgress' as const, label: '进行中入职单', link: '/onboarding', hint: '三方清单未完成' },
+  { key: 'docsNeedReview' as const, label: '材料待人工核对', link: '/onboarding', hint: '仅图片未识别字段（低置信度）' },
 ];
 
 /** 待办事项聚合 To-Do Center */
