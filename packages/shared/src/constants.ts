@@ -13,6 +13,8 @@ export const ACTIVITY_ACTIONS = {
   JOB_CREATED: 'job.created',
   JOB_UPDATED: 'job.updated',
   STAGES_UPDATED: 'job.stages_updated',
+  TALENT_POOL_SCANNED: 'job.talent_pool_scanned',
+  TALENT_POOL_ACTIVATED: 'application.talent_pool_activated',
   CANDIDATE_CREATED: 'candidate.created',
   CANDIDATE_UPDATED: 'candidate.updated',
   RESUME_ADDED: 'resume.added',
