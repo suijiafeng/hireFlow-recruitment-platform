@@ -4,17 +4,24 @@ import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { AiService } from '../ai/ai.service';
+import { ApplicationsService } from '../applications/applications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { QueryJobsDto } from './dto/query-jobs.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateStagesDto } from './dto/update-stages.dto';
 
+/** 人才库唤醒单次扫描上限：真实 AI 引擎下控 Token 成本（mock 引擎零成本） */
+const TALENT_POOL_SCAN_LIMIT = 20;
+
 @Injectable()
 export class JobsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly ai: AiService,
+    private readonly applications: ApplicationsService,
   ) {}
 
   async list(query: QueryJobsDto, user?: JwtUser) {
@@ -165,6 +172,91 @@ export class JobsService {
       stages: dto.stages.map((s) => s.name),
     });
     return this.getStages(jobId);
+  }
+
+  /**
+   * 人才库唤醒：历史淘汰/撤回候选人 × 本职位 JD 重新 AI 打分，推荐 Top 10。
+   * 复用现有 scoreMatch 引擎；候选池按最近更新取前 N 控制 Token 成本。
+   */
+  async talentPoolScan(jobId: string, user: JwtUser) {
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('职位不存在');
+
+    // 候选池：有淘汰/撤回记录的候选人，排除已在本职位在途/已入职的（避免重复推荐）
+    const pool = await this.prisma.candidate.findMany({
+      where: {
+        applications: { some: { status: { in: ['REJECTED', 'WITHDRAWN'] } } },
+        NOT: { applications: { some: { jobId, status: { in: ['ACTIVE', 'HIRED'] } } } },
+      },
+      include: {
+        resumes: { orderBy: { createdAt: 'desc' }, take: 1 },
+        applications: {
+          where: { status: { in: ['REJECTED', 'WITHDRAWN'] } },
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+          include: { job: { select: { title: true } } },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: TALENT_POOL_SCAN_LIMIT,
+    });
+
+    const scored = await Promise.all(
+      pool.map(async (candidate) => {
+        const resume = candidate.resumes[0];
+        const resumeText = resume?.rawText ?? (resume?.parsed ? JSON.stringify(resume.parsed) : '');
+        if (!resumeText && candidate.tags.length === 0) return null; // 无简历无标签，不可评估
+        const { data, meta } = await this.ai.scoreMatch({
+          jobTitle: job.title,
+          jobDescription: job.description ?? '',
+          jobRequirement: job.requirement ?? '',
+          resumeText,
+          candidateTags: candidate.tags,
+        });
+        const last = candidate.applications[0];
+        return {
+          candidate: {
+            id: candidate.id,
+            name: candidate.name,
+            tags: candidate.tags,
+            source: candidate.source,
+          },
+          score: data.score,
+          hits: data.hits.slice(0, 4),
+          highlights: data.highlights,
+          aiMeta: meta,
+          lastApplication: last
+            ? {
+                jobTitle: last.job.title,
+                status: last.status,
+                rejectReason: last.rejectReason,
+                updatedAt: last.updatedAt,
+              }
+            : null,
+        };
+      }),
+    );
+    const recommendations = scored
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.TALENT_POOL_SCANNED, 'Job', jobId, {
+      job: job.title,
+      scanned: pool.length,
+      recommended: recommendations.length,
+    });
+    return { job: { id: job.id, title: job.title }, scanned: pool.length, recommendations };
+  }
+
+  /** 唤醒激活：为历史候选人在本职位生成新应聘进入首列（复用创建守卫；同职位重复会 409 由前端提示） */
+  async talentPoolActivate(jobId: string, candidateId: string, user: JwtUser) {
+    const application = await this.applications.create({ candidateId, jobId }, user);
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.TALENT_POOL_ACTIVATED, 'Application', application.id, {
+      candidate: application.candidate.name,
+      via: 'talent_pool',
+    });
+    return application;
   }
 
   private async ensureExists(id: string) {

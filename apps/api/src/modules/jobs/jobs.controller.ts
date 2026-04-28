@@ -56,4 +56,22 @@ export class JobsController {
   updateStages(@Param('id') id: string, @Body() dto: UpdateStagesDto, @CurrentUser() user: JwtUser) {
     return this.jobsService.updateStages(id, dto, user);
   }
+
+  @Post(':id/talent-pool/scan')
+  @RequirePermissions(PERMISSIONS.APPLICATION_CREATE)
+  @ApiOperation({ summary: '人才库唤醒：历史候选人按本职位 AI 打分推荐 Top 10' })
+  talentPoolScan(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.jobsService.talentPoolScan(id, user);
+  }
+
+  @Post(':id/talent-pool/activate')
+  @RequirePermissions(PERMISSIONS.APPLICATION_CREATE)
+  @ApiOperation({ summary: '唤醒激活：为候选人生成新应聘进入首列' })
+  talentPoolActivate(
+    @Param('id') id: string,
+    @Body() body: { candidateId: string },
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.jobsService.talentPoolActivate(id, body.candidateId, user);
+  }
 }
