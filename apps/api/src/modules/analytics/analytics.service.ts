@@ -33,7 +33,16 @@ export class AnalyticsService {
     const onboardingInProgress = await this.prisma.onboarding.count({
       where: { status: 'IN_PROGRESS' },
     });
-    return { newResumes, myPendingEvaluations, pendingOffers, onboardingInProgress };
+    // 待人工核对材料（低置信度阻断）：documents 为 JSON 数组，量小直接内存过滤
+    const inProgress = await this.prisma.onboarding.findMany({
+      where: { status: 'IN_PROGRESS' },
+      select: { documents: true },
+    });
+    const docsNeedReview = inProgress.reduce((sum, o) => {
+      const docs = (o.documents as Array<{ needsReview?: boolean }> | null) ?? [];
+      return sum + docs.filter((d) => d.needsReview).length;
+    }, 0);
+    return { newResumes, myPendingEvaluations, pendingOffers, onboardingInProgress, docsNeedReview };
   }
 
   /** 大盘总览指标 */

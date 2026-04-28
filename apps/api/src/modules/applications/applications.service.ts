@@ -117,7 +117,19 @@ export class ApplicationsService {
     } catch (e: unknown) {
       // P2002 = 唯一约束冲突（candidateId + jobId）
       if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
-        throw new ConflictException('该候选人已应聘此职位');
+        // 重复投递不静默丢弃：在原应聘时间轴留痕
+        const existing = await this.prisma.application.findUnique({
+          where: { candidateId_jobId: { candidateId: dto.candidateId, jobId: dto.jobId } },
+          select: { id: true, status: true },
+        });
+        if (existing) {
+          await this.activityLog.record(user, ACTIVITY_ACTIONS.APPLICATION_REAPPLIED, 'Application', existing.id, {
+            candidate: candidate.name,
+            job: job.title,
+            existingStatus: existing.status,
+          });
+        }
+        throw new ConflictException('该候选人已应聘此职位（重复投递已记录到原应聘时间轴）');
       }
       throw e;
     }
