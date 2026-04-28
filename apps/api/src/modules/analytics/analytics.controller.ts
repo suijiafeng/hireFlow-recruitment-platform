@@ -37,4 +37,11 @@ export class AnalyticsController {
   insight(@Param('jobId') jobId: string) {
     return this.analyticsService.insight(jobId);
   }
+
+  @Get('insights')
+  @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
+  @ApiOperation({ summary: '数据洞察（TTH/渠道/面试官/毁约/阶段停留回放）' })
+  insights() {
+    return this.analyticsService.insights();
+  }
 }
