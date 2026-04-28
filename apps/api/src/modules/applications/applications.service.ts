@@ -199,6 +199,30 @@ export class ApplicationsService {
     if (isBackward && !dto.reason?.trim()) {
       throw new BadRequestException('回退阶段必须填写原因（受控回退）');
     }
+    // 自动化接管列拦截：终段列由业务事件驱动，手动拖入需实体状态背书，
+    // 否则看板列与实体状态脱钩、漏斗虚报（状态强校验，拒绝非法流转）
+    if (!isBackward && targetStage.name === '待入职') {
+      const offer = await this.prisma.offer.findUnique({
+        where: { applicationId: id },
+        select: { decision: true },
+      });
+      if (offer?.decision !== 'ACCEPTED') {
+        throw new BadRequestException(
+          '「待入职」由候选人接受 Offer 后自动流转：请先在录用管理中完成 Offer 发送与答复',
+        );
+      }
+    }
+    if (!isBackward && targetStage.name === '已入职') {
+      const onboarding = await this.prisma.onboarding.findUnique({
+        where: { applicationId: id },
+        select: { status: true },
+      });
+      if (onboarding?.status !== 'COMPLETED') {
+        throw new BadRequestException(
+          '「已入职」由入职闭环自动流转（三方清单完成 + 合同签署），不可手动拖入',
+        );
+      }
+    }
 
     // 无位移的拖回原列：不写库、不加版本，直接返回当前卡片
     if (targetStage.id === application.stageId) {
@@ -265,7 +289,7 @@ export class ApplicationsService {
     return updated;
   }
 
-  /** 按阶段名称自动移卡（自动化工作流用：Offer 接受→待入职、合同签署→已入职）；阶段不存在则跳过 */
+  /** 按阶段名称自动移卡（自动化工作流用：发起 Offer→Offer、接受→待入职、签约→已入职）；阶段不存在或需回退则跳过 */
   async moveToStageByName(applicationId: string, stageName: string, user: JwtUser) {
     const application = await this.prisma.application.findUniqueOrThrow({
       where: { id: applicationId },
@@ -275,6 +299,8 @@ export class ApplicationsService {
       where: { jobId: application.jobId, name: stageName },
     });
     if (!target || target.id === application.stageId) return;
+    // 自动化只向前推进：卡片已越过目标列时不回拖（如已在待入职时补发 Offer 事件）
+    if (target.order < application.stage.order) return;
     await this.prisma.application.update({
       where: { id: applicationId },
       data: {

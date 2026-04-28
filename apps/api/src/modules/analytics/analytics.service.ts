@@ -30,6 +30,25 @@ export class AnalyticsService {
     const pendingOffers = user.permissions.includes(PERMISSIONS.OFFER_APPROVE)
       ? await this.prisma.offer.count({ where: { approvalStatus: 'PENDING' } })
       : null;
+    // Offer 双待办：通知会被刷走，待办卡才是工作驱动
+    const canInitiate = user.permissions.includes(PERMISSIONS.OFFER_INITIATE);
+    const rejectedOffers = canInitiate
+      ? await this.prisma.offer.count({ where: { approvalStatus: 'REJECTED' } })
+      : null;
+    const offersDue = canInitiate
+      ? await this.prisma.offer.count({
+          where: {
+            OR: [
+              { approvalStatus: 'EXPIRED', extendedOnce: false }, // 已失效可续期
+              {
+                approvalStatus: 'SENT',
+                decision: null,
+                expiresAt: { lte: new Date(now.getTime() + 24 * 3600 * 1000) }, // 24h 内到期
+              },
+            ],
+          },
+        })
+      : null;
     const onboardingInProgress = await this.prisma.onboarding.count({
       where: { status: 'IN_PROGRESS' },
     });
@@ -42,38 +61,58 @@ export class AnalyticsService {
       const docs = (o.documents as Array<{ needsReview?: boolean }> | null) ?? [];
       return sum + docs.filter((d) => d.needsReview).length;
     }, 0);
-    return { newResumes, myPendingEvaluations, pendingOffers, onboardingInProgress, docsNeedReview };
+    return {
+      newResumes,
+      myPendingEvaluations,
+      pendingOffers,
+      rejectedOffers,
+      offersDue,
+      onboardingInProgress,
+      docsNeedReview,
+    };
   }
 
-  /** 大盘总览指标 */
+  /** 大盘总览指标。pausedJobs 单列：满编自动暂停后「招聘中 0」需要有解释 */
   async overview() {
     const now = new Date();
-    const [openJobs, candidates, upcomingInterviews, hired] = await this.prisma.$transaction([
+    const [openJobs, pausedJobs, candidates, upcomingInterviews, hired] = await this.prisma.$transaction([
       this.prisma.job.count({ where: { status: 'OPEN' } }),
+      this.prisma.job.count({ where: { status: 'PAUSED' } }),
       this.prisma.candidate.count(),
       this.prisma.interview.count({ where: { status: 'SCHEDULED', scheduledAt: { gte: now } } }),
       this.prisma.application.count({ where: { status: 'HIRED' } }),
     ]);
-    return { openJobs, candidates, upcomingInterviews, hired };
+    return { openJobs, pausedJobs, candidates, upcomingInterviews, hired };
   }
 
   /**
    * 招聘漏斗：
    * 「到达某阶段的人数」按快照口径近似 = 停留在该阶段及其之后所有阶段的人数之和。
+   * 口径修正：中间列只计 ACTIVE（淘汰/撤回已离开漏斗）；
+   * 末列「已入职」以 status=HIRED 为准——手动拖进终列的卡不再虚报入职数。
    */
   async funnel(jobId: string) {
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
-      include: {
-        stages: {
-          orderBy: { order: 'asc' },
-          include: { _count: { select: { applications: true } } },
-        },
-      },
+      include: { stages: { orderBy: { order: 'asc' } } },
     });
     if (!job) throw new NotFoundException('职位不存在');
 
-    const counts = job.stages.map((s) => s._count.applications);
+    const grouped = await this.prisma.application.groupBy({
+      by: ['stageId', 'status'],
+      where: { jobId },
+      _count: { _all: true },
+    });
+    const activeAt = new Map<string, number>();
+    let hiredTotal = 0;
+    for (const g of grouped) {
+      if (g.status === 'ACTIVE') activeAt.set(g.stageId, g._count._all);
+      if (g.status === 'HIRED') hiredTotal += g._count._all;
+    }
+    const lastIndex = job.stages.length - 1;
+    const counts = job.stages.map((s, i) =>
+      i === lastIndex ? hiredTotal : (activeAt.get(s.id) ?? 0),
+    );
     const reached = counts.map((_, i) => counts.slice(i).reduce((a, b) => a + b, 0));
 
     return {

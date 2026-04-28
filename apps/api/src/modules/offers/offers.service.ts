@@ -103,6 +103,8 @@ export class OffersService {
       job: application.job.title,
       grade: dto.grade ?? null,
     });
+    // 看板与实体状态对齐：发起 Offer 即自动移卡到「Offer」列（auto 留痕）
+    await this.applications.moveToStageByName(dto.applicationId, 'Offer', user);
     // 通知矩阵：Offer 审批待办 → 用人经理
     if (application.job.hiringManagerId) {
       await this.notifications.push(
