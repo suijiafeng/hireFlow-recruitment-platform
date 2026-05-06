@@ -34,9 +34,9 @@ import type { AxiosError } from 'axios';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { boardApi, jobsApi } from '../../api';
+import { applicationsApi, boardApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import type { BatchResult, BoardCard, BoardData } from '../../api/types';
+import type { BatchResult, BoardCard, BoardData, CompareData } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { useAuthStore } from '../../stores/auth';
 
@@ -244,6 +244,106 @@ function BoardColumnView({
   );
 }
 
+/** 候选人对比：2-4 人并排 + AI 综合意见；AI 是辅助，终审在人 */
+function CompareModal({ data, loading, onClose }: { data: CompareData | null; loading: boolean; onClose: () => void }) {
+  const CONCLUSION_TEXT: Record<string, string> = {
+    STRONG_YES: '强烈推荐',
+    YES: '推荐',
+    NO: '不推荐',
+    STRONG_NO: '强烈不推荐',
+  };
+  return (
+    <Modal
+      title={data ? `候选人对比 · ${data.jobTitle}` : 'AI 正在对比…'}
+      open={loading || Boolean(data)}
+      onCancel={onClose}
+      footer={null}
+      width={Math.min(320 * (data?.candidates.length ?? 2) + 80, 1200)}
+      destroyOnHidden
+    >
+      {loading || !data ? (
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin tip="AI 正在汇总匹配分与面评数据…" />
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+            {data.candidates.map((c) => {
+              const rank = data.ai.ranking.find((r) => r.name === c.name)?.rank;
+              return (
+                <Card
+                  key={c.applicationId}
+                  size="small"
+                  style={{ flex: 1, borderColor: rank === 1 ? '#2a78d6' : undefined }}
+                  title={
+                    <Space>
+                      {c.name}
+                      {rank === 1 && <Tag color="blue">AI 首推</Tag>}
+                    </Space>
+                  }
+                >
+                  <p style={{ margin: '0 0 6px' }}>
+                    匹配分：
+                    {c.matchScore != null ? <Tag color={c.matchScore >= 85 ? 'green' : c.matchScore >= 70 ? 'blue' : 'default'}>{c.matchScore}</Tag> : '未评分'}
+                  </p>
+                  <div style={{ marginBottom: 6 }}>
+                    {c.tags.slice(0, 4).map((t) => (
+                      <Tag key={t} style={{ fontSize: 11 }}>
+                        {t}
+                      </Tag>
+                    ))}
+                  </div>
+                  {c.highlights && (
+                    <Typography.Paragraph style={{ fontSize: 12, marginBottom: 6 }} ellipsis={{ rows: 3 }}>
+                      {c.highlights}
+                    </Typography.Paragraph>
+                  )}
+                  <div style={{ fontSize: 12 }}>
+                    面评：
+                    {c.evaluations.length === 0 ? (
+                      <span style={{ color: '#999' }}>暂无</span>
+                    ) : (
+                      c.evaluations.map((e, i) => (
+                        <Tag key={i} color={e.conclusion?.includes('YES') ? 'green' : 'orange'} style={{ fontSize: 11 }}>
+                          {CONCLUSION_TEXT[e.conclusion ?? ''] ?? '无结论'}
+                          {e.avgScore != null ? ` ${e.avgScore}分` : ''}
+                        </Tag>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+          <Alert
+            type="info"
+            showIcon
+            title={`AI 综合意见（${data.aiMeta.provider}${data.aiMeta.degraded ? '·降级' : ''}，仅供参考，终审权在用人经理）`}
+            description={
+              <>
+                <Typography.Paragraph style={{ marginBottom: 8 }}>{data.ai.summary}</Typography.Paragraph>
+                <ol style={{ margin: 0, paddingLeft: 18 }}>
+                  {data.ai.ranking
+                    .slice()
+                    .sort((a, b) => a.rank - b.rank)
+                    .map((r) => (
+                      <li key={r.name}>
+                        <b>{r.name}</b> — {r.rationale}
+                      </li>
+                    ))}
+                </ol>
+                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                  风险提示：{data.ai.risks}
+                </Typography.Text>
+              </>
+            }
+          />
+        </>
+      )}
+    </Modal>
+  );
+}
+
 interface PendingMove {
   applicationId: string;
   stageId: string;
@@ -390,6 +490,37 @@ export function PipelinePage() {
     onError: (error) => message.error(extractErrorMessage(error, '批量移动失败')),
   });
 
+  const [compareData, setCompareData] = useState<CompareData | null>(null);
+  const compareMutation = useMutation({
+    mutationFn: () => applicationsApi.compare([...selected]),
+    onSuccess: setCompareData,
+    onError: (error) => message.error(extractErrorMessage(error, '对比失败')),
+  });
+
+  /** 发预筛链接（选中恰 1 人时可用；邀约前核实硬性条件） */
+  const sendPrescreen = async () => {
+    const id = [...selected][0];
+    try {
+      const { token } = await applicationsApi.prescreenLink(id);
+      const url = `${window.location.origin}/portal/prescreen/${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        message.success('预筛链接已复制，请发送给候选人（薪资/到岗/出差三问）');
+      } catch {
+        modal.info({
+          title: '候选人预筛链接',
+          content: (
+            <Typography.Text copyable style={{ wordBreak: 'break-all' }}>
+              {url}
+            </Typography.Text>
+          ),
+        });
+      }
+    } catch (error) {
+      message.error(extractErrorMessage(error, '获取链接失败'));
+    }
+  };
+
   const findCard = (id: string) =>
     boardQuery.data?.columns.flatMap((c) => c.applications).find((a) => a.id === id);
 
@@ -481,6 +612,17 @@ export function PipelinePage() {
                 onClick={() => setBatchMoveOpen(true)}
               >
                 批量移动
+              </Button>
+              <Button
+                size="small"
+                disabled={selected.size < 2 || selected.size > 4}
+                loading={compareMutation.isPending}
+                onClick={() => compareMutation.mutate()}
+              >
+                AI 对比（2-4 人）
+              </Button>
+              <Button size="small" disabled={selected.size !== 1} onClick={() => void sendPrescreen()}>
+                预筛链接
               </Button>
               <Button size="small" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
                 清空选择
@@ -628,6 +770,12 @@ export function PipelinePage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <CompareModal
+        data={compareData}
+        loading={compareMutation.isPending}
+        onClose={() => setCompareData(null)}
+      />
 
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
     </Card>
