@@ -11,15 +11,32 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PERMISSIONS, STAGE_STAY_SLA } from '@hireflow/shared';
-import { App, Badge, Card, Empty, Form, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd';
+import { CheckSquareOutlined } from '@ant-design/icons';
+import { PERMISSIONS, REJECT_REASONS, STAGE_STAY_SLA } from '@hireflow/shared';
+import {
+  Alert,
+  App,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
 import type { AxiosError } from 'axios';
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { boardApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import type { BoardCard, BoardData } from '../../api/types';
+import type { BatchResult, BoardCard, BoardData } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { useAuthStore } from '../../stores/auth';
 
@@ -126,18 +143,55 @@ function DraggableCard({
   );
 }
 
+/** 批量模式下的可选卡片：点击/复选框切换选中，选中态描边高亮 */
+function SelectableCard({
+  card,
+  checked,
+  onToggle,
+}: {
+  card: BoardCard;
+  checked: boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div onClick={() => onToggle(card.id)} style={{ position: 'relative', cursor: 'pointer' }}>
+      <div style={{ position: 'absolute', top: 6, right: 10, zIndex: 2 }}>
+        <Checkbox checked={checked} onChange={() => onToggle(card.id)} onClick={(e) => e.stopPropagation()} />
+      </div>
+      <div
+        style={{
+          outline: checked ? '2px solid #2a78d6' : 'none',
+          outlineOffset: -2,
+          borderRadius: 8,
+        }}
+      >
+        <CardView card={card} />
+      </div>
+    </div>
+  );
+}
+
 function BoardColumnView({
   stage,
   cards,
   dragDisabled,
   onOpen,
+  batchMode,
+  selected,
+  onToggle,
+  onToggleColumn,
 }: {
   stage: { id: string; name: string };
   cards: BoardCard[];
   dragDisabled: boolean;
   onOpen: (candidateId: string) => void;
+  batchMode: boolean;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleColumn: (ids: string[], select: boolean) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id, disabled: batchMode });
+  const selectedInColumn = cards.filter((c) => selected.has(c.id)).length;
   return (
     <div
       ref={setNodeRef}
@@ -155,13 +209,31 @@ function BoardColumnView({
         maxHeight: 'calc(100vh - 230px)',
       }}
     >
-      <div style={{ padding: '4px 4px 10px', fontWeight: 600 }}>
-        {stage.name} <Badge count={cards.length} color="#8c8c8c" style={{ marginLeft: 4 }} />
+      <div style={{ padding: '4px 4px 10px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+        {batchMode && cards.length > 0 && (
+          <Checkbox
+            checked={selectedInColumn === cards.length}
+            indeterminate={selectedInColumn > 0 && selectedInColumn < cards.length}
+            onChange={(e) =>
+              onToggleColumn(
+                cards.map((c) => c.id),
+                e.target.checked,
+              )
+            }
+          />
+        )}
+        <span>
+          {stage.name} <Badge count={cards.length} color="#8c8c8c" style={{ marginLeft: 4 }} />
+        </span>
       </div>
       <div style={{ overflowY: 'auto', flex: 1, minHeight: 60 }}>
-        {cards.map((card) => (
-          <DraggableCard key={card.id} card={card} disabled={dragDisabled} onOpen={onOpen} />
-        ))}
+        {cards.map((card) =>
+          batchMode ? (
+            <SelectableCard key={card.id} card={card} checked={selected.has(card.id)} onToggle={onToggle} />
+          ) : (
+            <DraggableCard key={card.id} card={card} disabled={dragDisabled} onOpen={onOpen} />
+          ),
+        )}
         {cards.length === 0 && (
           <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '24px 0' }}>
             拖拽卡片到此阶段
@@ -182,7 +254,7 @@ interface PendingMove {
 }
 
 export function PipelinePage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -191,6 +263,13 @@ export function PipelinePage() {
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null);
   const [pendingRevert, setPendingRevert] = useState<PendingMove | null>(null);
   const [revertForm] = Form.useForm();
+  // 批量操作：选择态仅存前端，切换职位/退出批量即清空
+  const [batchMode, setBatchMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchRejectOpen, setBatchRejectOpen] = useState(false);
+  const [batchMoveOpen, setBatchMoveOpen] = useState(false);
+  const [batchRejectForm] = Form.useForm<{ reason: string; note?: string }>();
+  const [batchMoveForm] = Form.useForm<{ stageId: string; reason?: string }>();
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'options'],
@@ -243,6 +322,73 @@ export function PipelinePage() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const canMove = hasPermission(PERMISSIONS.APPLICATION_MOVE);
+
+  const exitBatch = () => {
+    setBatchMode(false);
+    setSelected(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleColumn = (ids: string[], select: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (select ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  };
+
+  /** 批量结果反馈：全部成功报数字；部分失败弹错误报告明细 */
+  const reportBatch = (result: BatchResult, verb: string) => {
+    void queryClient.invalidateQueries({ queryKey: ['board', jobId] });
+    setSelected(new Set());
+    if (result.failed.length === 0) {
+      message.success(`${verb}成功 ${result.succeeded} 人`);
+      return;
+    }
+    modal.warning({
+      title: `${verb}完成：成功 ${result.succeeded} / ${result.total} 人`,
+      width: 520,
+      content: (
+        <ul style={{ paddingLeft: 18, maxHeight: 260, overflowY: 'auto' }}>
+          {result.failed.map((f) => (
+            <li key={f.id} style={{ marginBottom: 4 }}>
+              <b>{f.candidate ?? f.id}</b>：{f.error}
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+  };
+
+  const batchRejectMutation = useMutation({
+    mutationFn: (values: { reason: string; note?: string }) =>
+      boardApi.batchReject({ ids: [...selected], ...values }),
+    onSuccess: (result) => {
+      setBatchRejectOpen(false);
+      batchRejectForm.resetFields();
+      reportBatch(result, '淘汰');
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '批量淘汰失败')),
+  });
+
+  const batchMoveMutation = useMutation({
+    mutationFn: (values: { stageId: string; reason?: string }) =>
+      boardApi.batchMove({ ids: [...selected], stageId: values.stageId, reason: values.reason || undefined }),
+    onSuccess: (result) => {
+      setBatchMoveOpen(false);
+      batchMoveForm.resetFields();
+      reportBatch(result, '移动');
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '批量移动失败')),
+  });
 
   const findCard = (id: string) =>
     boardQuery.data?.columns.flatMap((c) => c.applications).find((a) => a.id === id);
@@ -298,9 +444,51 @@ export function PipelinePage() {
         </Space>
       }
       extra={
-        !canMove && <Typography.Text type="secondary">当前角色仅可查看，不可移动卡片</Typography.Text>
+        <Space>
+          {!canMove && <Typography.Text type="secondary">当前角色仅可查看，不可移动卡片</Typography.Text>}
+          {canMove &&
+            (batchMode ? (
+              <Button onClick={exitBatch}>退出批量</Button>
+            ) : (
+              <Button icon={<CheckSquareOutlined />} onClick={() => setBatchMode(true)}>
+                批量操作
+              </Button>
+            ))}
+        </Space>
       }
     >
+      {batchMode && (
+        <Alert
+          type="info"
+          style={{ marginBottom: 12 }}
+          message={
+            <Space wrap>
+              <span>
+                已选 <b>{selected.size}</b> 人（点卡片或列头复选框选择）
+              </span>
+              <Button
+                size="small"
+                danger
+                disabled={selected.size === 0}
+                onClick={() => setBatchRejectOpen(true)}
+              >
+                批量淘汰
+              </Button>
+              <Button
+                size="small"
+                type="primary"
+                disabled={selected.size === 0}
+                onClick={() => setBatchMoveOpen(true)}
+              >
+                批量移动
+              </Button>
+              <Button size="small" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+                清空选择
+              </Button>
+            </Space>
+          }
+        />
+      )}
       {!jobId || boardQuery.isLoading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
           {jobsQuery.isLoading || boardQuery.isLoading ? (
@@ -323,8 +511,12 @@ export function PipelinePage() {
                 key={column.stage.id}
                 stage={column.stage}
                 cards={column.applications}
-                dragDisabled={!canMove}
+                dragDisabled={!canMove || batchMode}
                 onOpen={setDetailId}
+                batchMode={batchMode}
+                selected={selected}
+                onToggle={toggleSelected}
+                onToggleColumn={toggleColumn}
               />
             ))}
           </div>
@@ -379,6 +571,60 @@ export function PipelinePage() {
             rules={[{ required: true, min: 2, message: '请填写回退原因（至少 2 个字）' }]}
           >
             <Input.TextArea rows={3} placeholder="如：二面评价存在分歧，需重新安排一面补充考察" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 批量淘汰：破坏性操作显示影响人数（防呆） */}
+      <Modal
+        title={`批量淘汰 ${selected.size} 人`}
+        open={batchRejectOpen}
+        onCancel={() => setBatchRejectOpen(false)}
+        onOk={() => batchRejectForm.submit()}
+        okText={`确认淘汰 ${selected.size} 人`}
+        okButtonProps={{ danger: true }}
+        confirmLoading={batchRejectMutation.isPending}
+        destroyOnHidden
+      >
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="淘汰为终态操作，不可逆"
+          description="每人独立留痕；原因码将用于漏斗分析与人才库回流。感谢信通道接入后将按防呆规则延迟 3 天发送。"
+        />
+        <Form form={batchRejectForm} layout="vertical" onFinish={(v) => batchRejectMutation.mutate(v)}>
+          <Form.Item name="reason" label="淘汰原因码（应用于全部所选）" rules={[{ required: true, message: '请选择原因码' }]}>
+            <Select placeholder="选择原因" options={REJECT_REASONS.map((r) => ({ value: r, label: r }))} />
+          </Form.Item>
+          <Form.Item name="note" label="补充说明（可选）">
+            <Input.TextArea rows={2} maxLength={300} placeholder="如：本批次为简历初筛不匹配" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 批量移动：目标阶段 + 可选回退原因（批量含回退卡时后端逐条校验） */}
+      <Modal
+        title={`批量移动 ${selected.size} 人`}
+        open={batchMoveOpen}
+        onCancel={() => setBatchMoveOpen(false)}
+        onOk={() => batchMoveForm.submit()}
+        okText={`移动 ${selected.size} 人`}
+        confirmLoading={batchMoveMutation.isPending}
+        destroyOnHidden
+      >
+        <Form form={batchMoveForm} layout="vertical" onFinish={(v) => batchMoveMutation.mutate(v)}>
+          <Form.Item name="stageId" label="目标阶段" rules={[{ required: true, message: '请选择目标阶段' }]}>
+            <Select
+              placeholder="选择阶段"
+              options={boardQuery.data?.columns.map((c) => ({ value: c.stage.id, label: c.stage.name }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="回退原因（所选中含需回退的卡片时必填，未填的回退卡会失败并列入报告）"
+          >
+            <Input.TextArea rows={2} maxLength={200} placeholder="如：批量回退重新安排一面" />
           </Form.Item>
         </Form>
       </Modal>
