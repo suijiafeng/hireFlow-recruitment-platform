@@ -1,7 +1,11 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Prisma } from '../../generated/prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import type {
   AiEngine,
+  CompareInput,
   EvaluationDraftInput,
   FunnelInput,
   HelpdeskInput,
@@ -29,7 +33,10 @@ export class AiService {
   private readonly mock = new MockAiEngine();
   private readonly llm: AiEngine | null = null;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const provider = config.get<string>('AI_PROVIDER') ?? 'auto';
     const apiKey = config.get<string>('ANTHROPIC_API_KEY');
 
@@ -59,16 +66,55 @@ export class AiService {
     return { data: await fn(this.mock), meta: { provider: this.mock.name, degraded: false } };
   }
 
+  /**
+   * 结果缓存（Token FinOps）：相同输入命中即回放，防重复解析刷 Token。
+   * 仅在真实 LLM 引擎启用时生效（mock 零成本无需缓存）；缓存读写失败静默跳过不阻断。
+   */
+  private async cachedRun<T>(
+    capability: string,
+    input: unknown,
+    fn: (engine: AiEngine) => Promise<T>,
+  ): Promise<{ data: T; meta: AiMeta }> {
+    if (!this.llm) return this.run(fn);
+    const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    try {
+      const hit = await this.prisma.aiCache.findUnique({
+        where: { capability_hash: { capability, hash } },
+      });
+      if (hit) {
+        return { data: hit.payload as T, meta: { provider: `${hit.provider}·缓存`, degraded: false } };
+      }
+    } catch {
+      /* 缓存不可用不影响主流程 */
+    }
+    const result = await this.run(fn);
+    if (!result.meta.degraded && result.meta.provider !== this.mock.name) {
+      try {
+        await this.prisma.aiCache.create({
+          data: {
+            capability,
+            hash,
+            payload: result.data as unknown as Prisma.InputJsonValue,
+            provider: result.meta.provider,
+          },
+        });
+      } catch {
+        /* 并发写重复等冲突静默忽略 */
+      }
+    }
+    return result;
+  }
+
   generateJd(input: JdInput) {
     return this.run((e) => e.generateJd(input));
   }
 
   parseResume(rawText: string) {
-    return this.run((e) => e.parseResume(rawText));
+    return this.cachedRun('parseResume', rawText, (e) => e.parseResume(rawText));
   }
 
   scoreMatch(input: MatchInput) {
-    return this.run((e) => e.scoreMatch(input));
+    return this.cachedRun('scoreMatch', input, (e) => e.scoreMatch(input));
   }
 
   draftEvaluation(input: EvaluationDraftInput) {
@@ -85,5 +131,9 @@ export class AiService {
 
   predictRetention(input: RetentionInput) {
     return this.run((e) => e.predictRetention(input));
+  }
+
+  compareCandidates(input: CompareInput) {
+    return this.run((e) => e.compareCandidates(input));
   }
 }

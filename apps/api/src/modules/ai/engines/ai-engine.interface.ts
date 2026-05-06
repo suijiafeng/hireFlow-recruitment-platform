@@ -52,6 +52,8 @@ export interface EvaluationDraftInput {
   jobTitle: string;
   round: number;
   notes: string;
+  /** 岗位评分卡维度；缺省用全局默认三维 */
+  dimensions?: string[];
 }
 
 export interface FunnelInput {
@@ -93,4 +95,26 @@ export interface AiEngine {
   /** 入职问答（HR Helpdesk）：仅依据提供的制度文档回答 */
   answerQuestion(input: HelpdeskInput): Promise<string>;
   predictRetention(input: RetentionInput): Promise<RetentionHint>;
+  /** 候选人对比（2-4 人并排 + AI 综合对比意见） */
+  compareCandidates(input: CompareInput): Promise<CompareResult>;
+}
+
+export interface CompareInput {
+  jobTitle: string;
+  candidates: Array<{
+    name: string;
+    matchScore: number | null;
+    tags: string[];
+    highlights: string | null;
+    risks: string | null;
+    evaluations: Array<{ conclusion: string | null; avgScore: number | null; comments: string | null }>;
+  }>;
+}
+
+export interface CompareResult {
+  /** 综合对比意见（谁更适合、为什么） */
+  summary: string;
+  ranking: Array<{ name: string; rank: number; rationale: string }>;
+  /** 决策风险提示（信息不足/维度缺失等） */
+  risks: string;
 }

@@ -3,6 +3,8 @@ import { Logger } from '@nestjs/common';
 import { EvaluationConclusion } from '@hireflow/shared';
 import type {
   AiEngine,
+  CompareInput,
+  CompareResult,
   EvaluationDraft,
   EvaluationDraftInput,
   FunnelInput,
@@ -110,6 +112,29 @@ const ANSWER_SCHEMA = {
     answer: { type: 'string', description: '基于文档的中文回答，简洁直接；文档无法回答时明确说明' },
   },
   required: ['answer'],
+  additionalProperties: false,
+} as const;
+
+const COMPARE_SCHEMA = {
+  type: 'object',
+  properties: {
+    summary: { type: 'string', description: '3-5 句综合对比意见：谁更适合该岗位、关键差异是什么' },
+    ranking: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          rank: { type: 'integer', description: '1 为最推荐' },
+          rationale: { type: 'string', description: '一句话排名依据' },
+        },
+        required: ['name', 'rank', 'rationale'],
+        additionalProperties: false,
+      },
+    },
+    risks: { type: 'string', description: '决策风险提示（信息不足、维度缺失、偏差可能）' },
+  },
+  required: ['summary', 'ranking', 'risks'],
   additionalProperties: false,
 } as const;
 
@@ -233,10 +258,13 @@ export class AnthropicAiEngine implements AiEngine {
   }
 
   async draftEvaluation(input: EvaluationDraftInput): Promise<EvaluationDraft> {
+    const dimensions = input.dimensions?.length
+      ? input.dimensions
+      : ['技术能力', '工程素养', '沟通协作'];
     const draft = await this.completeJson<EvaluationDraft>(
       [
         '你是面试评价助手。根据面试官的原始记录，生成结构化面评草稿供面试官修改确认。',
-        '评分卡固定三个维度：技术能力、工程素养、沟通协作，各 1-5 整数分。',
+        `评分卡维度为本岗位模板（逐一输出，勿增减）：${dimensions.join('、')}，各 1-5 整数分。`,
         '结论从 STRONG_YES/YES/NO/STRONG_NO 中选择。评语客观、基于记录、不夸大。',
         '在 comments 开头注明【AI 草稿·请修改确认】。',
       ].join('\n'),
@@ -306,5 +334,36 @@ export class AnthropicAiEngine implements AiEngine {
       2048,
     );
     return insight;
+  }
+
+  async compareCandidates(input: CompareInput): Promise<CompareResult> {
+    return this.completeJson<CompareResult>(
+      [
+        '你是招聘终审助手。基于给定候选人的匹配分、标签与面评数据做横向对比。',
+        '要求：对比要点具体、可解释；ranking 覆盖全部候选人且 rank 从 1 开始；',
+        'risks 必须指出数据不足之处；结尾提醒最终决策以用人经理为准。',
+      ].join('\n'),
+      [
+        `目标职位：${input.jobTitle}`,
+        ...input.candidates.map((c, i) =>
+          [
+            `候选人${i + 1}：${c.name}`,
+            `  匹配分：${c.matchScore ?? '未评分'}`,
+            `  标签：${c.tags.join('、') || '（无）'}`,
+            c.highlights ? `  亮点：${c.highlights}` : '',
+            c.risks ? `  风险：${c.risks}` : '',
+            c.evaluations.length
+              ? `  面评：${c.evaluations
+                  .map((e) => `${e.conclusion ?? '无结论'}(均分${e.avgScore ?? '-'})${e.comments ? `「${e.comments.slice(0, 80)}」` : ''}`)
+                  .join('；')}`
+              : '  面评：暂无',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        ),
+      ].join('\n'),
+      COMPARE_SCHEMA,
+      4096,
+    );
   }
 }

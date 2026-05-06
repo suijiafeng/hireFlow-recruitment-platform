@@ -1,6 +1,8 @@
 import { EvaluationConclusion } from '@hireflow/shared';
 import type {
   AiEngine,
+  CompareInput,
+  CompareResult,
   EvaluationDraft,
   EvaluationDraftInput,
   FunnelInput,
@@ -163,11 +165,16 @@ export class MockAiEngine implements AiEngine {
     const techSignal = countMatches(input.notes, /算法|架构|设计|原理|源码|性能|方案/g);
     const commSignal = countMatches(input.notes, /沟通|表达|清晰|条理|协作/g);
 
-    const scorecard = [
-      { dimension: '技术能力', score: clamp(base + Math.min(techSignal, 2) * 0.4), comment: '依据面试记录中的技术讨论评估' },
-      { dimension: '工程素养', score: clamp(base), comment: '依据项目经验与实践细节评估' },
-      { dimension: '沟通协作', score: clamp(base + Math.min(commSignal, 2) * 0.4), comment: '依据表达与互动情况评估' },
-    ];
+    // 岗位模板维度：技术/沟通类维度叠加对应信号，其余用基础分
+    const dimensions = input.dimensions?.length ? input.dimensions : ['技术能力', '工程素养', '沟通协作'];
+    const scorecard = dimensions.map((dimension) => {
+      const isTech = /技术|工程|架构|算法|代码|专业/.test(dimension);
+      const isComm = /沟通|协作|表达|团队/.test(dimension);
+      const score = clamp(
+        base + (isTech ? Math.min(techSignal, 2) * 0.4 : 0) + (isComm ? Math.min(commSignal, 2) * 0.4 : 0),
+      );
+      return { dimension, score, comment: `依据面试记录中与「${dimension}」相关的信号评估` };
+    });
     const avg = scorecard.reduce((s, i) => s + i.score, 0) / scorecard.length;
 
     const conclusion =
@@ -238,5 +245,38 @@ export class MockAiEngine implements AiEngine {
       ? `「${worst.from} → ${worst.to}」转化率 ${(worst.rate * 100).toFixed(0)}% 为全流程最低，建议复盘该环节的筛选标准或面试官档期。`
       : '各阶段转化平稳，暂无明显瓶颈。';
     return head + tail;
+  }
+
+  async compareCandidates(input: CompareInput): Promise<CompareResult> {
+    // 规则口径：AI 匹配分 60% + 面评均分（换算百分制）40%；无面评按 50 中性分
+    const scored = input.candidates.map((c) => {
+      const evalScores = c.evaluations.map((e) => e.avgScore).filter((s): s is number => s != null);
+      const evalAvg100 = evalScores.length
+        ? (evalScores.reduce((a, b) => a + b, 0) / evalScores.length) * 20
+        : 50;
+      const passCount = c.evaluations.filter(
+        (e) => e.conclusion === 'YES' || e.conclusion === 'STRONG_YES',
+      ).length;
+      const composite = (c.matchScore ?? 50) * 0.6 + evalAvg100 * 0.4;
+      return { name: c.name, composite, passCount, evalCount: c.evaluations.length };
+    });
+    const ranked = [...scored].sort((a, b) => b.composite - a.composite);
+    const top = ranked[0];
+    return {
+      summary:
+        `按「匹配分 60% + 面评均分 40%」综合，${ranked
+          .map((r, i) => `${i + 1}) ${r.name} ${Math.round(r.composite)} 分`)
+          .join('；')}。` +
+        `${top.name} 综合领先${top.passCount > 0 ? `，且已获 ${top.passCount} 轮推荐结论` : ''}；建议结合岗位侧重与团队互补做终审。`,
+      ranking: ranked.map((r, i) => ({
+        name: r.name,
+        rank: i + 1,
+        rationale: `综合 ${Math.round(r.composite)} 分（面评 ${r.evalCount} 轮、推荐 ${r.passCount} 轮）`,
+      })),
+      risks:
+        scored.some((s) => s.evalCount === 0)
+          ? '部分候选人尚无面评数据，排名主要依赖简历匹配分，建议补齐面试后再终审。（规则引擎估算，仅作辅助参考）'
+          : '各候选人均有面评数据；注意规则引擎不理解语义细节，终审以人工判断为准。',
+    };
   }
 }
