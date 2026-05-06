@@ -100,6 +100,7 @@ model User {
   hiringManagerJobs Job[]                  @relation("JobHiringManager")
   createdJobs       Job[]                  @relation("JobCreatedBy")
   interviewSlots    InterviewInterviewer[]
+  availableSlots    InterviewerSlot[]
   evaluations       Evaluation[]
   notifications     Notification[]
 }
@@ -165,6 +166,7 @@ model Job {
   createdBy       User       @relation("JobCreatedBy", fields: [createdById], references: [id])
   stages          PipelineStage[]
   applications    Application[]
+  scorecardTemplate Json? // 岗位级评分卡模板 [{dimension, weight}]（空则用全局默认）
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }
@@ -224,6 +226,8 @@ model Application {
   stageEnteredAt DateTime          @default(now()) // 进入当前阶段时间（停留时长/SLA）
   version        Int               @default(0) // 乐观锁：并发拖卡冲突检测
   rejectReason   String? // 淘汰/撤回原因码（原因码强制）
+  prescreen      Json? // AI 预筛问答（薪资/到岗/出差 + 提交时间 + 硬性条件核验结果）
+  prescreenToken String? @unique // 预筛免登录 H5 令牌
   interviews     Interview[]
   offer          Offer?
   onboarding     Onboarding?
@@ -245,9 +249,35 @@ model Interview {
   meetingUrl    String?
   status        InterviewStatus        @default(SCHEDULED)
   transcript    Json? // 面试 Copilot 转写（二期）
+  portalToken   String?                @unique // 候选人自助选时 H5 令牌
   interviewers  InterviewInterviewer[]
   evaluations   Evaluation[]
   createdAt     DateTime               @default(now())
+}
+
+// 面试官可约时段（无外部日历集成时的系统内空闲档）
+model InterviewerSlot {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startAt   DateTime
+  endAt     DateTime
+  bookedBy  String? // 占用该时段的 interviewId；null = 空闲（落定时二次校验防冲突）
+  createdAt DateTime @default(now())
+
+  @@index([userId, startAt])
+}
+
+// AI 结果缓存（Token FinOps）：相同输入不重复调用引擎，命中即回放
+model AiCache {
+  id         String   @id @default(cuid())
+  capability String // parseResume / scoreMatch …
+  hash       String // sha256(规范化输入)
+  payload    Json
+  provider   String
+  createdAt  DateTime @default(now())
+
+  @@unique([capability, hash])
 }
 
 model InterviewInterviewer {
