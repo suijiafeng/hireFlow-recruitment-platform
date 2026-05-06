@@ -6,6 +6,7 @@ import type {
   BatchResult,
   BoardCard,
   BoardData,
+  CompareData,
   Candidate,
   CandidateDetail,
   Department,
@@ -15,6 +16,8 @@ import type {
   HelpdeskAnswer,
   InsightsData,
   Interview,
+  InterviewerSlot,
+  InterviewPortalView,
   JdDraft,
   Job,
   Offer,
@@ -22,6 +25,7 @@ import type {
   Onboarding,
   OnboardingPortalView,
   Paginated,
+  PrescreenView,
   Resume,
   RetentionHint,
   Role,
@@ -56,6 +60,7 @@ export const jobsApi = {
       requirement: string;
       headcount: number;
       status: string;
+      scorecardTemplate: Array<{ dimension: string; weight: number }>;
     }>,
   ) => http.patch<Job>(`/jobs/${id}`, data).then((r) => r.data),
   talentPoolScan: (jobId: string) =>
@@ -103,6 +108,10 @@ export const applicationsApi = {
   create: (data: { candidateId: string; jobId: string }) =>
     http.post<BoardCard>('/applications', data).then((r) => r.data),
   score: (id: string) => http.post<BoardCard>(`/applications/${id}/score`).then((r) => r.data),
+  compare: (ids: string[]) =>
+    http.post<CompareData>('/applications/compare', { ids }).then((r) => r.data),
+  prescreenLink: (id: string) =>
+    http.post<{ token: string }>(`/applications/${id}/prescreen-link`).then((r) => r.data),
 };
 
 export const resumesApi = {
@@ -162,6 +171,16 @@ export const portalApi = {
   },
   onboardingSignContract: (token: string) =>
     http.post<OnboardingPortalView>(`/portal/onboardings/${token}/contract/sign`).then((r) => r.data),
+  interviewView: (token: string) =>
+    http.get<InterviewPortalView>(`/portal/interviews/${token}`).then((r) => r.data),
+  interviewPick: (token: string, slotId: string) =>
+    http.post<InterviewPortalView>(`/portal/interviews/${token}/pick`, { slotId }).then((r) => r.data),
+  prescreenView: (token: string) =>
+    http.get<PrescreenView>(`/portal/prescreen/${token}`).then((r) => r.data),
+  prescreenSubmit: (
+    token: string,
+    data: { expectedSalary: number; availableDate: string; travelOk: boolean; note?: string },
+  ) => http.post<PrescreenView>(`/portal/prescreen/${token}`, data).then((r) => r.data),
 };
 
 export const notificationsApi = {
@@ -247,6 +266,12 @@ export const interviewsApi = {
       .then((r) => r.data),
   cancel: (interviewId: string) =>
     http.post<Interview>(`/interviews/${interviewId}/cancel`).then((r) => r.data),
+  selfScheduleLink: (interviewId: string) =>
+    http.post<{ token: string }>(`/interviews/${interviewId}/self-schedule-link`).then((r) => r.data),
+  mySlots: () => http.get<InterviewerSlot[]>('/interviewer-slots/mine').then((r) => r.data),
+  addSlot: (startAt: string, endAt: string) =>
+    http.post<InterviewerSlot>('/interviewer-slots', { startAt, endAt }).then((r) => r.data),
+  removeSlot: (id: string) => http.delete(`/interviewer-slots/${id}`).then((r) => r.data),
 };
 
 export const departmentsApi = {

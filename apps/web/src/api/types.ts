@@ -18,6 +18,11 @@ export interface UserBrief {
   email?: string;
 }
 
+export interface ScorecardDimension {
+  dimension: string;
+  weight: number;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -27,6 +32,7 @@ export interface Job {
   status: JobStatus;
   department: Department;
   hiringManager: UserBrief | null;
+  scorecardTemplate?: ScorecardDimension[] | null;
   _count?: { applications: number };
   createdAt: string;
 }
@@ -71,7 +77,7 @@ export interface Interview {
   application?: {
     id: string;
     candidate: { id: string; name: string };
-    job: { id: string; title: string };
+    job: { id: string; title: string; scorecardTemplate?: ScorecardDimension[] | null };
     stage: { name: string };
   };
 }
@@ -329,6 +335,59 @@ export interface TodoSummary {
   offersDue: number | null;
   onboardingInProgress: number;
   docsNeedReview: number;
+}
+
+/** 面试官可约时段（自助选时） */
+export interface InterviewerSlot {
+  id: string;
+  startAt: string;
+  endAt: string;
+  bookedBy: string | null;
+}
+
+export interface InterviewPortalView {
+  company: string;
+  candidateName: string;
+  jobTitle: string;
+  round: number;
+  durationMins: number;
+  scheduledAt: string | null;
+  status: string;
+  slots: Array<{ id: string; startAt: string; endAt: string }>;
+}
+
+export interface PrescreenView {
+  company: string;
+  candidateName: string;
+  jobTitle: string;
+  prescreen: {
+    expectedSalary: number;
+    availableDate: string;
+    travelOk: boolean;
+    note: string | null;
+    flags: string[];
+    submittedAt: string;
+  } | null;
+}
+
+/** 候选人对比（2-4 人并排 + AI 综合意见） */
+export interface CompareData {
+  jobTitle: string;
+  candidates: Array<{
+    applicationId: string;
+    name: string;
+    matchScore: number | null;
+    tags: string[];
+    highlights: string | null;
+    risks: string | null;
+    evaluations: Array<{ conclusion: string | null; avgScore: number | null; comments: string | null }>;
+  }>;
+  ai: {
+    summary: string;
+    ranking: Array<{ name: string; rank: number; rationale: string }>;
+    risks: string;
+  };
+  aiMeta: AiMeta;
 }
 
 export interface BoardColumn {
