@@ -1,20 +1,27 @@
 import { RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { EVALUATION_CONCLUSION_LABEL, EvaluationConclusion } from '@hireflow/shared';
+import {
+  DEFAULT_SCORECARD_TEMPLATE,
+  EVALUATION_CONCLUSION_LABEL,
+  EvaluationConclusion,
+} from '@hireflow/shared';
 import { App, Button, Form, Input, Modal, Radio, Rate, Typography } from 'antd';
 import { useState } from 'react';
 import { interviewsApi } from '../api';
 import { extractErrorMessage } from '../api/client';
 
-const DEFAULT_DIMENSIONS = ['技术能力', '工程素养', '沟通协作'];
+const DEFAULT_DIMENSIONS = DEFAULT_SCORECARD_TEMPLATE.map((t) => t.dimension);
 
 interface Props {
   interviewId: string | null;
+  /** 岗位评分卡模板维度；缺省用全局默认 */
+  dimensions?: string[];
   onClose: () => void;
 }
 
 /** 结构化评分卡面评：AI 生成草稿 → 面试官修改确认 */
-export function EvaluationModal({ interviewId, onClose }: Props) {
+export function EvaluationModal({ interviewId, dimensions, onClose }: Props) {
+  const dims = dimensions?.length ? dimensions : DEFAULT_DIMENSIONS;
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
@@ -44,7 +51,7 @@ export function EvaluationModal({ interviewId, onClose }: Props) {
       comments?: string;
     }) =>
       interviewsApi.submitEvaluation(interviewId!, {
-        scorecard: DEFAULT_DIMENSIONS.map((dimension) => ({
+        scorecard: dims.map((dimension) => ({
           dimension,
           score: values.scores[dimension],
         })),
@@ -104,7 +111,7 @@ export function EvaluationModal({ interviewId, onClose }: Props) {
       </div>
 
       <Form form={form} layout="vertical" onFinish={(values) => submitMutation.mutate(values)}>
-        {DEFAULT_DIMENSIONS.map((dimension) => (
+        {dims.map((dimension) => (
           <Form.Item
             key={dimension}
             name={['scores', dimension]}
