@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
@@ -51,5 +51,38 @@ export class InterviewsController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.interviewsService.submitEvaluation(id, dto, user);
+  }
+
+  @Post(':id/self-schedule-link')
+  @RequirePermissions(PERMISSIONS.INTERVIEW_SCHEDULE)
+  @ApiOperation({ summary: '生成候选人自助选时链接（未定时间的面试）' })
+  selfScheduleLink(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.interviewsService.selfScheduleLink(id, user);
+  }
+}
+
+/** 面试官可约时段自维护（无外部日历时的空闲档来源） */
+@ApiTags('interviews')
+@ApiBearerAuth()
+@Controller('interviewer-slots')
+export class InterviewerSlotsController {
+  constructor(private readonly interviewsService: InterviewsService) {}
+
+  @Get('mine')
+  @ApiOperation({ summary: '我的可约时段' })
+  mine(@CurrentUser() user: JwtUser) {
+    return this.interviewsService.mySlots(user);
+  }
+
+  @Post()
+  @ApiOperation({ summary: '添加可约时段（重叠校验）' })
+  add(@Body() body: { startAt: string; endAt: string }, @CurrentUser() user: JwtUser) {
+    return this.interviewsService.addSlot(body.startAt, body.endAt, user);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '删除自己的空闲时段（被占用的不可删）' })
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.interviewsService.removeSlot(id, user);
   }
 }

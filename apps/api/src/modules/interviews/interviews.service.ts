@@ -1,7 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ACTIVITY_ACTIONS } from '@hireflow/shared';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
 import { departmentScopeOf, isAssignedScope } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import { candidateActor, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
@@ -126,7 +133,7 @@ export class InterviewsService {
           select: {
             id: true,
             candidate: { select: { id: true, name: true } },
-            job: { select: { id: true, title: true } },
+            job: { select: { id: true, title: true, scorecardTemplate: true } },
             stage: { select: { name: true } },
           },
         },
@@ -145,17 +152,25 @@ export class InterviewsService {
       where: { id: interviewId },
       include: {
         application: {
-          include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+          include: {
+            candidate: { select: { name: true } },
+            job: { select: { title: true, scorecardTemplate: true } },
+          },
         },
       },
     });
     if (!interview) throw new NotFoundException('面试不存在');
 
+    // 岗位评分卡模板：AI 草稿按模板维度输出，与面评表单一致
+    const template = interview.application.job.scorecardTemplate as
+      | Array<{ dimension: string }>
+      | null;
     const { data, meta } = await this.ai.draftEvaluation({
       candidateName: interview.application.candidate.name,
       jobTitle: interview.application.job.title,
       round: interview.round,
       notes,
+      dimensions: template?.map((t) => t.dimension),
     });
     return { ...data, aiMeta: meta };
   }
@@ -199,5 +214,150 @@ export class InterviewsService {
       },
     );
     return evaluation;
+  }
+
+  // ---------- 面试官可约时段 + 候选人自助选时 ----------
+
+  /** 我的可约时段（面试官自维护，替代外部日历集成的低成本路径） */
+  async mySlots(user: JwtUser) {
+    return this.prisma.interviewerSlot.findMany({
+      where: { userId: user.sub, endAt: { gte: new Date() } },
+      orderBy: { startAt: 'asc' },
+    });
+  }
+
+  async addSlot(startAt: string, endAt: string, user: JwtUser) {
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    if (!(start < end)) throw new BadRequestException('结束时间必须晚于开始时间');
+    if (start < new Date()) throw new BadRequestException('不能添加过去的时段');
+    const overlap = await this.prisma.interviewerSlot.findFirst({
+      where: { userId: user.sub, startAt: { lt: end }, endAt: { gt: start } },
+    });
+    if (overlap) throw new ConflictException('与已有时段重叠');
+    return this.prisma.interviewerSlot.create({
+      data: { userId: user.sub, startAt: start, endAt: end },
+    });
+  }
+
+  async removeSlot(id: string, user: JwtUser) {
+    const slot = await this.prisma.interviewerSlot.findUnique({ where: { id } });
+    if (!slot) throw new NotFoundException('时段不存在');
+    if (slot.userId !== user.sub) throw new ForbiddenException('仅可删除自己的时段');
+    if (slot.bookedBy) throw new BadRequestException('该时段已被面试占用，请先与 HR 协调改期');
+    await this.prisma.interviewerSlot.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /** 生成候选人自助选时链接（未定时间的面试；重发复用同一令牌） */
+  async selfScheduleLink(interviewId: string, user: JwtUser) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id: interviewId },
+      include: { application: { include: { candidate: { select: { name: true } } } } },
+    });
+    if (!interview) throw new NotFoundException('面试不存在');
+    if (interview.scheduledAt) throw new BadRequestException('该面试已确定时间，如需改期请先取消原时间');
+
+    let token = interview.portalToken;
+    if (!token) {
+      token = newPortalToken();
+      await this.prisma.interview.update({ where: { id: interviewId }, data: { portalToken: token } });
+    }
+    return { token };
+  }
+
+  /** 候选人视角：可选时段 = 全部被指派面试官都空闲的时间窗（多面试官取重叠覆盖） */
+  async portalView(token: string) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { portalToken: token },
+      include: {
+        interviewers: { include: { user: { select: { id: true, name: true } } } },
+        application: {
+          select: {
+            candidate: { select: { name: true } },
+            job: { select: { title: true } },
+          },
+        },
+      },
+    });
+    if (!interview) throw new NotFoundException('链接无效或已失效，请联系 HR');
+
+    const base = {
+      company: 'ART 科技有限公司',
+      candidateName: interview.application.candidate.name,
+      jobTitle: interview.application.job.title,
+      round: interview.round,
+      durationMins: interview.durationMins ?? 60,
+      scheduledAt: interview.scheduledAt,
+      status: interview.status,
+    };
+    if (interview.scheduledAt) return { ...base, slots: [] };
+
+    const interviewerIds = interview.interviewers.map((i) => i.user.id);
+    const now = new Date();
+    const slots = await this.prisma.interviewerSlot.findMany({
+      where: { userId: { in: interviewerIds }, bookedBy: null, startAt: { gte: now } },
+      orderBy: { startAt: 'asc' },
+    });
+    // 主时段取第一位面试官的空闲档；多面试官时要求其余面试官有覆盖该时间窗的空闲档
+    const primary = slots.filter((s) => s.userId === interviewerIds[0]);
+    const available = primary.filter((slot) =>
+      interviewerIds.slice(1).every((uid) =>
+        slots.some((o) => o.userId === uid && o.startAt <= slot.startAt && o.endAt >= slot.endAt),
+      ),
+    );
+    return {
+      ...base,
+      slots: available.map((s) => ({ id: s.id, startAt: s.startAt, endAt: s.endAt })),
+    };
+  }
+
+  /**
+   * 候选人确认时段：写入条件二次校验（确认瞬间二次校验，冲突给替代时段），
+   * 并发抢占返回 409，前端刷新剩余时段。
+   */
+  async portalPick(token: string, slotId: string) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { portalToken: token },
+      include: {
+        interviewers: true,
+        application: { select: { candidate: { select: { name: true } }, job: { select: { title: true } } } },
+      },
+    });
+    if (!interview) throw new NotFoundException('链接无效或已失效，请联系 HR');
+    if (interview.scheduledAt) throw new BadRequestException('该面试时间已确定');
+
+    const claimed = await this.prisma.interviewerSlot.updateMany({
+      where: { id: slotId, bookedBy: null },
+      data: { bookedBy: interview.id },
+    });
+    if (claimed.count === 0) {
+      throw new ConflictException('该时段刚被约走，请从剩余时段中重新选择');
+    }
+    const slot = await this.prisma.interviewerSlot.findUniqueOrThrow({ where: { id: slotId } });
+    await this.prisma.interview.update({
+      where: { id: interview.id },
+      data: { scheduledAt: slot.startAt, status: 'SCHEDULED' },
+    });
+    const actor = candidateActor(interview.application.candidate.name);
+    await this.activityLog.record(actor, ACTIVITY_ACTIONS.INTERVIEW_SELF_SCHEDULED, 'Application', interview.applicationId, {
+      candidate: interview.application.candidate.name,
+      round: interview.round,
+      scheduledAt: slot.startAt.toISOString(),
+    });
+    // 通知矩阵：面试确认 → 面试官 IM+日历（此处站内信），HR 站内
+    await this.notifications.push(
+      interview.interviewers.map((i) => i.userId),
+      `候选人已确认面试时间：${interview.application.candidate.name}`,
+      `${interview.application.job.title} · 第 ${interview.round} 轮 · ${slot.startAt.toLocaleString('zh-CN')}`,
+      '/interviews',
+    );
+    await this.notifications.pushToRole(
+      RoleCode.HR,
+      `面试时间已敲定：${interview.application.candidate.name}`,
+      `${interview.application.job.title} · 第 ${interview.round} 轮`,
+      '/interviews',
+    );
+    return this.portalView(token);
   }
 }

@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { InterviewsController } from './interviews.controller';
+import { InterviewPortalController } from './interview-portal.controller';
+import { InterviewerSlotsController, InterviewsController } from './interviews.controller';
 import { InterviewsService } from './interviews.service';
 
 @Module({
-  controllers: [InterviewsController],
+  controllers: [InterviewsController, InterviewerSlotsController, InterviewPortalController],
   providers: [InterviewsService],
 })
 export class InterviewsModule {}
