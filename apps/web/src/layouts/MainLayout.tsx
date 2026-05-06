@@ -3,6 +3,7 @@ import {
   AuditOutlined,
   CommentOutlined,
   DashboardOutlined,
+  FundOutlined,
   IdcardOutlined,
   LogoutOutlined,
   ProfileOutlined,
@@ -23,6 +24,7 @@ const { Header, Sider, Content } = Layout;
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': '数据大盘',
+  '/insights': '数据洞察',
   '/jobs': '职位管理',
   '/candidates': '候选人',
   '/pipeline': '招聘看板',
@@ -42,6 +44,7 @@ const MENU_DEFS: Array<{
     label: '招聘',
     children: [
       { key: '/dashboard', icon: <DashboardOutlined />, label: '数据大盘', perms: [PERMISSIONS.DASHBOARD_VIEW] },
+      { key: '/insights', icon: <FundOutlined />, label: '数据洞察', perms: [PERMISSIONS.DASHBOARD_VIEW] },
       { key: '/jobs', icon: <ProfileOutlined />, label: '职位管理', perms: [PERMISSIONS.JOB_READ] },
       { key: '/candidates', icon: <TeamOutlined />, label: '候选人', perms: [PERMISSIONS.CANDIDATE_READ] },
       { key: '/pipeline', icon: <AppstoreOutlined />, label: '招聘看板', perms: [PERMISSIONS.JOB_READ] },

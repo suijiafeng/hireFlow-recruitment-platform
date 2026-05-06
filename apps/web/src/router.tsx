@@ -3,6 +3,7 @@ import { firstVisiblePath, MainLayout } from './layouts/MainLayout';
 import { useAuthStore } from './stores/auth';
 import { CandidatesPage } from './pages/candidates/CandidatesPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
+import { InsightsPage } from './pages/insights/InsightsPage';
 import { HelpdeskPage } from './pages/helpdesk/HelpdeskPage';
 import { InterviewsPage } from './pages/interviews/InterviewsPage';
 import { JobsPage } from './pages/jobs/JobsPage';
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomeRedirect /> },
       { path: 'dashboard', element: <DashboardPage /> },
+      { path: 'insights', element: <InsightsPage /> },
       { path: 'jobs', element: <JobsPage /> },
       { path: 'candidates', element: <CandidatesPage /> },
       { path: 'pipeline', element: <PipelinePage /> },
