@@ -24,6 +24,7 @@ export const ACTIVITY_ACTIONS = {
   APPLICATION_SCORED: 'application.scored',
   APPLICATION_STAGE_CHANGED: 'application.stage_changed',
   INTERVIEW_SCHEDULED: 'interview.scheduled',
+  INTERVIEW_SELF_SCHEDULED: 'interview.self_scheduled',
   INTERVIEW_CANCELED: 'interview.canceled',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
   OFFER_INITIATED: 'offer.initiated',
@@ -35,6 +36,9 @@ export const ACTIVITY_ACTIONS = {
   OFFER_EXTENDED: 'offer.extended',
   OFFER_EXPIRED: 'offer.expired',
   APPLICATION_WITHDRAWN: 'application.withdrawn',
+  CANDIDATES_COMPARED: 'application.candidates_compared',
+  PRESCREEN_SENT: 'application.prescreen_sent',
+  PRESCREEN_SUBMITTED: 'application.prescreen_submitted',
   ONBOARDING_CREATED: 'onboarding.created',
   ONBOARDING_ITEM_DONE: 'onboarding.item_done',
   ONBOARDING_COMPLETED: 'onboarding.completed',
@@ -83,6 +87,13 @@ export const OFFER_DECLINE_REASONS = [
 ] as const;
 
 /** 阶段停留 SLA（天）：超过 warn 标黄、超过 danger 标红（后续做成可配置） */
+/** 全局默认评分卡模板：评分卡按岗位模板配置；Job.scorecardTemplate 为空时使用 */
+export const DEFAULT_SCORECARD_TEMPLATE = [
+  { dimension: '技术能力', weight: 40 },
+  { dimension: '工程素养', weight: 30 },
+  { dimension: '沟通协作', weight: 30 },
+] as const;
+
 export const STAGE_STAY_SLA = { warnDays: 3, dangerDays: 7 } as const;
 
 /** 淘汰/撤回原因码（原因码强制，供漏斗分析与人才库回流） */
