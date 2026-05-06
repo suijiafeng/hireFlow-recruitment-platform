@@ -41,6 +41,20 @@ export class ApplicationsController {
     return this.applicationsService.score(id, user);
   }
 
+  @Post('applications/compare')
+  @RequirePermissions(PERMISSIONS.CANDIDATE_READ)
+  @ApiOperation({ summary: '候选人对比（2-4 人并排 + AI 综合意见，同职位内）' })
+  compare(@Body() body: { ids: string[] }, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.compare(body.ids ?? [], user);
+  }
+
+  @Post('applications/:id/prescreen-link')
+  @RequirePermissions(PERMISSIONS.APPLICATION_MOVE)
+  @ApiOperation({ summary: '生成候选人预筛链接（邀约前核实薪资/到岗/出差）' })
+  sendPrescreen(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.applicationsService.sendPrescreen(id, user);
+  }
+
   // 批量路由必须声明在 :id 参数路由之前（Nest 按声明顺序匹配，否则 "batch" 会被当作 :id）
   @Post('applications/batch/reject')
   @RequirePermissions(PERMISSIONS.APPLICATION_MOVE)

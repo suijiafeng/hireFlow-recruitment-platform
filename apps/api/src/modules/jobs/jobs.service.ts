@@ -116,8 +116,20 @@ export class JobsService {
 
   async update(id: string, dto: UpdateJobDto, user: JwtUser) {
     await this.ensureExists(id);
-    const job = await this.prisma.job.update({ where: { id }, data: dto });
-    await this.activityLog.record(user, ACTIVITY_ACTIONS.JOB_UPDATED, 'Job', id, { ...dto });
+    const { scorecardTemplate, ...rest } = dto;
+    const job = await this.prisma.job.update({
+      where: { id },
+      data: {
+        ...rest,
+        // Json 列需显式转换（DTO 类实例缺 index signature）
+        ...(scorecardTemplate !== undefined
+          ? { scorecardTemplate: scorecardTemplate as unknown as Prisma.InputJsonValue }
+          : {}),
+      },
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.JOB_UPDATED, 'Job', id, {
+      ...dto,
+    } as unknown as Prisma.InputJsonValue);
     return job;
   }
 

@@ -5,12 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ACTIVITY_ACTIONS } from '@hireflow/shared';
+import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
 import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import { candidateActor, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { BatchMoveDto, BatchRejectDto, MoveStageDto, RejectApplicationDto } from './dto/move-stage.dto';
@@ -40,6 +42,7 @@ export class ApplicationsService {
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
     private readonly ai: AiService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -309,6 +312,168 @@ export class ApplicationsService {
     return this.runBatch(dto.ids, (id) =>
       this.moveStage(id, { stageId: dto.stageId, reason: dto.reason }, user),
     );
+  }
+
+  /**
+   * 候选人对比（2-4 人并排 + AI 综合对比意见）。
+   * 数据（匹配分/标签/面评）与 AI 意见分开返回：AI 永远是辅助，终审权在用人经理。
+   */
+  async compare(ids: string[], user: JwtUser) {
+    const unique = [...new Set(ids)];
+    if (unique.length < 2 || unique.length > 4) {
+      throw new BadRequestException('对比需选择 2-4 位候选人');
+    }
+    const apps = await this.prisma.application.findMany({
+      where: { id: { in: unique } },
+      include: {
+        candidate: { select: { id: true, name: true, tags: true, source: true } },
+        job: { select: { id: true, title: true } },
+        interviews: {
+          include: {
+            evaluations: {
+              where: { submittedAt: { not: null } },
+              select: { conclusion: true, comments: true, scorecard: true },
+            },
+          },
+        },
+      },
+    });
+    if (apps.length !== unique.length) throw new NotFoundException('部分应聘记录不存在');
+    if (new Set(apps.map((a) => a.jobId)).size > 1) {
+      throw new BadRequestException('仅支持同一职位内的候选人对比');
+    }
+
+    const candidates = apps.map((a) => {
+      const evaluations = a.interviews
+        .flatMap((iv) => iv.evaluations)
+        .map((ev) => {
+          const sc = ev.scorecard as Array<{ score: number }> | null;
+          const avg = sc?.length ? sc.reduce((s, x) => s + x.score, 0) / sc.length : null;
+          return {
+            conclusion: ev.conclusion,
+            avgScore: avg != null ? Math.round(avg * 10) / 10 : null,
+            comments: ev.comments,
+          };
+        });
+      const report = a.matchReport as { highlights?: string; risks?: string } | null;
+      return {
+        applicationId: a.id,
+        name: a.candidate.name,
+        matchScore: a.matchScore,
+        tags: a.candidate.tags,
+        highlights: report?.highlights ?? null,
+        risks: report?.risks ?? null,
+        evaluations,
+      };
+    });
+
+    const { data, meta } = await this.ai.compareCandidates({
+      jobTitle: apps[0].job.title,
+      candidates: candidates.map(({ applicationId: _id, ...rest }) => rest),
+    });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.CANDIDATES_COMPARED, 'Job', apps[0].job.id, {
+      job: apps[0].job.title,
+      candidates: candidates.map((c) => c.name),
+    });
+    return { jobTitle: apps[0].job.title, candidates, ai: data, aiMeta: meta };
+  }
+
+  // ---------- AI 预筛机器人（邀约前自动核实硬性条件） ----------
+
+  /** 生成/复用预筛链接（HR 发给候选人，token 即凭证） */
+  async sendPrescreen(id: string, user: JwtUser) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+    });
+    if (!application) throw new NotFoundException('应聘记录不存在');
+    if (application.status !== 'ACTIVE') throw new BadRequestException('该应聘已不在流程中');
+
+    let token = application.prescreenToken;
+    if (!token) {
+      token = newPortalToken();
+      await this.prisma.application.update({ where: { id }, data: { prescreenToken: token } });
+      await this.activityLog.record(user, ACTIVITY_ACTIONS.PRESCREEN_SENT, 'Application', id, {
+        candidate: application.candidate.name,
+        job: application.job.title,
+      });
+    }
+    return { token };
+  }
+
+  /** 候选人视角的预筛页（@Public） */
+  async prescreenView(token: string) {
+    const application = await this.prisma.application.findUnique({
+      where: { prescreenToken: token },
+      include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+    });
+    if (!application) throw new NotFoundException('链接无效或已失效，请联系 HR');
+    return {
+      company: 'ART 科技有限公司',
+      candidateName: application.candidate.name,
+      jobTitle: application.job.title,
+      prescreen: application.prescreen,
+    };
+  }
+
+  /**
+   * 候选人提交预筛三问（薪资/到岗/出差）。硬性条件核验（不符拦截）：
+   * 期望薪资超过该职位已发 Offer 最高 base 的 120% → 标记；到岗超 60 天 → 标记；不接受出差 → 标记。
+   * 标记不自动淘汰（AI/规则永不直接淘汰人），推送 HR 人工判断。
+   */
+  async prescreenSubmit(
+    token: string,
+    dto: { expectedSalary: number; availableDate: string; travelOk: boolean; note?: string },
+  ) {
+    const application = await this.prisma.application.findUnique({
+      where: { prescreenToken: token },
+      include: { candidate: { select: { name: true } }, job: { select: { id: true, title: true } } },
+    });
+    if (!application) throw new NotFoundException('链接无效或已失效，请联系 HR');
+    if (application.prescreen) throw new BadRequestException('预筛信息已提交过，如需更正请联系 HR');
+
+    const flags: string[] = [];
+    const topOffer = await this.prisma.offer.findFirst({
+      where: { application: { jobId: application.job.id }, sentAt: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { salary: true },
+    });
+    const band = (topOffer?.salary as { base?: number } | null)?.base;
+    if (band && dto.expectedSalary > band * 1.2) {
+      flags.push(`期望薪资 ¥${dto.expectedSalary} 超出该职位近期 Offer 水平（¥${band}）20% 以上`);
+    }
+    const days = (new Date(dto.availableDate).getTime() - Date.now()) / 86_400_000;
+    if (Number.isFinite(days) && days > 60) flags.push('最早到岗时间超过 60 天');
+    if (!dto.travelOk) flags.push('不接受出差安排');
+
+    const prescreen = {
+      expectedSalary: dto.expectedSalary,
+      availableDate: dto.availableDate,
+      travelOk: dto.travelOk,
+      note: dto.note ?? null,
+      flags,
+      submittedAt: new Date().toISOString(),
+    };
+    await this.prisma.application.update({
+      where: { id: application.id },
+      data: { prescreen: prescreen as unknown as Prisma.InputJsonValue },
+    });
+    const actor = candidateActor(application.candidate.name);
+    await this.activityLog.record(actor, ACTIVITY_ACTIONS.PRESCREEN_SUBMITTED, 'Application', application.id, {
+      candidate: application.candidate.name,
+      flags,
+    });
+    await this.notifications.pushToRole(
+      RoleCode.HR,
+      flags.length
+        ? `预筛存在不符项：${application.candidate.name}`
+        : `预筛已回收：${application.candidate.name}`,
+      flags.length
+        ? `${application.job.title} · ${flags.join('；')} · 请人工判断是否继续邀约`
+        : `${application.job.title} · 硬性条件均符合，可安排邀约`,
+      '/pipeline',
+    );
+    return this.prescreenView(token);
   }
 
   /** 顺序执行保证列内 position 分配与留痕顺序稳定；单次上限已由 DTO 约束（≤100） */
