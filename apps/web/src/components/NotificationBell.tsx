@@ -1,10 +1,11 @@
 import { BellOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Button, Empty, List, Popover, Typography } from 'antd';
+import { Badge, Button, List, Popover, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router';
 import { notificationsApi } from '../api';
 import type { NotificationItem } from '../api/types';
+import { EmptyBlock } from './ui';
 
 /** 站内通知铃铛（站内信渠道），30s 轮询未读 */
 export function NotificationBell() {
@@ -36,7 +37,7 @@ export function NotificationBell() {
       trigger="click"
       placement="bottomRight"
       title={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="u-flex-between">
           <span>通知</span>
           {(query.data?.unread ?? 0) > 0 && (
             <Button type="link" size="small" onClick={() => readAllMutation.mutate()}>
@@ -46,31 +47,31 @@ export function NotificationBell() {
         </div>
       }
       content={
-        <div style={{ width: 340, maxHeight: 420, overflowY: 'auto' }}>
+        <div className="notif-panel">
           {!query.data?.items.length ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知" />
+            <EmptyBlock minHeight={140} description="暂无通知" />
           ) : (
             <List
               size="small"
               dataSource={query.data.items}
               renderItem={(item) => (
                 <List.Item
-                  style={{ cursor: 'pointer', padding: '8px 4px', opacity: item.read ? 0.55 : 1 }}
+                  className={item.read ? 'notif-item notif-item--read' : 'notif-item'}
                   onClick={() => handleClick(item)}
                 >
-                  <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <Typography.Text strong={!item.read} style={{ fontSize: 13 }}>
-                        {!item.read && <Badge status="processing" style={{ marginRight: 6 }} />}
+                  <div className="u-w-full">
+                    <div className="notif-row">
+                      <Typography.Text strong={!item.read}>
+                        {!item.read && <Badge status="processing" className="u-mr-6" />}
                         {item.title}
                       </Typography.Text>
-                      <span style={{ fontSize: 11, color: '#999', flexShrink: 0 }}>
+                      <span className="notif-time">
                         {dayjs(item.createdAt).format('MM-DD HH:mm')}
                       </span>
                     </div>
                     {item.body && (
                       <Typography.Paragraph
-                        style={{ fontSize: 12, color: '#777', margin: '2px 0 0' }}
+                        className="notif-body"
                         ellipsis={{ rows: 2, tooltip: item.body }}
                       >
                         {item.body}
@@ -85,7 +86,7 @@ export function NotificationBell() {
       }
     >
       <Badge count={query.data?.unread ?? 0} size="small">
-        <Button type="text" icon={<BellOutlined style={{ fontSize: 17 }} />} />
+        <Button type="text" icon={<BellOutlined className="bell-icon" />} />
       </Badge>
     </Popover>
   );

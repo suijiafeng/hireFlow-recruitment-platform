@@ -65,13 +65,13 @@ export function ScheduleInterviewModal({ applicationId, existingRounds = 0, onCl
         }
       >
         <Form.Item name="round" label="轮次" rules={[{ required: true }]}>
-          <InputNumber min={1} max={10} style={{ width: '100%' }} />
+          <InputNumber min={1} max={10} className="u-w-full" />
         </Form.Item>
         <Form.Item name="scheduledAt" label="面试时间">
-          <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} />
+          <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" className="u-w-full" />
         </Form.Item>
         <Form.Item name="durationMins" label="时长（分钟）">
-          <InputNumber min={15} max={480} step={15} style={{ width: '100%' }} />
+          <InputNumber min={15} max={480} step={15} className="u-w-full" />
         </Form.Item>
         <Form.Item
           name="interviewerIds"

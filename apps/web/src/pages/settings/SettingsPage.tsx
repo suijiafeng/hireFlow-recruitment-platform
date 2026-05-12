@@ -1,3 +1,4 @@
+import { SettingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { PERMISSIONS } from '@hireflow/shared';
 import { Card, Table, Tabs, Tag, Typography } from 'antd';
@@ -5,6 +6,7 @@ import dayjs from 'dayjs';
 import { useState } from 'react';
 import { auditApi, rbacApi } from '../../api';
 import type { ActivityItem, Role } from '../../api/types';
+import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 const DATA_SCOPE_LABEL: Record<string, string> = {
@@ -37,11 +39,11 @@ function RolesTab() {
           render: (_, r) => (
             <>
               {r.permissions.map(({ permission }) => (
-                <Tag key={permission.id} style={{ marginBottom: 4 }}>
+                <Tag key={permission.id} className="u-mb-4">
                   {permission.name}
                 </Tag>
               ))}
-              {r.permissions.length === 0 && <span style={{ color: '#999' }}>（门户角色，无后台权限）</span>}
+              {r.permissions.length === 0 && <span className="u-muted">（门户角色，无后台权限）</span>}
             </>
           ),
         },
@@ -83,7 +85,7 @@ function AuditTab() {
         {
           title: '详情',
           render: (_, r) => (
-            <Typography.Text style={{ fontSize: 12 }} ellipsis>
+            <Typography.Text className="u-meta" ellipsis>
               {r.payload ? JSON.stringify(r.payload) : '-'}
             </Typography.Text>
           ),
@@ -102,7 +104,13 @@ export function SettingsPage() {
       : []),
   ];
   return (
-    <Card title="系统设置">
+    <Card
+      title={
+        <CardTitle icon={<SettingOutlined />}>
+          系统设置
+        </CardTitle>
+      }
+    >
       <Tabs items={items} />
     </Card>
   );

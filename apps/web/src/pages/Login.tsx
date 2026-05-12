@@ -1,4 +1,4 @@
-import { LockOutlined, MailOutlined } from '@ant-design/icons';
+import { LockOutlined, MailOutlined, RocketOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Form, Input, Typography } from 'antd';
 import { Navigate, useNavigate } from 'react-router';
@@ -24,20 +24,17 @@ export function LoginPage() {
   if (token) return <Navigate to="/" replace />;
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #1f3c88 0%, #2d6cdf 100%)',
-      }}
-    >
-      <Card style={{ width: 380 }}>
-        <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 4 }}>
+    <div className="login-bg">
+      <Card className="login-card">
+        <div className="login-logo">
+          <div className="login-logo-mark">
+            <RocketOutlined />
+          </div>
+        </div>
+        <Typography.Title level={4} className="u-center u-mb-4">
           智能招聘平台
         </Typography.Title>
-        <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
+        <Typography.Paragraph type="secondary" className="u-center">
           AI-Powered Recruiting & Onboarding
         </Typography.Paragraph>
         <Form
@@ -64,12 +61,12 @@ export function LoginPage() {
           </Button>
         </Form>
         <Alert
-          style={{ marginTop: 16 }}
+          className="u-mt-16"
           type="info"
           showIcon
           title="开发环境测试账号"
           description={
-            <div style={{ fontSize: 12 }}>
+            <div className="u-meta">
               admin / hr / manager / interviewer / it @arthr.local
               <br />
               统一密码：Admin@123456
