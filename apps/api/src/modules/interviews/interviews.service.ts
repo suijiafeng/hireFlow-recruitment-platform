@@ -231,6 +231,12 @@ export class InterviewsService {
     const end = new Date(endAt);
     if (!(start < end)) throw new BadRequestException('结束时间必须晚于开始时间');
     if (start < new Date()) throw new BadRequestException('不能添加过去的时段');
+    // 门户展示仅取结束时间 HH:mm，跨天会渲染成「23:00 - 01:00」的伪时段：按 +8 时区禁止跨天
+    const CN_OFFSET = 8 * 3600 * 1000;
+    const dayOf = (d: Date) => Math.floor((d.getTime() + CN_OFFSET) / 86_400_000);
+    if (dayOf(start) !== dayOf(end)) {
+      throw new BadRequestException('可约时段不能跨天，请拆分为多个时段');
+    }
     const overlap = await this.prisma.interviewerSlot.findFirst({
       where: { userId: user.sub, startAt: { lt: end }, endAt: { gt: start } },
     });

@@ -91,15 +91,23 @@ export function InterviewPortalPage() {
                   onChange={(e) => setSlotId(e.target.value)}
                   style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}
                 >
-                  {view.slots.map((s) => (
-                    <Radio key={s.id} value={s.id} style={{ padding: '6px 0' }}>
-                      <Space>
-                        <CalendarOutlined />
-                        {dayjs(s.startAt).format('MM-DD（ddd）HH:mm')} - {dayjs(s.endAt).format('HH:mm')}
-                        {dayjs(s.startAt).diff(dayjs(), 'day') <= 1 && <Tag color="blue">最近</Tag>}
-                      </Space>
-                    </Radio>
-                  ))}
+                  {view.slots.map((s) => {
+                    // 防御性补日期：结束时间跨天时只显 HH:mm 会渲染成误导性的「23:00 - 01:00」倒序时段
+                    const start = dayjs(s.startAt);
+                    const end = dayjs(s.endAt);
+                    const endLabel = end.isSame(start, 'day')
+                      ? end.format('HH:mm')
+                      : end.format('MM-DD HH:mm');
+                    return (
+                      <Radio key={s.id} value={s.id} style={{ padding: '6px 0' }}>
+                        <Space>
+                          <CalendarOutlined />
+                          {start.format('MM-DD（ddd）HH:mm')} - {endLabel}
+                          {start.diff(dayjs(), 'day') <= 1 && <Tag color="blue">最近</Tag>}
+                        </Space>
+                      </Radio>
+                    );
+                  })}
                 </Radio.Group>
                 <Button
                   type="primary"

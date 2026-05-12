@@ -93,7 +93,21 @@ function MySlotsCard() {
         destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={(v) => addMutation.mutate(v.range)}>
-          <Form.Item name="range" label="起止时间" rules={[{ required: true, message: '请选择时间段' }]}>
+          <Form.Item
+            name="range"
+            label="起止时间"
+            extra="不支持跨天：候选人门户仅展示结束时间的时分，跨天会显示成误导性的倒序时段"
+            rules={[
+              { required: true, message: '请选择时间段' },
+              {
+                validator: async (_, value: [Dayjs, Dayjs] | undefined) => {
+                  if (value && !value[0].isSame(value[1], 'day')) {
+                    throw new Error('起止时间须在同一天内，请拆分为多个时段');
+                  }
+                },
+              },
+            ]}
+          >
             <DatePicker.RangePicker
               showTime={{ format: 'HH:mm', minuteStep: 15 }}
               format="MM-DD HH:mm"
