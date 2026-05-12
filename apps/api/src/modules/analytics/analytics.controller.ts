@@ -38,6 +38,13 @@ export class AnalyticsController {
     return this.analyticsService.insight(jobId);
   }
 
+  @Get('trend')
+  @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
+  @ApiOperation({ summary: '近 8 周投递/入职趋势（大盘折线图）' })
+  trend() {
+    return this.analyticsService.trend();
+  }
+
   @Get('insights')
   @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
   @ApiOperation({ summary: '数据洞察（TTH/渠道/面试官/毁约/阶段停留回放）' })

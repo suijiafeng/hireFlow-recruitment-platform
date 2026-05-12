@@ -141,6 +141,43 @@ export class AnalyticsService {
   }
 
   /**
+   * 近 N 周投递/入职趋势（大盘折线图）：
+   * 投递 = Application.createdAt；入职 = onboarding.completed 留痕（与 TTH 口径一致）。
+   * 周一为周起点；当前数据量级直接内存分桶。
+   */
+  async trend(weeks = 8) {
+    const WEEK = 7 * 86_400_000;
+    const now = new Date();
+    const dayOfWeek = (now.getDay() + 6) % 7; // 周一=0
+    const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+    const start = new Date(thisMonday.getTime() - (weeks - 1) * WEEK);
+
+    const [apps, completions] = await Promise.all([
+      this.prisma.application.findMany({
+        where: { createdAt: { gte: start } },
+        select: { createdAt: true },
+      }),
+      this.prisma.activityLog.findMany({
+        where: { action: 'onboarding.completed', createdAt: { gte: start } },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    const label = (d: Date) =>
+      `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const points = Array.from({ length: weeks }, (_, i) => ({
+      week: label(new Date(start.getTime() + i * WEEK)),
+      applied: 0,
+      hired: 0,
+    }));
+    const bucketOf = (d: Date) =>
+      Math.min(weeks - 1, Math.max(0, Math.floor((d.getTime() - start.getTime()) / WEEK)));
+    for (const a of apps) points[bucketOf(a.createdAt)].applied += 1;
+    for (const c of completions) points[bucketOf(c.createdAt)].hired += 1;
+    return { weeks, start: start.toISOString(), points };
+  }
+
+  /**
    * 数据洞察（全部基于 Application 状态机事件计算）：
    * TTH 中位数 / 渠道效能 / Offer 接受率 / 面试官效能 / 毁约率 / 阶段停留 P50-P90（ActivityLog 回放）。
    * 当前数据量级直接内存聚合；上量后迁移为物化视图或定时汇总表。
