@@ -4,6 +4,7 @@ import {
   CommentOutlined,
   DashboardOutlined,
   FundOutlined,
+  HomeOutlined,
   IdcardOutlined,
   LogoutOutlined,
   ProfileOutlined,
@@ -14,7 +15,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { PERMISSIONS, ROLE_LABEL, type RoleCode } from '@hireflow/shared';
-import { Avatar, Dropdown, Layout, Menu, Space, Tag, Typography } from 'antd';
+import { Avatar, Breadcrumb, Dropdown, Layout, Menu, Space, Tag, Typography } from 'antd';
 import { useMemo } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { NotificationBell } from '../components/NotificationBell';
@@ -111,92 +112,85 @@ export function MainLayout() {
   const selectedKey = Object.keys(PAGE_TITLES).find((key) => location.pathname.startsWith(key));
   const primaryRole = user?.roles[0] as RoleCode | undefined;
 
+  // 面包屑：首页 / 菜单分组 / 当前页（带页面图标）
+  const currentGroup = MENU_DEFS.find((g) => g.children.some((c) => c.key === selectedKey));
+  const currentItem = currentGroup?.children.find((c) => c.key === selectedKey);
+  const breadcrumbItems = [
+    { title: <HomeOutlined /> },
+    ...(currentGroup ? [{ title: currentGroup.label }] : []),
+    ...(selectedKey
+      ? [
+          {
+            title: (
+              <Space size={6}>
+                {currentItem?.icon}
+                <Typography.Text strong>{PAGE_TITLES[selectedKey]}</Typography.Text>
+              </Space>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={216}>
-        <div
-          style={{
-            height: 60,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '0 20px',
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              background: 'linear-gradient(135deg, #2a78d6 0%, #6db3ff 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              flexShrink: 0,
-            }}
-          >
-            <RocketOutlined style={{ fontSize: 17 }} />
+    // 外层锁定视口高度：左侧菜单栏固定，右侧主内容区独立滚动
+    <Layout className="layout-root">
+      <Sider width={220}>
+        <div className="sider-inner">
+          <div className="sider-logo">
+            <div className="sider-logo-mark">
+              <RocketOutlined />
+            </div>
+            <div className="sider-logo-text">
+              <div className="sider-logo-name">ART 智能招聘</div>
+              <div className="sider-logo-sub">AI Recruiting</div>
+            </div>
           </div>
-          <div style={{ lineHeight: 1.2 }}>
-            <div style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>ART 智能招聘</div>
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>AI Recruiting</div>
+          <div className="sider-menu-scroll">
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={selectedKey ? [selectedKey] : []}
+              items={menuItems}
+              onClick={({ key }) => navigate(key)}
+            />
           </div>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={selectedKey ? [selectedKey] : []}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ borderInlineEnd: 'none' }}
-        />
       </Sider>
-      <Layout>
-        <Header
-          style={{
-            padding: '0 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            height: 56,
-            boxShadow: '0 1px 3px rgba(15, 30, 70, 0.06)',
-            zIndex: 1,
-          }}
-        >
-          <Typography.Text strong style={{ fontSize: 16 }}>
-            {selectedKey ? PAGE_TITLES[selectedKey] : ''}
-          </Typography.Text>
+      <Layout className="layout-main">
+        <Header className="layout-header">
+          <Breadcrumb items={breadcrumbItems} />
           <Space size={12}>
             <NotificationBell />
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'logout',
-                  icon: <LogoutOutlined />,
-                  label: '退出登录',
-                  onClick: () => {
-                    logout();
-                    navigate('/login');
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'logout',
+                    icon: <LogoutOutlined />,
+                    label: '退出登录',
+                    onClick: () => {
+                      logout();
+                      navigate('/login');
+                    },
                   },
-                },
-              ],
-            }}
-          >
-            <Space style={{ cursor: 'pointer' }} size={8}>
-              <Avatar size="small" style={{ background: '#2a78d6' }} icon={<UserOutlined />} />
-              <Typography.Text>{user?.name}</Typography.Text>
-              {primaryRole && ROLE_LABEL[primaryRole] && (
-                <Tag color="blue" style={{ marginInlineEnd: 0 }}>
-                  {ROLE_LABEL[primaryRole]}
-                </Tag>
-              )}
-            </Space>
-          </Dropdown>
+                ],
+              }}
+            >
+              <Space size={8} className="header-user hover-lift">
+                <Avatar size="small" className="header-avatar" icon={<UserOutlined />} />
+                <Typography.Text>{user?.name}</Typography.Text>
+                {primaryRole && ROLE_LABEL[primaryRole] && (
+                  <Tag className="u-mr-0">
+                    {ROLE_LABEL[primaryRole]}
+                  </Tag>
+                )}
+              </Space>
+            </Dropdown>
           </Space>
         </Header>
-        <Content style={{ padding: 24, overflow: 'auto' }}>
+        {/* 主内容区：唯一滚动容器 */}
+        <Content className="layout-content">
           <Outlet />
         </Content>
       </Layout>
