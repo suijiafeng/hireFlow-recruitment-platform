@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClockCircleOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, LinkOutlined, PlusOutlined, ScheduleOutlined } from '@ant-design/icons';
 import {
   EVALUATION_CONCLUSION_LABEL,
   INTERVIEW_STATUS_LABEL,
@@ -15,6 +15,7 @@ import { extractErrorMessage } from '../../api/client';
 import type { Interview } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { EvaluationModal } from '../../components/EvaluationModal';
+import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 /** 我的可约时段：面试官自维护空闲档，候选人自助选时的档期来源 */
@@ -51,19 +52,19 @@ function MySlotsCard() {
     <Card
       size="small"
       title={
-        <>
-          <ClockCircleOutlined /> 我的可约时段
-        </>
+        <CardTitle icon={<ClockCircleOutlined />}>
+          我的可约时段
+        </CardTitle>
       }
       extra={
         <Button size="small" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
           添加时段
         </Button>
       }
-      style={{ marginBottom: 16 }}
+      className="u-mb-16"
     >
       {!slotsQuery.data?.length ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <Typography.Text type="secondary" className="u-meta">
           尚未维护空闲时段。添加后，HR 发出的「候选人自助选时」链接将展示你的空闲档。
         </Typography.Text>
       ) : (
@@ -71,7 +72,7 @@ function MySlotsCard() {
           {slotsQuery.data.map((s) => (
             <Tag
               key={s.id}
-              color={s.bookedBy ? 'orange' : 'blue'}
+              color={s.bookedBy ? 'orange' : 'default'}
               closable={!s.bookedBy}
               onClose={(e) => {
                 e.preventDefault();
@@ -112,7 +113,7 @@ function MySlotsCard() {
               showTime={{ format: 'HH:mm', minuteStep: 15 }}
               format="MM-DD HH:mm"
               minDate={dayjs()}
-              style={{ width: '100%' }}
+              className="u-w-full"
             />
           </Form.Item>
         </Form>
@@ -161,7 +162,7 @@ export function InterviewsPage() {
         modal.info({
           title: '候选人选时链接',
           content: (
-            <Typography.Text copyable style={{ wordBreak: 'break-all' }}>
+            <Typography.Text copyable className="u-break-all">
               {url}
             </Typography.Text>
           ),
@@ -175,12 +176,18 @@ export function InterviewsPage() {
   return (
     <>
       <MySlotsCard />
-      <Card title="面试管理">
+      <Card
+        title={
+          <CardTitle icon={<ScheduleOutlined />}>
+            面试管理
+          </CardTitle>
+        }
+      >
       <Table<Interview>
         rowKey="id"
         loading={interviewsQuery.isLoading}
         dataSource={interviewsQuery.data}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 场面试` }}
         columns={[
           {
             title: '候选人',
@@ -190,7 +197,7 @@ export function InterviewsPage() {
                 <Button
                   type="link"
                   size="small"
-                  style={{ padding: 0 }}
+                  className="u-p0"
                   onClick={() => setDetailId(r.application!.candidate.id)}
                 >
                   {r.application.candidate.name}
@@ -221,7 +228,7 @@ export function InterviewsPage() {
             title: '面评',
             render: (_, r) =>
               r.evaluations.length === 0 ? (
-                <span style={{ color: '#999' }}>未提交</span>
+                <span className="u-muted">未提交</span>
               ) : (
                 <Space size={4} wrap>
                   {r.evaluations.map((ev) =>

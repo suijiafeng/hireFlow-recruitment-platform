@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PERMISSIONS } from '@hireflow/shared';
 import { App, Button, Card, Form, Input, Modal, Select, Space, Table, Tag, Tooltip } from 'antd';
@@ -8,6 +8,7 @@ import { candidatesApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Candidate } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
+import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 export function CandidatesPage() {
@@ -63,7 +64,11 @@ export function CandidatesPage() {
 
   return (
     <Card
-      title="候选人"
+      title={
+        <CardTitle icon={<TeamOutlined />}>
+          候选人
+        </CardTitle>
+      }
       extra={
         <Space>
           <Input.Search
@@ -73,7 +78,7 @@ export function CandidatesPage() {
               setPage(1);
               setKeyword(value.trim());
             }}
-            style={{ width: 240 }}
+            className="w-240"
           />
           {hasPermission(PERMISSIONS.CANDIDATE_CREATE) && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
@@ -100,7 +105,7 @@ export function CandidatesPage() {
             dataIndex: 'name',
             width: 100,
             render: (name: string, record) => (
-              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetailId(record.id)}>
+              <Button type="link" size="small" className="u-p0" onClick={() => setDetailId(record.id)}>
                 {name}
               </Button>
             ),
@@ -109,9 +114,9 @@ export function CandidatesPage() {
             title: '联系方式',
             width: 220,
             render: (_, r) => (
-              <div style={{ fontSize: 12 }}>
+              <div className="u-meta">
                 <div>{r.email ?? '-'}</div>
-                <div style={{ color: '#999' }}>{r.phone ?? '-'}</div>
+                <div className="u-muted">{r.phone ?? '-'}</div>
               </div>
             ),
           },
@@ -123,7 +128,7 @@ export function CandidatesPage() {
             render: (tags: string[]) => (
               <>
                 {tags.slice(0, 4).map((tag) => (
-                  <Tag key={tag} color="blue">
+                  <Tag key={tag}>
                     {tag}
                   </Tag>
                 ))}
@@ -145,7 +150,7 @@ export function CandidatesPage() {
                   </Tag>
                 ))
               ) : (
-                <span style={{ color: '#999' }}>暂无</span>
+                <span className="u-muted">暂无</span>
               ),
           },
           {
