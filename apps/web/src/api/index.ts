@@ -31,6 +31,7 @@ import type {
   Role,
   TalentPoolScanResult,
   TodoSummary,
+  TrendData,
   UserBrief,
 } from './types';
 
@@ -236,6 +237,7 @@ export const analyticsApi = {
   funnel: (jobId: string) => http.get<FunnelData>(`/analytics/funnel/${jobId}`).then((r) => r.data),
   insight: (jobId: string) =>
     http.post<{ insight: string; aiMeta: { provider: string } }>(`/analytics/insight/${jobId}`).then((r) => r.data),
+  trend: () => http.get<TrendData>('/analytics/trend').then((r) => r.data),
   insights: () => http.get<InsightsData>('/analytics/insights').then((r) => r.data),
 };
 

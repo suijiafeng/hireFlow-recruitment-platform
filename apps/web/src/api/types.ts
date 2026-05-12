@@ -395,6 +395,13 @@ export interface BoardColumn {
   applications: BoardCard[];
 }
 
+/** 近 N 周投递/入职趋势（大盘折线图） */
+export interface TrendData {
+  weeks: number;
+  start: string;
+  points: Array<{ week: string; applied: number; hired: number }>;
+}
+
 /** 数据洞察报表 */
 export interface InsightsData {
   tth: {

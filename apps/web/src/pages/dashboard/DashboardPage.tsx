@@ -1,116 +1,50 @@
 import {
-  CheckCircleOutlined,
-  ProfileOutlined,
+  CarryOutOutlined,
+  FunnelPlotOutlined,
+  LineChartOutlined,
   RobotOutlined,
-  ScheduleOutlined,
-  TeamOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { App, Button, Card, Col, Empty, Row, Select, Spin, Statistic, Tooltip, Typography } from 'antd';
-import type { ReactNode } from 'react';
+import { App, Button, Card, Col, Row, Select, Spin, Tooltip, Typography } from 'antd';
+import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { analyticsApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { FunnelStage } from '../../api/types';
+import { ChartTip, SERIES, TrendChart } from '../../components/charts';
+import { CardTitle, EmptyBlock } from '../../components/ui';
 
-function StatCard({
-  title,
-  value,
-  icon,
-  color,
-  loading,
-  extra,
-}: {
-  title: string;
-  value: number | string;
-  icon: ReactNode;
-  color: string;
-  loading: boolean;
-  /** 数值下方的补充说明（如「另有 N 个满编暂停」），避免"招聘中 0"看起来像坏数据 */
-  extra?: string;
-}) {
-  return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: `${color}1a`,
-            color,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </div>
-        <div>
-          <Statistic title={title} value={value} loading={loading} />
-          {extra && <div style={{ fontSize: 11, color: '#d48806', marginTop: 2 }}>{extra}</div>}
-        </div>
-      </div>
-    </Card>
-  );
-}
+const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
-/* 漏斗条：单色系列（长度编码人数），文字用文本色而非系列色；每条自带 hover 提示 */
-const SERIES_BLUE = '#2a78d6';
-const INK_PRIMARY = 'rgba(0,0,0,0.88)';
-const INK_SECONDARY = 'rgba(0,0,0,0.65)';
-const INK_MUTED = 'rgba(0,0,0,0.45)';
-
+/* 漏斗条：单色系列（长度编码人数，位置编码阶段次序）；每条自带 hover 提示 */
 function FunnelBar({ stage, max }: { stage: FunnelStage; max: number }) {
   const widthPct = max > 0 ? (stage.reached / max) * 100 : 0;
-  const conversionText =
-    stage.conversion != null ? `${Math.round(stage.conversion * 100)}%` : '—';
+  const conversionText = stage.conversion != null ? `${Math.round(stage.conversion * 100)}%` : '—';
   return (
     <Tooltip
-      title={`${stage.name}：当前停留 ${stage.current} 人 · 累计到达 ${stage.reached} 人${
-        stage.conversion != null ? ` · 相对上一阶段转化 ${conversionText}` : ''
-      }`}
+      trigger={['hover', 'focus']}
+      title={
+        <ChartTip
+          title={stage.name}
+          rows={[
+            { value: stage.reached, label: '累计到达' },
+            { value: stage.current, label: '当前停留' },
+            ...(stage.conversion != null ? [{ value: conversionText, label: '相对上一阶段转化' }] : []),
+          ]}
+        />
+      }
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-        <span
-          style={{
-            width: 64,
-            textAlign: 'right',
-            fontSize: 12,
-            color: INK_SECONDARY,
-            flexShrink: 0,
-          }}
-        >
-          {stage.name}
-        </span>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <div className="funnel-row" tabIndex={0}>
+        <span className="funnel-label">{stage.name}</span>
+        <div className="funnel-track">
           <div
-            style={{
-              width: `${widthPct}%`,
-              minWidth: stage.reached > 0 ? 6 : 0,
-              height: 20,
-              background: SERIES_BLUE,
-              borderRadius: '0 4px 4px 0',
-              transition: 'width .3s',
-            }}
+            className="funnel-bar"
+            style={cssVars({ '--w': `${widthPct}%`, '--minw': stage.reached > 0 ? '6px' : '0' })}
           />
-          <span
-            style={{
-              fontSize: 12,
-              color: INK_PRIMARY,
-              fontVariantNumeric: 'tabular-nums',
-              flexShrink: 0,
-            }}
-          >
-            {stage.reached}
-          </span>
+          <span className="funnel-value">{stage.reached}</span>
         </div>
-        <span style={{ width: 40, textAlign: 'right', fontSize: 12, color: INK_MUTED, flexShrink: 0 }}>
-          {conversionText}
-        </span>
+        <span className="funnel-rate">{conversionText}</span>
       </div>
     </Tooltip>
   );
@@ -131,44 +65,65 @@ function TodoCenter() {
   const navigate = useNavigate();
   const todosQuery = useQuery({ queryKey: ['todos'], queryFn: analyticsApi.todos });
   const data = todosQuery.data;
+  const visible = TODO_META.filter((meta) => data?.[meta.key] !== null);
   return (
-    <Card title="待办中心" size="small" style={{ marginTop: 16 }}>
-      <Row gutter={12}>
-        {TODO_META.map((meta) => {
-          const value = data?.[meta.key];
-          if (value === null) return null; // 无权限项不展示（如非审批人不显示待审批 Offer）
-          const count = value ?? 0;
-          return (
-            <Col span={6} key={meta.key}>
-              <div
-                onClick={() => navigate(meta.link)}
-                style={{
-                  border: '1px solid #eceef3',
-                  borderRadius: 8,
-                  padding: '10px 14px',
-                  cursor: 'pointer',
-                  background: count > 0 ? '#fffbf0' : '#fafafa',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13 }}>{meta.label}</span>
-                  <span
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 600,
-                      color: count > 0 ? '#d48806' : 'rgba(0,0,0,0.45)',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {todosQuery.isLoading ? '…' : count}
-                  </span>
+    <Card
+      title={
+        <CardTitle icon={<CarryOutOutlined />}>
+          待办中心
+        </CardTitle>
+      }
+      size="small"
+    >
+      {visible.length === 0 && !todosQuery.isLoading ? (
+        <EmptyBlock minHeight={120} description="暂无待办事项" />
+      ) : (
+        <Row gutter={[12, 12]}>
+          {visible.map((meta) => {
+            const count = data?.[meta.key] ?? 0;
+            return (
+              <Col span={6} key={meta.key}>
+                <div
+                  className={count > 0 ? 'todo-tile todo-tile--hot hover-lift' : 'todo-tile hover-lift'}
+                  onClick={() => navigate(meta.link)}
+                >
+                  <div className="todo-tile-head">
+                    <span>{meta.label}</span>
+                    <span className="todo-tile-count">{todosQuery.isLoading ? '…' : count}</span>
+                  </div>
+                  <div className="todo-tile-hint">{meta.hint}</div>
                 </div>
-                <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{meta.hint}</div>
-              </div>
-            </Col>
-          );
-        })}
-      </Row>
+              </Col>
+            );
+          })}
+        </Row>
+      )}
+    </Card>
+  );
+}
+
+/** 近 8 周投递/入职趋势（双系列折线，列命中区 Tooltip） */
+function TrendCard() {
+  const trendQuery = useQuery({ queryKey: ['trend'], queryFn: analyticsApi.trend });
+  const points = trendQuery.data?.points ?? [];
+  return (
+    <Card
+      title={
+        <CardTitle icon={<LineChartOutlined />}>
+          近 8 周投递与入职趋势
+        </CardTitle>
+      }
+      size="small"
+      className="u-mt-16"
+      loading={trendQuery.isLoading}
+    >
+      <TrendChart
+        data={points.map((p) => ({ x: p.week, values: { applied: p.applied, hired: p.hired } }))}
+        series={[
+          { key: 'applied', label: '新增投递', color: SERIES.blue },
+          { key: 'hired', label: '入职闭环', color: SERIES.aqua },
+        ]}
+      />
     </Card>
   );
 }
@@ -178,7 +133,6 @@ export function DashboardPage() {
   const [jobId, setJobId] = useState<string>();
   const [insight, setInsight] = useState<{ text: string; provider: string } | null>(null);
 
-  const overviewQuery = useQuery({ queryKey: ['analytics-overview'], queryFn: analyticsApi.overview });
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'options'],
     queryFn: () => jobsApi.list({ page: 1, pageSize: 100 }),
@@ -206,59 +160,22 @@ export function DashboardPage() {
 
   return (
     <div>
-      <Row gutter={16}>
-        <Col span={6}>
-          <StatCard
-            title="招聘中职位"
-            value={overviewQuery.data?.openJobs ?? '-'}
-            icon={<ProfileOutlined />}
-            color="#2a78d6"
-            loading={overviewQuery.isLoading}
-            extra={
-              overviewQuery.data?.pausedJobs
-                ? `另有 ${overviewQuery.data.pausedJobs} 个职位满编暂停`
-                : undefined
-            }
-          />
-        </Col>
-        <Col span={6}>
-          <StatCard
-            title="候选人总数"
-            value={overviewQuery.data?.candidates ?? '-'}
-            icon={<TeamOutlined />}
-            color="#1baf7a"
-            loading={overviewQuery.isLoading}
-          />
-        </Col>
-        <Col span={6}>
-          <StatCard
-            title="待进行面试"
-            value={overviewQuery.data?.upcomingInterviews ?? '-'}
-            icon={<ScheduleOutlined />}
-            color="#eda100"
-            loading={overviewQuery.isLoading}
-          />
-        </Col>
-        <Col span={6}>
-          <StatCard
-            title="已入职"
-            value={overviewQuery.data?.hired ?? '-'}
-            icon={<CheckCircleOutlined />}
-            color="#4a3aa7"
-            loading={overviewQuery.isLoading}
-          />
-        </Col>
-      </Row>
-
+      {/* 规模总览四卡已迁至「数据洞察」；大盘定位为工作台：趋势 + 待办 + 漏斗诊断 */}
       <TodoCenter />
+      <TrendCard />
 
-      <Row gutter={16} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]} className="u-mt-16">
         <Col span={14}>
           <Card
-            title="招聘漏斗"
+            title={
+              <CardTitle icon={<FunnelPlotOutlined />}>
+                招聘漏斗
+              </CardTitle>
+            }
+            classNames={{ body: 'card-body-chart' }}
             extra={
               <Select
-                style={{ width: 240 }}
+                className="w-240"
                 placeholder="选择职位"
                 loading={jobsQuery.isLoading}
                 value={jobId}
@@ -274,7 +191,7 @@ export function DashboardPage() {
             }
           >
             {funnelQuery.isLoading ? (
-              <div style={{ textAlign: 'center', padding: 32 }}>
+              <div className="loading-center">
                 <Spin />
               </div>
             ) : funnelQuery.data ? (
@@ -282,18 +199,23 @@ export function DashboardPage() {
                 {funnelQuery.data.stages.map((stage) => (
                   <FunnelBar key={stage.id} stage={stage} max={maxReached} />
                 ))}
-                <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+                <Typography.Paragraph type="secondary" className="chart-note">
                   条长 = 累计到达人数（快照口径）· 右列 = 相对上一阶段转化率 · 悬停查看明细
                 </Typography.Paragraph>
               </>
             ) : (
-              <Empty description="暂无职位数据" />
+              <EmptyBlock minHeight={220} description="暂无职位数据，创建职位后这里将展示招聘漏斗" />
             )}
           </Card>
         </Col>
         <Col span={10}>
           <Card
-            title="AI 招聘健康度诊断"
+            title={
+              <CardTitle icon={<RobotOutlined />}>
+                AI 招聘健康度诊断
+              </CardTitle>
+            }
+            classNames={{ body: 'card-body-chart' }}
             extra={
               <Button
                 size="small"
@@ -308,15 +230,15 @@ export function DashboardPage() {
           >
             {insight ? (
               <>
-                <Typography.Paragraph style={{ fontSize: 13 }}>{insight.text}</Typography.Paragraph>
-                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                <Typography.Paragraph>{insight.text}</Typography.Paragraph>
+                <Typography.Text type="secondary" className="u-meta">
                   来源：{insight.provider}
                   {insight.provider === 'mock' && '（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型诊断）'}
                 </Typography.Text>
               </>
             ) : (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              <EmptyBlock
+                minHeight={220}
                 description="选择职位后点击「生成诊断」，AI 将基于漏斗数据输出瓶颈分析与建议"
               />
             )}
