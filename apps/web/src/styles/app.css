@@ -1,0 +1,922 @@
+/* ============================================================
+   全站语义类（去行内样式）：
+   - 结构/静态样式一律在此定义；数据驱动的值经 CSS 变量传入
+   - 命名：布局 layout-* / 组件语义前缀 / 通用工具 u-*
+   ============================================================ */
+
+/* ---------------- 通用工具 ---------------- */
+.u-meta {
+  font-size: 12px;
+}
+.u-num-20 {
+  font-size: 20px;
+}
+.u-muted {
+  color: rgba(0, 0, 0, 0.45);
+}
+.u-secondary {
+  color: rgba(0, 0, 0, 0.65);
+}
+.u-faint {
+  color: rgba(0, 0, 0, 0.25);
+}
+.u-warning-text {
+  color: #eda100;
+}
+.u-tabular {
+  font-variant-numeric: tabular-nums;
+}
+.u-flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.u-flex-row {
+  display: flex;
+}
+.u-w-full {
+  width: 100%;
+}
+.u-p0 {
+  padding: 0;
+}
+.u-center {
+  text-align: center;
+}
+.u-break-all {
+  word-break: break-all;
+}
+.u-pointer {
+  cursor: pointer;
+}
+.ico-warning {
+  color: #eda100;
+}
+.ico-error {
+  color: #e34948;
+}
+.u-block {
+  display: block;
+}
+.u-left {
+  text-align: left;
+}
+.u-mt-0 { margin-top: 0; }
+.u-mt-4 { margin-top: 4px; }
+.u-mt-8 { margin-top: 8px; }
+.u-mt-12 { margin-top: 12px; }
+.u-mt-16 { margin-top: 16px; }
+.u-mb-4 { margin-bottom: 4px; }
+.u-mb-8 { margin-bottom: 8px; }
+.u-mb-12 { margin-bottom: 12px; }
+.u-mb-16 { margin-bottom: 16px; }
+.u-mr-0 { margin-inline-end: 0; }
+.u-ml-6 { margin-left: 6px; }
+.u-mr-6 { margin-right: 6px; }
+/* antd Space 撑满并两端对齐（不覆盖其 inline-flex display） */
+.space-between {
+  width: 100%;
+  justify-content: space-between;
+}
+.u-flex-gap-12 {
+  display: flex;
+  gap: 12px;
+}
+.w-100 { width: 100px; }
+.w-120 { width: 120px; }
+.w-140 { width: 140px; }
+.w-160 { width: 160px; }
+.w-220 { width: 220px; }
+.w-240 { width: 240px; }
+.w-260 { width: 260px; }
+
+.loading-center {
+  text-align: center;
+  padding: 32px;
+}
+.loading-center--lg {
+  padding: 48px;
+}
+.loading-center--xl {
+  padding: 60px;
+}
+
+.tag-meta {
+  font-size: 12px;
+}
+.rate-sm {
+  font-size: 12px;
+}
+
+/* 高弹窗内容区：限高内滚，不撑破视口（配合 Modal classNames.body） */
+.modal-body-scroll {
+  max-height: min(64vh, 680px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ---------------- 共享 UI（ui.tsx） ---------------- */
+.icon-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(13, 27, 62, 0.05);
+  color: rgba(0, 0, 0, 0.65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.icon-badge--lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 20px;
+}
+.card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title-icon {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 16px;
+}
+.stat-card-body {
+  min-height: 108px;
+  display: flex;
+  align-items: center;
+}
+.stat-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+.stat-card-main {
+  min-width: 0;
+}
+.stat-card-extra {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 2px;
+}
+/* 指标卡后缀说明降级：不随主数值同字号 */
+.stat-card-inner .ant-statistic-content-suffix {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-inline-start: 6px;
+}
+.empty-block {
+  min-height: var(--mh, 160px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.45);
+}
+.empty-block .ant-empty {
+  margin: 0;
+}
+
+/* 图表卡片 body 统一最小高度（成对卡片等高） */
+.card-body-chart {
+  min-height: 272px;
+}
+
+/* ---------------- 主布局 ---------------- */
+.layout-root {
+  height: 100vh;
+  overflow: hidden;
+}
+.sider-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.sider-logo {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  flex-shrink: 0;
+}
+.sider-logo-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2a78d6 0%, #6db3ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.sider-logo-text {
+  line-height: 1.3;
+}
+.sider-logo-name {
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+}
+.sider-logo-sub {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+}
+.sider-menu-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 12px;
+}
+.sider-menu-scroll .ant-menu {
+  border-inline-end: none;
+}
+.layout-main {
+  height: 100vh;
+  min-width: 0;
+}
+.layout-header {
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  box-shadow: 0 1px 3px rgba(15, 30, 70, 0.06);
+  z-index: 1;
+  flex-shrink: 0;
+}
+.layout-content {
+  padding: 24px;
+  overflow: auto;
+  min-height: 0;
+}
+.header-user {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.header-avatar {
+  background: #0d1b3e;
+}
+
+/* ---------------- 登录页 ---------------- */
+.login-bg {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1f3c88 0%, #2d6cdf 100%);
+}
+.login-card {
+  width: 380px;
+  box-shadow: 0 12px 40px rgba(13, 27, 62, 0.25);
+}
+.login-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.login-logo-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2a78d6 0%, #6db3ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24px;
+}
+
+/* ---------------- 数据大盘 ---------------- */
+.funnel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.funnel-label {
+  width: 64px;
+  text-align: right;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  flex-shrink: 0;
+}
+.funnel-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.funnel-bar {
+  width: var(--w);
+  min-width: var(--minw, 0);
+  height: 20px;
+  background: #2a78d6;
+  border-radius: 0 4px 4px 0;
+  transition: width 0.3s;
+}
+.funnel-row:hover .funnel-bar {
+  filter: brightness(1.08);
+}
+.funnel-value {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.88);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.funnel-rate {
+  width: 40px;
+  text-align: right;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+.chart-note {
+  font-size: 12px;
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.todo-tile {
+  border: 1px solid #e6e9f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  min-height: 68px;
+  background: #fafafa;
+}
+.todo-tile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.todo-tile-count {
+  font-size: 20px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+.todo-tile--hot .todo-tile-count {
+  color: #eda100;
+}
+.todo-tile-hint {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 2px;
+}
+
+/* ---------------- 招聘看板 ---------------- */
+.kanban-board {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.kanban-col {
+  width: 272px;
+  flex-shrink: 0;
+  background: #f0f2f7;
+  border-radius: 10px;
+  padding: 8px;
+  transition: background 0.15s;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 230px);
+}
+.kanban-col--over {
+  background: #dfeeff;
+  outline: 2px dashed #2a78d6;
+  outline-offset: -2px;
+}
+.kanban-col-head {
+  padding: 4px 4px 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kanban-col-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 60px;
+}
+.kanban-col-empty {
+  text-align: center;
+  color: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  padding: 24px 8px 16px;
+}
+.kanban-card {
+  margin-bottom: 8px;
+}
+.kanban-card--overlay {
+  box-shadow: 0 8px 24px rgba(15, 30, 70, 0.18);
+  cursor: grabbing;
+}
+.kanban-card-body {
+  padding: 8px 12px;
+}
+.kanban-card-tags {
+  margin: 6px 0;
+}
+/* 匹配分：色点承载分档信息，数字用墨色（比彩色 Tag 安静） */
+.kanban-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  font-variant-numeric: tabular-nums;
+}
+.kanban-score-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #bfbfbf;
+  flex-shrink: 0;
+}
+.kanban-score-dot--high {
+  background: #1baf7a;
+}
+.kanban-score-dot--mid {
+  background: #2a78d6;
+}
+/* 技能：点分文本单行省略，替代一排标签盒子 */
+.kanban-skills {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kanban-card-foot {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.drag-source {
+  cursor: grab;
+}
+.drag-source--dragging {
+  opacity: 0.3;
+}
+.drag-source--readonly {
+  cursor: pointer;
+}
+.drag-overlay-card {
+  width: 256px;
+}
+.select-card {
+  position: relative;
+  cursor: pointer;
+}
+.select-card-check {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 2;
+}
+.select-card-frame {
+  border-radius: 8px;
+}
+.select-card-frame--on {
+  outline: 2px solid #2a78d6;
+  outline-offset: -2px;
+}
+.compare-cols {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.compare-card {
+  flex: 1;
+}
+.compare-card--top {
+  border-color: #2a78d6;
+}
+.compare-line {
+  margin: 0 0 6px;
+}
+.plain-ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.batch-fail-list {
+  padding-left: 18px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.batch-fail-list li {
+  margin-bottom: 4px;
+}
+
+/* ---------------- 入职问答（聊天） ---------------- */
+.chat-card-body {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 200px);
+}
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.chat-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.chat-row--user {
+  flex-direction: row-reverse;
+}
+.chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.chat-avatar--bot {
+  background: rgba(13, 27, 62, 0.06);
+  color: rgba(0, 0, 0, 0.65);
+}
+.chat-avatar--user {
+  background: #0d1b3e;
+  color: #fff;
+}
+.chat-bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 2px 12px 12px 12px;
+  background: #f5f7fa;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.chat-row--user .chat-bubble {
+  border-radius: 12px 2px 12px 12px;
+  background: #2a78d6;
+  color: #fff;
+}
+.chat-bubble--typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(0, 0, 0, 0.45);
+}
+/* 欢迎态：正式的起始页（不伪装成聊天记录） */
+.chat-welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+.chat-welcome-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(13, 27, 62, 0.05);
+  color: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.chat-welcome-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.chat-welcome-desc {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+  max-width: 420px;
+  margin-bottom: 20px;
+}
+.chat-welcome-qs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 520px;
+}
+
+/* 气泡脚注：出处 + 引擎来源一行收纳 */
+.chat-src {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #d9d9d9;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.chat-provider {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-left: auto;
+  cursor: help;
+}
+/* 时间戳：悬停行时浮现，不常驻占位 */
+.chat-time {
+  align-self: flex-end;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.chat-row:hover .chat-time {
+  opacity: 1;
+}
+/* 复制回答：悬停气泡时浮现 */
+.chat-bubble {
+  position: relative;
+}
+.chat-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.chat-row:hover .chat-copy {
+  opacity: 1;
+}
+/* 失败气泡：内联重试，不只靠 toast */
+.chat-bubble--error {
+  background: #fff2f0;
+  color: rgba(0, 0, 0, 0.65);
+}
+/* 输入区（客服工作台范式）：卡片底部通栏面板，细线分隔消息区，textarea 完全裸化 */
+.chat-composer {
+  margin: 12px -16px -16px; /* 抵消卡片 body 内边距，通栏贴底 */
+  padding: 10px 16px 12px;
+  border-top: 1px solid #e6e9f0;
+}
+.chat-composer .ant-input,
+.chat-composer .ant-input:hover,
+.chat-composer .ant-input:focus,
+.chat-composer .ant-input:focus-within {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  resize: none;
+  border-radius: 0;
+}
+.chat-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+.chat-input-hint {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.25);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 右栏：常见问题（点击即问） */
+.faq-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.65);
+}
+.faq-item:hover {
+  background: #f4f6fa;
+  color: rgba(0, 0, 0, 0.88);
+}
+.faq-item .anticon {
+  margin-top: 3px;
+  color: rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+.helpdesk-escalation {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e6e9f0;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+}
+.docs-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+.doc-item {
+  margin-bottom: 10px;
+}
+
+/* ---------------- 候选人详情抽屉 ---------------- */
+.match-report {
+  max-width: 340px;
+}
+.match-report-line {
+  margin-bottom: 8px;
+}
+.match-report-tags {
+  margin-bottom: 6px;
+}
+.iv-block {
+  border: 1px solid #e6e9f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: #fafafa;
+}
+.iv-eval {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e8e8e8;
+}
+.iv-eval-comment {
+  font-size: 12px;
+  margin: 4px 0 0;
+  color: rgba(0, 0, 0, 0.65);
+}
+.resume-summary {
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+.timeline-meta {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+}
+.timeline-detail {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+/* ---------------- 录用管理 ---------------- */
+.retention-pop {
+  max-width: 320px;
+}
+.retention-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+/* ---------------- 面评弹窗 ---------------- */
+.copilot-box {
+  background: #f6f8fa;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.copilot-desc {
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+
+/* ---------------- 通知铃铛 ---------------- */
+.notif-panel {
+  width: 340px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.notif-item {
+  cursor: pointer;
+  padding: 8px 4px;
+}
+.notif-item--read {
+  opacity: 0.55;
+}
+.notif-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.notif-time {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+.notif-body {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  margin: 2px 0 0;
+}
+.bell-icon {
+  font-size: 18px;
+}
+
+/* ---------------- 入职清单/材料 ---------------- */
+.check-row {
+  display: flex;
+  justify-content: space-between;
+}
+.check-done {
+  text-decoration: line-through;
+  color: rgba(0, 0, 0, 0.45);
+}
+.doc-meta {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 4px;
+}
+
+/* ---------------- 免登录门户 ---------------- */
+.portal-shell {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0d1b3e 0%, #1f3f8f 45%, #eef1f6 45.1%);
+  padding: 32px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.portal-body {
+  width: 100%;
+  max-width: 480px;
+}
+.portal-head {
+  color: #fff;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.portal-head h4.ant-typography {
+  color: #fff;
+  margin-bottom: 4px;
+}
+.portal-head-sub {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+}
+.portal-foot {
+  text-align: center;
+  font-size: 12px;
+  margin-top: 12px;
+}
+.portal-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+.portal-check-label {
+  flex: 1;
+}
+.portal-check-label--done {
+  color: rgba(0, 0, 0, 0.45);
+  text-decoration: line-through;
+}
+.portal-company-item {
+  flex: 1;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+}
+.check-ico {
+  color: #d9d9d9;
+}
+.check-ico--done {
+  color: #1baf7a;
+}
+.portal-slot-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.portal-slot {
+  padding: 6px 0;
+}
+.portal-doc-img {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 6px;
+  border: 1px solid #e6e9f0;
+  margin-bottom: 8px;
+  display: block;
+}
