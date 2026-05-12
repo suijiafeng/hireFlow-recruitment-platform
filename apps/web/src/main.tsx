@@ -7,6 +7,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 import { router } from './router';
+import { buildTheme } from './theme';
+import './styles/global.css';
+import './styles/app.css';
+import './styles/charts.css';
 
 dayjs.locale('zh-cn');
 
@@ -29,20 +33,7 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        token: {
-          borderRadius: 8,
-          colorBgLayout: '#eef1f6',
-          motion: !disableMotion,
-        },
-        components: {
-          Layout: { headerBg: '#ffffff', siderBg: '#0d1b3e' },
-          Menu: { darkItemBg: '#0d1b3e', darkSubMenuItemBg: '#0a1633' },
-        },
-      }}
-    >
+    <ConfigProvider locale={zhCN} theme={buildTheme(disableMotion)}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
