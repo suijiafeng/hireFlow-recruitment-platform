@@ -1,13 +1,4 @@
-import {
-  CheckOutlined,
-  CloseOutlined,
-  EditOutlined,
-  FieldTimeOutlined,
-  InfoCircleOutlined,
-  LinkOutlined,
-  RobotOutlined,
-  SendOutlined,
-} from '@ant-design/icons';
+import { AuditOutlined, FieldTimeOutlined, InfoCircleOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   OFFER_APPROVAL_STATUS_LABEL,
@@ -42,6 +33,7 @@ import { offersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { Offer, RetentionHint } from '../../api/types';
+import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -71,27 +63,27 @@ function RetentionPopover({ offerId }: { offerId: string }) {
         retentionMutation.isPending ? (
           <Spin size="small" />
         ) : hint ? (
-          <div style={{ maxWidth: 320 }}>
-            <Typography.Text strong style={{ fontSize: 20 }}>
+          <div className="retention-pop">
+            <Typography.Text strong className="u-num-20">
               {Math.round(hint.probability * 100)}%
             </Typography.Text>
-            <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
+            <Typography.Text type="secondary" className="u-ml-6 u-meta">
               预计通过试用期并留存
             </Typography.Text>
-            <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, color: '#555' }}>
+            <ul className="retention-list">
               {hint.factors.map((f, i) => (
                 <li key={i}>{f}</li>
               ))}
             </ul>
           </div>
         ) : (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          <Typography.Text type="secondary" className="u-meta">
             点击生成
           </Typography.Text>
         )
       }
     >
-      <Button size="small" icon={<RobotOutlined />}>
+      <Button size="small" type="link" icon={<RobotOutlined />} className="u-p0">
         AI 参考
       </Button>
     </Popover>
@@ -181,7 +173,7 @@ function ResubmitModal({
           showIcon
           title="审批驳回意见"
           description={offer.approvalNote}
-          style={{ marginBottom: 16 }}
+          className="u-mb-16"
         />
       )}
       <Form
@@ -195,19 +187,19 @@ function ResubmitModal({
         }}
         onFinish={(v) => mutation.mutate(v)}
       >
-        <Space style={{ display: 'flex' }} align="start">
+        <Space className="u-flex-row" align="start">
           <Form.Item
             name="salaryBase"
             label="月薪（base，元）"
             rules={[{ required: true, message: '请输入月薪' }]}
           >
-            <InputNumber min={1000} max={1_000_000} step={1000} style={{ width: 160 }} />
+            <InputNumber min={1000} max={1_000_000} step={1000} className="w-160" />
           </Form.Item>
           <Form.Item name="bonusMonths" label="年终奖月数">
-            <InputNumber min={0} max={12} style={{ width: 120 }} />
+            <InputNumber min={0} max={12} className="w-120" />
           </Form.Item>
           <Form.Item name="grade" label="职级">
-            <Input placeholder="P6" maxLength={20} style={{ width: 100 }} />
+            <Input placeholder="P6" maxLength={20} className="w-100" />
           </Form.Item>
         </Space>
         <Form.Item name="note" label="备注（审批人可见）">
@@ -300,7 +292,7 @@ export function OffersPage() {
         modal.info({
           title: '候选人链接',
           content: (
-            <Typography.Text copyable style={{ wordBreak: 'break-all' }}>
+            <Typography.Text copyable className="u-break-all">
               {url}
             </Typography.Text>
           ),
@@ -316,12 +308,18 @@ export function OffersPage() {
   const canViewSalary = hasPermission(PERMISSIONS.SALARY_VIEW);
 
   return (
-    <Card title="录用管理" styles={{ body: { paddingTop: 8 } }}>
+    <Card
+      title={
+        <CardTitle icon={<AuditOutlined />}>
+          录用管理
+        </CardTitle>
+      }
+    >
       {offersQuery.isError ? (
         <QueryErrorResult error={offersQuery.error} />
       ) : (
         <>
-      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+      <Typography.Paragraph type="secondary" className="u-meta u-mb-12">
         流程：HR 发起 → 用人经理审批（驳回带意见可修改重提）→ HR 发送（候选人免登录链接，5 个工作日答复期，可续期一次）→
         候选人在线答复或 HR 代录；接受后自动生成入职单并移卡「待入职」
       </Typography.Paragraph>
@@ -329,7 +327,7 @@ export function OffersPage() {
         rowKey="id"
         loading={offersQuery.isLoading}
         dataSource={offersQuery.data}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 份 Offer` }}
         columns={[
           { title: '候选人', width: 110, render: (_, r) => r.application.candidate.name },
           {
@@ -342,11 +340,11 @@ export function OffersPage() {
             width: 150,
             render: (_, r) =>
               !canViewSalary ? (
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                <Typography.Text type="secondary" className="u-meta">
                   无权查看
                 </Typography.Text>
               ) : r.salary ? (
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <span className="u-tabular">
                   ¥{r.salary.base.toLocaleString()} × {12 + (r.salary.bonusMonths ?? 0)} 薪
                 </span>
               ) : (
@@ -362,7 +360,7 @@ export function OffersPage() {
                 <Tag color={STATUS_COLOR[v]}>{OFFER_APPROVAL_STATUS_LABEL[v as OfferApprovalStatus] ?? v}</Tag>
                 {v === 'REJECTED' && r.approvalNote && (
                   <Tooltip title={`驳回意见：${r.approvalNote}`}>
-                    <InfoCircleOutlined style={{ color: '#faad14' }} />
+                    <InfoCircleOutlined className="ico-warning" />
                   </Tooltip>
                 )}
               </Space>
@@ -380,7 +378,7 @@ export function OffersPage() {
                     </Tag>
                     {r.decision === 'DECLINED' && r.decisionReason && (
                       <Tooltip title={`原因：${r.decisionReason}`}>
-                        <InfoCircleOutlined style={{ color: '#ff4d4f' }} />
+                        <InfoCircleOutlined className="ico-error" />
                       </Tooltip>
                     )}
                   </Space>
@@ -390,7 +388,7 @@ export function OffersPage() {
                 const daysLeft = dayjs(r.expiresAt).diff(dayjs(), 'day');
                 return (
                   <Tooltip title={`答复截止：${dayjs(r.expiresAt).format('YYYY-MM-DD HH:mm')}${r.extendedOnce ? '（已续期）' : ''}`}>
-                    <Tag color={daysLeft <= 1 ? 'red' : 'blue'} icon={<FieldTimeOutlined />}>
+                    <Tag color={daysLeft <= 1 ? 'red' : 'default'} icon={<FieldTimeOutlined />}>
                       剩 {Math.max(daysLeft, 0)} 天
                     </Tag>
                   </Tooltip>
@@ -399,7 +397,7 @@ export function OffersPage() {
               if (r.approvalStatus === 'EXPIRED') {
                 return <Tag color="volcano">超期未答复</Tag>;
               }
-              return <span style={{ color: '#999' }}>待答复</span>;
+              return <span className="u-muted">待答复</span>;
             },
           },
           {
@@ -412,22 +410,22 @@ export function OffersPage() {
             title: '操作',
             width: 260,
             render: (_, r) => (
-              <Space size={4} wrap>
+              <Space size={8} wrap>
                 {r.approvalStatus === 'PENDING' && <RetentionPopover offerId={r.id} />}
                 {r.approvalStatus === 'PENDING' && canApprove && (
                   <>
                     <Popconfirm title="批准该 Offer？" onConfirm={() => act(() => offersApi.approve(r.id), '已批准')}>
-                      <Button size="small" type="primary" icon={<CheckOutlined />}>
+                      <Button size="small" type="link" className="u-p0">
                         通过
                       </Button>
                     </Popconfirm>
-                    <Button size="small" danger icon={<CloseOutlined />} onClick={() => setRejectTarget(r)}>
+                    <Button size="small" type="link" danger className="u-p0" onClick={() => setRejectTarget(r)}>
                       驳回
                     </Button>
                   </>
                 )}
                 {r.approvalStatus === 'REJECTED' && canInitiate && (
-                  <Button size="small" icon={<EditOutlined />} onClick={() => setResubmitTarget(r)}>
+                  <Button size="small" type="link" className="u-p0" onClick={() => setResubmitTarget(r)}>
                     修改重提
                   </Button>
                 )}
@@ -437,13 +435,13 @@ export function OffersPage() {
                     description="将生成候选人免登录链接，答复期 5 个工作日"
                     onConfirm={() => act(() => offersApi.send(r.id), 'Offer 已发送，可复制候选人链接')}
                   >
-                    <Button size="small" type="primary" icon={<SendOutlined />}>
+                    <Button size="small" type="link" className="u-p0">
                       发送
                     </Button>
                   </Popconfirm>
                 )}
                 {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') && canInitiate && (
-                  <Button size="small" icon={<LinkOutlined />} onClick={() => void copyPortalLink(r)}>
+                  <Button size="small" type="link" className="u-p0" onClick={() => void copyPortalLink(r)}>
                     复制链接
                   </Button>
                 )}
@@ -456,7 +454,7 @@ export function OffersPage() {
                       description="重新给予 5 个工作日答复期（仅可续期一次）"
                       onConfirm={() => act(() => offersApi.extend(r.id), '已续期 5 个工作日')}
                     >
-                      <Button size="small" icon={<FieldTimeOutlined />}>
+                      <Button size="small" type="link" className="u-p0">
                         续期
                       </Button>
                     </Popconfirm>
@@ -467,11 +465,11 @@ export function OffersPage() {
                       title="候选人已接受 Offer？将自动创建入职单"
                       onConfirm={() => act(() => offersApi.respond(r.id, 'ACCEPTED'), '已录入：接受，入职单已创建')}
                     >
-                      <Button size="small" type="primary">
+                      <Button size="small" type="link" className="u-p0">
                         录入接受
                       </Button>
                     </Popconfirm>
-                    <Button size="small" onClick={() => setDeclineTarget(r)}>
+                    <Button size="small" type="link" className="u-p0" onClick={() => setDeclineTarget(r)}>
                       录入拒绝
                     </Button>
                   </>
