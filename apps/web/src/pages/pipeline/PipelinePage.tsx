@@ -11,7 +11,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckSquareOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, CheckSquareOutlined } from '@ant-design/icons';
 import { PERMISSIONS, REJECT_REASONS, STAGE_STAY_SLA } from '@hireflow/shared';
 import {
   Alert,
@@ -28,6 +28,7 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { AxiosError } from 'axios';
@@ -38,6 +39,7 @@ import { applicationsApi, boardApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { BatchResult, BoardCard, BoardData, CompareData } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
+import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 /** 乐观更新：在本地缓存里把卡片从旧列挪到新列尾部 */
@@ -57,19 +59,18 @@ function moveCardInBoard(board: BoardData, applicationId: string, stageId: strin
   };
 }
 
-function scoreColor(score: number): string {
-  if (score >= 85) return 'green';
-  if (score >= 70) return 'blue';
-  return 'default';
+function scoreBand(score: number): string {
+  if (score >= 85) return 'kanban-score-dot kanban-score-dot--high';
+  if (score >= 70) return 'kanban-score-dot kanban-score-dot--mid';
+  return 'kanban-score-dot';
 }
 
-/** 阶段停留时长：超 3 天标黄、超 7 天标红 */
+/** 阶段停留时长：仅超 SLA 才提示——超 3 天标黄、超 7 天标红 */
 function StayTag({ card }: { card: BoardCard }) {
   const days = dayjs().diff(dayjs(card.stageEnteredAt), 'day');
-  if (days <= 0) return null;
-  const color = days > STAGE_STAY_SLA.dangerDays ? 'red' : days > STAGE_STAY_SLA.warnDays ? 'gold' : 'default';
+  if (days <= STAGE_STAY_SLA.warnDays) return null;
   return (
-    <Tag color={color} style={{ fontSize: 11, marginInlineEnd: 0 }}>
+    <Tag color={days > STAGE_STAY_SLA.dangerDays ? 'red' : 'gold'} className="tag-meta u-mr-0">
       停留 {days} 天
     </Tag>
   );
@@ -80,32 +81,27 @@ function CardView({ card, overlay = false }: { card: BoardCard; overlay?: boolea
   return (
     <Card
       size="small"
-      style={{
-        marginBottom: 8,
-        boxShadow: overlay ? '0 8px 24px rgba(15,30,70,0.18)' : undefined,
-        cursor: overlay ? 'grabbing' : undefined,
-      }}
-      styles={{ body: { padding: '8px 12px' } }}
+      className={overlay ? 'kanban-card kanban-card--overlay' : 'kanban-card'}
+      classNames={{ body: 'kanban-card-body' }}
     >
-      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+      <div className="u-flex-between">
         <Typography.Text strong>{card.candidate.name}</Typography.Text>
-        <Space size={4}>
+        <Space size={6}>
           {card.matchScore != null && (
-            <Tag color={scoreColor(card.matchScore)} style={{ marginInlineEnd: 0 }}>
-              匹配 {card.matchScore}
-            </Tag>
+            <Tooltip title={`AI 匹配分 ${card.matchScore}（≥85 优，≥70 良）`}>
+              <span className="kanban-score">
+                <span className={scoreBand(card.matchScore)} />
+                {card.matchScore}
+              </span>
+            </Tooltip>
           )}
           <StayTag card={card} />
         </Space>
-      </Space>
-      <div style={{ margin: '6px 0' }}>
-        {card.candidate.tags.slice(0, 3).map((tag) => (
-          <Tag key={tag} style={{ fontSize: 11 }}>
-            {tag}
-          </Tag>
-        ))}
       </div>
-      <div style={{ fontSize: 11, color: '#999', display: 'flex', justifyContent: 'space-between' }}>
+      {card.candidate.tags.length > 0 && (
+        <div className="kanban-skills">{card.candidate.tags.slice(0, 3).join(' · ')}</div>
+      )}
+      <div className="kanban-card-foot">
         <span>{card.candidate.source ?? '未知来源'}</span>
         <span>{dayjs(card.createdAt).format('MM-DD')}</span>
       </div>
@@ -123,6 +119,14 @@ function DraggableCard({
   onOpen: (candidateId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id, disabled });
+  // 拖拽由 DragOverlay 渲染跟手浮层；原卡片仅降透明度占位（修复裁剪/异常位移）
+  const cls = [
+    'drag-source',
+    disabled ? 'drag-source--readonly' : '',
+    isDragging ? 'drag-source--dragging' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <div
       ref={setNodeRef}
@@ -132,11 +136,7 @@ function DraggableCard({
         // PointerSensor 有 4px 启动阈值，纯点击不会触发拖拽
         if (!isDragging) onOpen(card.candidate.id);
       }}
-      style={{
-        // 拖拽由 DragOverlay 渲染跟手浮层；原卡片仅降透明度占位（修复裁剪/异常位移）
-        opacity: isDragging ? 0.3 : 1,
-        cursor: disabled ? 'pointer' : 'grab',
-      }}
+      className={cls}
     >
       <CardView card={card} />
     </div>
@@ -154,17 +154,11 @@ function SelectableCard({
   onToggle: (id: string) => void;
 }) {
   return (
-    <div onClick={() => onToggle(card.id)} style={{ position: 'relative', cursor: 'pointer' }}>
-      <div style={{ position: 'absolute', top: 6, right: 10, zIndex: 2 }}>
+    <div onClick={() => onToggle(card.id)} className="select-card">
+      <div className="select-card-check">
         <Checkbox checked={checked} onChange={() => onToggle(card.id)} onClick={(e) => e.stopPropagation()} />
       </div>
-      <div
-        style={{
-          outline: checked ? '2px solid #2a78d6' : 'none',
-          outlineOffset: -2,
-          borderRadius: 8,
-        }}
-      >
+      <div className={checked ? 'select-card-frame select-card-frame--on' : 'select-card-frame'}>
         <CardView card={card} />
       </div>
     </div>
@@ -193,23 +187,8 @@ function BoardColumnView({
   const { setNodeRef, isOver } = useDroppable({ id: stage.id, disabled: batchMode });
   const selectedInColumn = cards.filter((c) => selected.has(c.id)).length;
   return (
-    <div
-      ref={setNodeRef}
-      style={{
-        width: 272,
-        flexShrink: 0,
-        background: isOver ? '#dfeeff' : '#f0f2f7',
-        outline: isOver ? '2px dashed #2a78d6' : 'none',
-        outlineOffset: -2,
-        borderRadius: 10,
-        padding: 8,
-        transition: 'background .15s',
-        display: 'flex',
-        flexDirection: 'column',
-        maxHeight: 'calc(100vh - 230px)',
-      }}
-    >
-      <div style={{ padding: '4px 4px 10px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div ref={setNodeRef} className={isOver ? 'kanban-col kanban-col--over' : 'kanban-col'}>
+      <div className="kanban-col-head">
         {batchMode && cards.length > 0 && (
           <Checkbox
             checked={selectedInColumn === cards.length}
@@ -223,10 +202,10 @@ function BoardColumnView({
           />
         )}
         <span>
-          {stage.name} <Badge count={cards.length} color="#8c8c8c" style={{ marginLeft: 4 }} />
+          {stage.name} <Badge count={cards.length} color="#8c8c8c" />
         </span>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, minHeight: 60 }}>
+      <div className="kanban-col-scroll">
         {cards.map((card) =>
           batchMode ? (
             <SelectableCard key={card.id} card={card} checked={selected.has(card.id)} onToggle={onToggle} />
@@ -234,11 +213,7 @@ function BoardColumnView({
             <DraggableCard key={card.id} card={card} disabled={dragDisabled} onOpen={onOpen} />
           ),
         )}
-        {cards.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '24px 0' }}>
-            拖拽卡片到此阶段
-          </div>
-        )}
+        {cards.length === 0 && <div className="kanban-col-empty">暂无卡片</div>}
       </div>
     </div>
   );
@@ -259,22 +234,23 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
       onCancel={onClose}
       footer={null}
       width={Math.min(320 * (data?.candidates.length ?? 2) + 80, 1200)}
+      classNames={{ body: 'modal-body-scroll' }}
       destroyOnHidden
     >
       {loading || !data ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin tip="AI 正在汇总匹配分与面评数据…" />
+        <div className="loading-center loading-center--lg">
+          <Spin description="AI 正在汇总匹配分与面评数据…" />
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <div className="compare-cols">
             {data.candidates.map((c) => {
               const rank = data.ai.ranking.find((r) => r.name === c.name)?.rank;
               return (
                 <Card
                   key={c.applicationId}
                   size="small"
-                  style={{ flex: 1, borderColor: rank === 1 ? '#2a78d6' : undefined }}
+                  className={rank === 1 ? 'compare-card compare-card--top' : 'compare-card'}
                   title={
                     <Space>
                       {c.name}
@@ -282,29 +258,29 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
                     </Space>
                   }
                 >
-                  <p style={{ margin: '0 0 6px' }}>
+                  <p className="compare-line">
                     匹配分：
                     {c.matchScore != null ? <Tag color={c.matchScore >= 85 ? 'green' : c.matchScore >= 70 ? 'blue' : 'default'}>{c.matchScore}</Tag> : '未评分'}
                   </p>
-                  <div style={{ marginBottom: 6 }}>
+                  <div className="u-mb-4">
                     {c.tags.slice(0, 4).map((t) => (
-                      <Tag key={t} style={{ fontSize: 11 }}>
+                      <Tag key={t} className="tag-meta">
                         {t}
                       </Tag>
                     ))}
                   </div>
                   {c.highlights && (
-                    <Typography.Paragraph style={{ fontSize: 12, marginBottom: 6 }} ellipsis={{ rows: 3 }}>
+                    <Typography.Paragraph className="u-meta u-mb-4" ellipsis={{ rows: 3 }}>
                       {c.highlights}
                     </Typography.Paragraph>
                   )}
-                  <div style={{ fontSize: 12 }}>
+                  <div className="u-meta">
                     面评：
                     {c.evaluations.length === 0 ? (
-                      <span style={{ color: '#999' }}>暂无</span>
+                      <span className="u-muted">暂无</span>
                     ) : (
                       c.evaluations.map((e, i) => (
-                        <Tag key={i} color={e.conclusion?.includes('YES') ? 'green' : 'orange'} style={{ fontSize: 11 }}>
+                        <Tag key={i} color={e.conclusion?.includes('YES') ? 'green' : 'orange'} className="tag-meta">
                           {CONCLUSION_TEXT[e.conclusion ?? ''] ?? '无结论'}
                           {e.avgScore != null ? ` ${e.avgScore}分` : ''}
                         </Tag>
@@ -321,8 +297,8 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
             title={`AI 综合意见（${data.aiMeta.provider}${data.aiMeta.degraded ? '·降级' : ''}，仅供参考，终审权在用人经理）`}
             description={
               <>
-                <Typography.Paragraph style={{ marginBottom: 8 }}>{data.ai.summary}</Typography.Paragraph>
-                <ol style={{ margin: 0, paddingLeft: 18 }}>
+                <Typography.Paragraph className="u-mb-8">{data.ai.summary}</Typography.Paragraph>
+                <ol className="plain-ol">
                   {data.ai.ranking
                     .slice()
                     .sort((a, b) => a.rank - b.rank)
@@ -332,7 +308,7 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
                       </li>
                     ))}
                 </ol>
-                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                <Typography.Text type="secondary" className="u-meta u-block u-mt-8">
                   风险提示：{data.ai.risks}
                 </Typography.Text>
               </>
@@ -445,7 +421,7 @@ export function PipelinePage() {
     });
   };
 
-  /** 批量结果反馈：全部成功报数字；部分失败弹错误报告明细 */
+  /** 批量结果反馈：全部成功报数字；部分失败弹错误报告 */
   const reportBatch = (result: BatchResult, verb: string) => {
     void queryClient.invalidateQueries({ queryKey: ['board', jobId] });
     setSelected(new Set());
@@ -457,9 +433,9 @@ export function PipelinePage() {
       title: `${verb}完成：成功 ${result.succeeded} / ${result.total} 人`,
       width: 520,
       content: (
-        <ul style={{ paddingLeft: 18, maxHeight: 260, overflowY: 'auto' }}>
+        <ul className="batch-fail-list">
           {result.failed.map((f) => (
-            <li key={f.id} style={{ marginBottom: 4 }}>
+            <li key={f.id}>
               <b>{f.candidate ?? f.id}</b>：{f.error}
             </li>
           ))}
@@ -497,7 +473,7 @@ export function PipelinePage() {
     onError: (error) => message.error(extractErrorMessage(error, '对比失败')),
   });
 
-  /** 发预筛链接（选中恰 1 人时可用；邀约前核实硬性条件） */
+  /** 发预筛链接（选中恰 1 人时可用；V2 1.2 邀约前核实硬性条件） */
   const sendPrescreen = async () => {
     const id = [...selected][0];
     try {
@@ -510,7 +486,7 @@ export function PipelinePage() {
         modal.info({
           title: '候选人预筛链接',
           content: (
-            <Typography.Text copyable style={{ wordBreak: 'break-all' }}>
+            <Typography.Text copyable className="u-break-all">
               {url}
             </Typography.Text>
           ),
@@ -559,10 +535,12 @@ export function PipelinePage() {
   return (
     <Card
       title={
-        <Space>
-          招聘看板
+        <Space size={12}>
+          <CardTitle icon={<AppstoreOutlined />}>
+            招聘看板
+          </CardTitle>
           <Select
-            style={{ width: 260 }}
+            className="w-260"
             placeholder="选择职位"
             loading={jobsQuery.isLoading}
             value={jobId || undefined}
@@ -591,7 +569,7 @@ export function PipelinePage() {
       {batchMode && (
         <Alert
           type="info"
-          style={{ marginBottom: 12 }}
+          className="u-mb-12"
           message={
             <Space wrap>
               <span>
@@ -632,7 +610,7 @@ export function PipelinePage() {
         />
       )}
       {!jobId || boardQuery.isLoading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
+        <div className="loading-center loading-center--lg">
           {jobsQuery.isLoading || boardQuery.isLoading ? (
             <Spin />
           ) : (
@@ -647,7 +625,7 @@ export function PipelinePage() {
           onDragEnd={onDragEnd}
           onDragCancel={() => setActiveCard(null)}
         >
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
+          <div className="kanban-board">
             {boardQuery.data?.columns.map((column) => (
               <BoardColumnView
                 key={column.stage.id}
@@ -665,7 +643,7 @@ export function PipelinePage() {
           {/* 拖拽浮层：脱离列容器渲染，修复卡片被 overflow 裁剪/异常位移的问题 */}
           <DragOverlay dropAnimation={null}>
             {activeCard ? (
-              <div style={{ width: 256 }}>
+              <div className="drag-overlay-card">
                 <CardView card={activeCard} overlay />
               </div>
             ) : null}
@@ -685,7 +663,7 @@ export function PipelinePage() {
         destroyOnHidden
       >
         {pendingRevert && (
-          <Typography.Paragraph style={{ fontSize: 13 }}>
+          <Typography.Paragraph>
             将「{pendingRevert.candidateName}」从 <Tag>{pendingRevert.fromStage}</Tag> 回退到{' '}
             <Tag>{pendingRevert.toStage}</Tag>，回退操作仅 HR 可执行且全程留痕。
           </Typography.Paragraph>
@@ -717,7 +695,7 @@ export function PipelinePage() {
         </Form>
       </Modal>
 
-      {/* 批量淘汰：破坏性操作显示影响人数（防呆） */}
+      {/* 批量淘汰：破坏性操作显示影响人数 */}
       <Modal
         title={`批量淘汰 ${selected.size} 人`}
         open={batchRejectOpen}
@@ -731,7 +709,7 @@ export function PipelinePage() {
         <Alert
           type="warning"
           showIcon
-          style={{ marginBottom: 16 }}
+          className="u-mb-16"
           title="淘汰为终态操作，不可逆"
           description="每人独立留痕；原因码将用于漏斗分析与人才库回流。感谢信通道接入后将按防呆规则延迟 3 天发送。"
         />
