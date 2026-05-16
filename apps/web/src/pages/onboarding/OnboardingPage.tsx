@@ -1,4 +1,4 @@
-import { FileProtectOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
+import { FileProtectOutlined, IdcardOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CONTRACT_SIGN_STATUS_LABEL,
@@ -35,6 +35,7 @@ import { onboardingApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { ChecklistItem, Onboarding } from '../../api/types';
+import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 const OWNER_LABEL: Record<ChecklistItem['owner'], string> = {
@@ -58,17 +59,17 @@ function ChecklistGroup({
 }) {
   const items = onboarding.checklist.filter((i) => i.owner === owner);
   return (
-    <Card size="small" title={OWNER_LABEL[owner]} style={{ marginBottom: 12 }}>
-      <Space orientation="vertical" size={6} style={{ width: '100%' }}>
+    <Card size="small" title={OWNER_LABEL[owner]} className="u-mb-12">
+      <Space orientation="vertical" size={6} className="u-w-full">
         {items.map((item) => (
-          <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key={item.key} className="check-row">
             <Checkbox checked={item.done} disabled={!canToggle} onChange={(e) => onToggle(item.key, e.target.checked)}>
-              <span style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? '#999' : undefined }}>
+              <span className={item.done ? 'check-done' : undefined}>
                 {item.label}
               </span>
             </Checkbox>
             {item.doneAt && (
-              <span style={{ fontSize: 11, color: '#bbb' }}>{dayjs(item.doneAt).format('MM-DD HH:mm')}</span>
+              <span className="u-meta u-faint">{dayjs(item.doneAt).format('MM-DD HH:mm')}</span>
             )}
           </div>
         ))}
@@ -105,7 +106,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
         modal.info({
           title: '新员工资料填报链接',
           content: (
-            <Typography.Text copyable style={{ wordBreak: 'break-all' }}>
+            <Typography.Text copyable className="u-break-all">
               {url}
             </Typography.Text>
           ),
@@ -186,20 +187,20 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               showIcon
               title="入职闭环完成"
               description="清单全部完成且合同已签署，候选人已标记为已入职（HIRED）。"
-              style={{ marginBottom: 16 }}
+              className="u-mb-16"
             />
           )}
           {canManage && (
             <Button
               size="small"
               icon={<LinkOutlined />}
-              style={{ marginBottom: 12 }}
+              className="u-mb-12"
               onClick={() => void copyPortalLink(detail.id)}
             >
               复制新员工资料填报链接（免登录 H5）
             </Button>
           )}
-          <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
+          <Descriptions size="small" column={2} className="u-mb-16">
             <Descriptions.Item label="职位">
               {detail.application.job.title}（{detail.application.job.department.name}）
             </Descriptions.Item>
@@ -207,14 +208,14 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               <Progress
                 percent={Math.round((detail.progress.done / detail.progress.total) * 100)}
                 size="small"
-                style={{ width: 140 }}
+                className="w-140"
               />
             </Descriptions.Item>
             <Descriptions.Item label="邮箱">{detail.application.candidate.email ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="电话">{detail.application.candidate.phone ?? '-'}</Descriptions.Item>
           </Descriptions>
 
-          <Typography.Title level={5} style={{ marginTop: 0 }}>
+          <Typography.Title level={5} className="u-mt-0">
             三方待办清单
           </Typography.Title>
           {(['HR', 'IT', 'NEW_HIRE'] as const).map((owner) => (
@@ -244,7 +245,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               <Card
                 size="small"
                 key={doc.type}
-                style={{ marginBottom: 8 }}
+                className="u-mb-8"
                 title={
                   <Space size={8}>
                     {doc.label}
@@ -268,11 +269,11 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                     ))}
                   </Descriptions>
                 ) : (
-                  <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                  <Typography.Text type="warning" className="u-meta">
                     仅上传了图片、未识别出字段（低置信度阻断）：请打开原件人工核对，确认无误后手动勾选对应待办
                   </Typography.Text>
                 )}
-                <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                <div className="doc-meta">
                   识别引擎：{doc.ocrProvider} · {dayjs(doc.addedAt).format('YYYY-MM-DD HH:mm')}
                   {doc.fileName ? ` · ${doc.fileName}` : ''}
                 </div>
@@ -288,7 +289,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               size="small"
               current={contract ? SIGN_STEP[contract.signStatus] : 0}
               items={[{ title: '生成合同' }, { title: '发送签署' }, { title: '完成签署' }, { title: '存证归档' }]}
-              style={{ marginBottom: 16 }}
+              className="u-mb-16"
             />
             {!contract ? (
               canManage ? (
@@ -300,7 +301,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               )
             ) : (
               <>
-                <Descriptions size="small" column={2} style={{ marginBottom: 12 }}>
+                <Descriptions size="small" column={2} className="u-mb-12">
                   <Descriptions.Item label="模板">{contract.templateName}</Descriptions.Item>
                   <Descriptions.Item label="状态">
                     <Tag color={contract.signStatus === 'SIGNED' ? 'green' : 'blue'}>
@@ -312,7 +313,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                   )}
                   {contract.evidenceNo && (
                     <Descriptions.Item label="存证号">
-                      <Typography.Text code copyable style={{ fontSize: 12 }}>
+                      <Typography.Text code copyable className="u-meta">
                         {contract.evidenceNo}
                       </Typography.Text>
                     </Descriptions.Item>
@@ -335,7 +336,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                     </Button>
                   )}
                   {contract.signStatus === 'SIGNED' && (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" className="u-meta">
                       签署完成后已自动 Webhook 通知 IT 配置设备与账号（见候选人时间轴）
                     </Typography.Text>
                   )}
@@ -398,30 +399,36 @@ export function OnboardingPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const listQuery = useQuery({ queryKey: ['onboardings'], queryFn: onboardingApi.list, retry: false });
 
+  const pageTitle = (
+    <CardTitle icon={<IdcardOutlined />}>
+      入职管理
+    </CardTitle>
+  );
+
   if (listQuery.isError) {
     return (
-      <Card title="入职管理">
+      <Card title={pageTitle}>
         <QueryErrorResult error={listQuery.error} />
       </Card>
     );
   }
 
   return (
-    <Card title="入职管理" styles={{ body: { paddingTop: 8 } }}>
-      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+    <Card title={pageTitle}>
+      <Typography.Paragraph type="secondary" className="u-meta u-mb-12">
         Offer 接受后自动生成入职单：三方清单（HR/IT/新员工）+ 材料收集（OCR）+ 电子签合同；全部完成即闭环为「已入职」
       </Typography.Paragraph>
       <Table<Onboarding>
         rowKey="id"
         loading={listQuery.isLoading}
         dataSource={listQuery.data}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 张入职单` }}
         columns={[
           {
             title: '候选人',
             width: 120,
             render: (_, r) => (
-              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetailId(r.id)}>
+              <Button type="link" size="small" className="u-p0" onClick={() => setDetailId(r.id)}>
                 {r.application.candidate.name}
               </Button>
             ),
@@ -446,7 +453,7 @@ export function OnboardingPage() {
                   {CONTRACT_SIGN_STATUS_LABEL[r.contract.signStatus as ContractSignStatus]}
                 </Tag>
               ) : (
-                <span style={{ color: '#999' }}>未生成</span>
+                <span className="u-muted">未生成</span>
               ),
           },
           {
