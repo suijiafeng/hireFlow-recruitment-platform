@@ -1,4 +1,5 @@
 import {
+  AuditOutlined,
   CalendarOutlined,
   FileTextOutlined,
   InboxOutlined,
@@ -12,6 +13,7 @@ import {
   EVALUATION_CONCLUSION_LABEL,
   INTERVIEW_STATUS_LABEL,
   PERMISSIONS,
+  REJECT_REASONS,
   type ApplicationStatus,
   type EvaluationConclusion,
   type InterviewStatus,
@@ -25,6 +27,7 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popover,
   Rate,
@@ -39,7 +42,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
-import { applicationsApi, candidatesApi, jobsApi, resumesApi } from '../api';
+import { applicationsApi, boardApi, candidatesApi, jobsApi, offersApi, resumesApi } from '../api';
 import { extractErrorMessage } from '../api/client';
 import type { CandidateDetail, DetailApplication, Interview, MatchReport } from '../api/types';
 import { useAuthStore } from '../stores/auth';
@@ -59,6 +62,19 @@ const ACTION_LABEL: Record<string, string> = {
   'application.scored': 'AI 匹配评分',
   'interview.scheduled': '安排面试',
   'evaluation.submitted': '提交面评',
+  'offer.initiated': '发起 Offer',
+  'offer.approved': 'Offer 审批通过',
+  'offer.rejected': 'Offer 审批驳回',
+  'offer.sent': 'Offer 已发送',
+  'offer.responded': '候选人答复 Offer',
+  'onboarding.created': '创建入职单',
+  'onboarding.item_done': '入职待办更新',
+  'onboarding.completed': '入职闭环完成',
+  'onboarding.document_added': '提交入职材料',
+  'contract.created': '生成劳动合同',
+  'contract.sent': '合同发送签署',
+  'contract.signed': '合同签署完成',
+  'webhook.fired': '自动化通知（Webhook）',
 };
 
 const CONCLUSION_COLOR: Record<string, string> = {
@@ -182,12 +198,16 @@ function ApplicationCard({
   onEvaluate,
   onScore,
   scoring,
+  onOffer,
+  onReject,
 }: {
   application: DetailApplication;
   onSchedule: (id: string, rounds: number) => void;
   onEvaluate: (id: string) => void;
   onScore: (id: string) => void;
   scoring: boolean;
+  onOffer: (id: string) => void;
+  onReject: (id: string) => void;
 }) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const scoreTag =
@@ -235,6 +255,16 @@ function ApplicationCard({
               安排面试
             </Button>
           )}
+          {hasPermission(PERMISSIONS.OFFER_INITIATE) && application.status === 'ACTIVE' && (
+            <Button size="small" icon={<AuditOutlined />} onClick={() => onOffer(application.id)}>
+              发起 Offer
+            </Button>
+          )}
+          {hasPermission(PERMISSIONS.APPLICATION_MOVE) && application.status === 'ACTIVE' && (
+            <Button size="small" danger onClick={() => onReject(application.id)}>
+              淘汰
+            </Button>
+          )}
         </Space>
       }
     >
@@ -272,8 +302,12 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
   const [resumeOpen, setResumeOpen] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
+  const [offerFor, setOfferFor] = useState<string | null>(null);
+  const [rejectFor, setRejectFor] = useState<string | null>(null);
   const [resumeForm] = Form.useForm();
   const [applyForm] = Form.useForm();
+  const [offerForm] = Form.useForm();
+  const [rejectForm] = Form.useForm();
 
   const detailQuery = useQuery({
     queryKey: ['candidate-detail', candidateId],
@@ -356,6 +390,30 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
     onError: (error) => message.error(extractErrorMessage(error, '评分失败')),
   });
 
+  const rejectMutation = useMutation({
+    mutationFn: (values: { reason: string; note?: string }) => boardApi.reject(rejectFor!, values),
+    onSuccess: () => {
+      message.success('已淘汰并留痕（原因码已记录，感谢信通道接入后将延迟发送）');
+      setRejectFor(null);
+      rejectForm.resetFields();
+      invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '操作失败')),
+  });
+
+  const offerMutation = useMutation({
+    mutationFn: (values: { salaryBase: number; bonusMonths?: number; grade?: string; note?: string }) =>
+      offersApi.create({ applicationId: offerFor!, ...values }),
+    onSuccess: () => {
+      message.success('Offer 已发起，等待用人经理审批（见「录用管理」）');
+      setOfferFor(null);
+      offerForm.resetFields();
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['offers'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '发起失败')),
+  });
+
   const detail: CandidateDetail | undefined = detailQuery.data;
 
   return (
@@ -423,6 +481,8 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                           onEvaluate={setEvaluateFor}
                           onScore={(id) => scoreMutation.mutate(id)}
                           scoring={scoreMutation.isPending}
+                          onOffer={setOfferFor}
+                          onReject={setRejectFor}
                         />
                       ))
                     )}
@@ -631,6 +691,71 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                     label: `${j.title}（${j.department.name}）`,
                   }))}
                 />
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          <Modal
+            title={`发起 Offer · ${detail.name}`}
+            open={Boolean(offerFor)}
+            onCancel={() => setOfferFor(null)}
+            onOk={() => offerForm.submit()}
+            confirmLoading={offerMutation.isPending}
+            destroyOnHidden
+          >
+            <Form
+              form={offerForm}
+              layout="vertical"
+              initialValues={{ bonusMonths: 3 }}
+              onFinish={(values) => offerMutation.mutate(values)}
+            >
+              <Form.Item
+                name="salaryBase"
+                label="月薪（base，元）"
+                rules={[{ required: true, message: '请填写月薪' }]}
+              >
+                <InputNumber
+                  min={1000}
+                  max={1000000}
+                  step={1000}
+                  style={{ width: '100%' }}
+                  placeholder="如 30000"
+                />
+              </Form.Item>
+              <Form.Item name="bonusMonths" label="年终奖（月数）">
+                <InputNumber min={0} max={12} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item name="grade" label="职级">
+                <Input placeholder="如 P6" maxLength={20} />
+              </Form.Item>
+              <Form.Item name="note" label="备注（审批人可见）">
+                <Input.TextArea rows={2} maxLength={500} />
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          <Modal
+            title="淘汰候选人（原因码强制）"
+            open={Boolean(rejectFor)}
+            onCancel={() => setRejectFor(null)}
+            onOk={() => rejectForm.submit()}
+            okButtonProps={{ danger: true }}
+            okText="确认淘汰"
+            confirmLoading={rejectMutation.isPending}
+            destroyOnHidden
+          >
+            <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+              淘汰为终态、不可逆（误操作需「重新激活」生成新应聘记录）；原因码用于漏斗分析与人才库回流。
+            </Typography.Paragraph>
+            <Form form={rejectForm} layout="vertical" onFinish={(values) => rejectMutation.mutate(values)}>
+              <Form.Item name="reason" label="原因码" rules={[{ required: true, message: '必须选择原因码' }]}>
+                <Select
+                  placeholder="选择淘汰原因"
+                  options={REJECT_REASONS.map((r) => ({ value: r, label: r }))}
+                />
+              </Form.Item>
+              <Form.Item name="note" label="补充说明（可选）">
+                <Input.TextArea rows={2} maxLength={300} />
               </Form.Item>
             </Form>
           </Modal>
