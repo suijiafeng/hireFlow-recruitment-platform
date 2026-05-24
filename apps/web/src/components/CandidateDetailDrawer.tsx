@@ -78,10 +78,10 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 const CONCLUSION_COLOR: Record<string, string> = {
-  STRONG_YES: 'green',
-  YES: 'cyan',
-  NO: 'orange',
-  STRONG_NO: 'red',
+  STRONG_YES: 'success',
+  YES: 'success',
+  NO: 'warning',
+  STRONG_NO: 'error',
 };
 
 /** 可解释的匹配度报告（AI 输出必须给出打分依据） */
@@ -100,7 +100,7 @@ function MatchReportView({ report }: { report: MatchReport }) {
         <div className="u-mb-4">
           <span className="u-meta u-secondary">命中要求：</span>
           {report.hits.map((h) => (
-            <Tag key={h} color="green" className="u-meta">
+            <Tag key={h} color="success" className="u-meta">
               {h}
             </Tag>
           ))}
@@ -110,7 +110,7 @@ function MatchReportView({ report }: { report: MatchReport }) {
         <div className="u-mb-4">
           <span className="u-meta u-secondary">缺失要求：</span>
           {report.misses.map((m) => (
-            <Tag key={m} color="orange" className="u-meta">
+            <Tag key={m} color="warning" className="u-meta">
               {m}
             </Tag>
           ))}
@@ -204,14 +204,14 @@ function ApplicationCard({
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const scoreTag =
     application.matchScore != null ? (
-      <Tag color={application.matchScore >= 85 ? 'green' : application.matchScore >= 70 ? 'blue' : 'default'}>
+      <Tag color={application.matchScore >= 85 ? 'success' : application.matchScore >= 70 ? 'processing' : 'default'}>
         匹配 {application.matchScore}
       </Tag>
     ) : null;
   return (
     <Card
       size="small"
-      className="u-mb-12"
+      className="u-mb-16"
       title={
         <Space>
           {application.job.title}
@@ -456,7 +456,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                       <Button
                         size="small"
                         icon={<PlusOutlined />}
-                        className="u-mb-12"
+                        className="u-mb-16"
                         onClick={() => setApplyOpen(true)}
                       >
                         加入职位流程
@@ -490,7 +490,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                       <Button
                         size="small"
                         icon={<FileTextOutlined />}
-                        className="u-mb-12"
+                        className="u-mb-16"
                         onClick={() => setResumeOpen(true)}
                       >
                         导入简历文本
@@ -500,7 +500,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                       <Empty description="暂无简历" />
                     ) : (
                       detail.resumes.map((resume) => (
-                        <Card size="small" key={resume.id} className="u-mb-12">
+                        <Card size="small" key={resume.id} className="u-mb-16">
                           <Space className="space-between">
                             <Space>
                               <FileTextOutlined />
@@ -508,9 +508,9 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                               <Tag
                                 color={
                                   resume.parseStatus === 'DONE'
-                                    ? 'green'
+                                    ? 'success'
                                     : resume.parseStatus === 'FAILED'
-                                      ? 'red'
+                                      ? 'error'
                                       : 'default'
                                 }
                               >

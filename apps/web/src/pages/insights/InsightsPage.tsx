@@ -22,7 +22,7 @@ import {
   NestedBarChart,
   SERIES,
 } from '../../components/charts';
-import { CardTitle, StatCard } from '../../components/ui';
+import { StatCard } from '../../components/ui';
 
 const CHANNEL_STAGES = ['投递', '进面', 'Offer', '入职'];
 
@@ -39,8 +39,16 @@ export function InsightsPage() {
   const overview = overviewQuery.data;
 
   return (
-    <>
-      {/* 第一排：规模总览（自数据大盘迁入） */}
+    <div className="insights-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">数据洞察</h1>
+          <p className="page-header-subtitle">基于招聘全流程数据的多维度分析，辅助招聘决策</p>
+        </div>
+      </div>
+
+      {/* 第一排：规模总览 */}
       <Row gutter={[16, 16]}>
         <Col span={6}>
           <StatCard
@@ -123,16 +131,13 @@ export function InsightsPage() {
 
       <Row gutter={[16, 16]} className="u-mt-16">
         <Col span={12}>
-          <Card
-            title={
-              <CardTitle icon={<ShareAltOutlined />}>
-                渠道效能
-              </CardTitle>
-            }
-            size="small"
-            loading={loading}
-            classNames={{ body: 'card-body-chart' }}
-          >
+          <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <ShareAltOutlined className="section-icon" />
+                <span>渠道效能</span>
+              </div>
+            </div>
             <NestedBarChart
               stages={CHANNEL_STAGES}
               emptyText="暂无投递数据，录入候选人后自动统计"
@@ -144,15 +149,15 @@ export function InsightsPage() {
                   <ChartTip
                     title={c.source}
                     rows={[
-                      { color: '#86b6ef', value: c.applied, label: '投递' },
+                      { color: '#60A5FA', value: c.applied, label: '投递' },
                       {
-                        color: '#5598e7',
+                        color: '#3B82F6',
                         value: c.interviewed,
                         label: `进面${c.interviewRate != null ? `（${c.interviewRate}%）` : ''}`,
                       },
-                      { color: '#2a78d6', value: c.offered, label: `Offer（接受 ${c.accepted}）` },
+                      { color: '#2563EB', value: c.offered, label: `Offer（接受 ${c.accepted}）` },
                       {
-                        color: '#184f95',
+                        color: '#1E40AF',
                         value: c.hired,
                         label: `入职${c.hireRate != null ? `（${c.hireRate}%）` : ''}`,
                       },
@@ -164,16 +169,13 @@ export function InsightsPage() {
           </Card>
         </Col>
         <Col span={12}>
-          <Card
-            title={
-              <CardTitle icon={<TeamOutlined />}>
-                面试官效能（通过率 / 及时率）
-              </CardTitle>
-            }
-            size="small"
-            loading={loading}
-            classNames={{ body: 'card-body-chart' }}
-          >
+          <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <TeamOutlined className="section-icon" />
+                <span>面试官效能（通过率 / 及时率）</span>
+              </div>
+            </div>
             <GroupedBarChart
               unit="%"
               max={100}
@@ -215,20 +217,15 @@ export function InsightsPage() {
 
       <Row gutter={[16, 16]} className="u-mt-16">
         <Col span={12}>
-          <Card
-            title={
+          <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
+            <div className="section-header">
               <Tooltip title="基于 ActivityLog 阶段变更回放计算（精确口径，非快照）">
-                <span>
-                  <CardTitle icon={<HourglassOutlined />}>
-                    阶段停留时长（P50 → P90）
-                  </CardTitle>
-                </span>
+                <div className="section-title">
+                  <HourglassOutlined className="section-icon" />
+                  <span>阶段停留时长（P50 → P90）</span>
+                </div>
               </Tooltip>
-            }
-            size="small"
-            loading={loading}
-            classNames={{ body: 'card-body-chart' }}
-          >
+            </div>
             <DumbbellChart
               unit=" 天"
               rangeLabels={['P50 中位', 'P90 长尾']}
@@ -241,8 +238,8 @@ export function InsightsPage() {
                   <ChartTip
                     title={s.stage}
                     rows={[
-                      { color: '#6da7ec', value: `${s.p50Days} 天`, label: 'P50 中位停留' },
-                      { color: '#184f95', value: `${s.p90Days} 天`, label: 'P90 长尾停留' },
+                      { color: '#60A5FA', value: `${s.p50Days} 天`, label: 'P50 中位停留' },
+                      { color: '#1E40AF', value: `${s.p90Days} 天`, label: 'P90 长尾停留' },
                       { value: s.samples, label: '样本数' },
                     ]}
                   />
@@ -252,16 +249,13 @@ export function InsightsPage() {
           </Card>
         </Col>
         <Col span={12}>
-          <Card
-            title={
-              <CardTitle icon={<SolutionOutlined />}>
-                TTH 按职位（中位天数）
-              </CardTitle>
-            }
-            size="small"
-            loading={loading}
-            classNames={{ body: 'card-body-chart' }}
-          >
+          <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <SolutionOutlined className="section-icon" />
+                <span>TTH 按职位（中位天数）</span>
+              </div>
+            </div>
             <LollipopChart
               unit=" 天"
               emptyText="暂无入职闭环样本"
@@ -286,6 +280,6 @@ export function InsightsPage() {
           </Card>
         </Col>
       </Row>
-    </>
+    </div>
   );
 }

@@ -9,11 +9,13 @@ import { App, Button, Card, Col, Row, Select, Spin, Tooltip, Typography } from '
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import dayjs from 'dayjs';
 import { analyticsApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { FunnelStage } from '../../api/types';
 import { ChartTip, SERIES, TrendChart } from '../../components/charts';
-import { CardTitle, EmptyBlock } from '../../components/ui';
+import { EmptyBlock } from '../../components/ui';
+import { useAuthStore } from '../../stores/auth';
 
 const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
@@ -67,14 +69,13 @@ function TodoCenter() {
   const data = todosQuery.data;
   const visible = TODO_META.filter((meta) => data?.[meta.key] !== null);
   return (
-    <Card
-      title={
-        <CardTitle icon={<CarryOutOutlined />}>
-          待办中心
-        </CardTitle>
-      }
-      size="small"
-    >
+    <Card className="todo-center-card" size="small">
+      <div className="section-header">
+        <div className="section-title">
+          <CarryOutOutlined className="section-icon" />
+          <span>待办中心</span>
+        </div>
+      </div>
       {visible.length === 0 && !todosQuery.isLoading ? (
         <EmptyBlock minHeight={120} description="暂无待办事项" />
       ) : (
@@ -107,16 +108,13 @@ function TrendCard() {
   const trendQuery = useQuery({ queryKey: ['trend'], queryFn: analyticsApi.trend });
   const points = trendQuery.data?.points ?? [];
   return (
-    <Card
-      title={
-        <CardTitle icon={<LineChartOutlined />}>
-          近 8 周投递与入职趋势
-        </CardTitle>
-      }
-      size="small"
-      className="u-mt-16"
-      loading={trendQuery.isLoading}
-    >
+    <Card className="trend-card u-mt-16" size="small" loading={trendQuery.isLoading}>
+      <div className="section-header">
+        <div className="section-title">
+          <LineChartOutlined className="section-icon" />
+          <span>近 8 周投递与入职趋势</span>
+        </div>
+      </div>
       <TrendChart
         data={points.map((p) => ({ x: p.week, values: { applied: p.applied, hired: p.hired } }))}
         series={[
@@ -130,6 +128,7 @@ function TrendCard() {
 
 export function DashboardPage() {
   const { message } = App.useApp();
+  const user = useAuthStore((s) => s.user);
   const [jobId, setJobId] = useState<string>();
   const [insight, setInsight] = useState<{ text: string; provider: string } | null>(null);
 
@@ -158,22 +157,45 @@ export function DashboardPage() {
 
   const maxReached = Math.max(...(funnelQuery.data?.stages.map((s) => s.reached) ?? [0]), 1);
 
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return '早上好';
+    if (hour < 18) return '下午好';
+    return '晚上好';
+  };
+
   return (
-    <div>
-      {/* 规模总览四卡已迁至「数据洞察」；大盘定位为工作台：趋势 + 待办 + 漏斗诊断 */}
+    <div className="dashboard-page">
+      {/* 欢迎头部 */}
+      <div className="dashboard-welcome">
+        <div className="welcome-content">
+          <h1 className="welcome-title">
+            {greeting()}，{user?.name || '用户'} 👋
+          </h1>
+          <p className="welcome-subtitle">
+            今天是 {dayjs().format('YYYY年MM月DD日 dddd')}，祝你招聘顺利
+          </p>
+        </div>
+        <div className="welcome-decoration">
+          <div className="welcome-glow welcome-glow--1"></div>
+          <div className="welcome-glow welcome-glow--2"></div>
+        </div>
+      </div>
+
+      {/* 待办中心 */}
       <TodoCenter />
+
+      {/* 趋势图 */}
       <TrendCard />
 
       <Row gutter={[16, 16]} className="u-mt-16">
         <Col span={14}>
-          <Card
-            title={
-              <CardTitle icon={<FunnelPlotOutlined />}>
-                招聘漏斗
-              </CardTitle>
-            }
-            classNames={{ body: 'card-body-chart' }}
-            extra={
+          <Card className="funnel-card" classNames={{ body: 'card-body-chart' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <FunnelPlotOutlined className="section-icon" />
+                <span>招聘漏斗</span>
+              </div>
               <Select
                 className="w-240"
                 placeholder="选择职位"
@@ -188,8 +210,7 @@ export function DashboardPage() {
                   label: `${j.title}（${j.department.name}）`,
                 }))}
               />
-            }
-          >
+            </div>
             {funnelQuery.isLoading ? (
               <div className="loading-center">
                 <Spin />
@@ -209,16 +230,15 @@ export function DashboardPage() {
           </Card>
         </Col>
         <Col span={10}>
-          <Card
-            title={
-              <CardTitle icon={<RobotOutlined />}>
-                AI 招聘健康度诊断
-              </CardTitle>
-            }
-            classNames={{ body: 'card-body-chart' }}
-            extra={
+          <Card className="ai-insight-card" classNames={{ body: 'card-body-chart' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <RobotOutlined className="section-icon" />
+                <span>AI 招聘健康度诊断</span>
+              </div>
               <Button
                 size="small"
+                type="primary"
                 icon={<RobotOutlined />}
                 loading={insightMutation.isPending}
                 disabled={!jobId}
@@ -226,16 +246,15 @@ export function DashboardPage() {
               >
                 生成诊断
               </Button>
-            }
-          >
+            </div>
             {insight ? (
-              <>
-                <Typography.Paragraph>{insight.text}</Typography.Paragraph>
-                <Typography.Text type="secondary" className="u-meta">
+              <div className="ai-insight-content">
+                <div className="ai-insight-text">{insight.text}</div>
+                <Typography.Text type="secondary" className="u-meta ai-insight-meta">
                   来源：{insight.provider}
                   {insight.provider === 'mock' && '（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型诊断）'}
                 </Typography.Text>
-              </>
+              </div>
             ) : (
               <EmptyBlock
                 minHeight={220}
