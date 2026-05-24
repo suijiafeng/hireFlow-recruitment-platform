@@ -4,9 +4,10 @@ import type { CSSProperties, ReactNode } from 'react';
 /** 数据驱动的尺寸经 CSS 变量传入，静态样式见 styles/app.css */
 const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
-/** 中性灰圆角小图标：指标卡的视觉锚点（实用优先，不上装饰色） */
+/** 图标徽章：中性灰底灰图标（装饰性颜色零容忍，色彩留给数据与状态） */
 export function IconBadge({ icon, size = 'sm' }: { icon: ReactNode; size?: 'sm' | 'lg' }) {
-  return <span className={size === 'lg' ? 'icon-badge icon-badge--lg' : 'icon-badge'}>{icon}</span>;
+  const classNames = ['icon-badge', size === 'lg' ? 'icon-badge--lg' : ''].filter(Boolean).join(' ');
+  return <span className={classNames}>{icon}</span>;
 }
 
 /** 卡片标题：墨色小图标 + 文本（色彩留给数据与状态，标题不抢视线） */
@@ -19,7 +20,7 @@ export function CardTitle({ icon, children }: { icon: ReactNode; children: React
   );
 }
 
-/** 指标卡（大盘/洞察共用）：中性图标 + 数值，固定 body 高度保证同行等高 */
+/** 指标卡（大盘/洞察共用）：中性徽章 + 数值，固定 body 高度保证同行等高 */
 export function StatCard({
   title,
   value,
@@ -37,7 +38,7 @@ export function StatCard({
   extra?: string;
 }) {
   return (
-    <Card classNames={{ body: 'stat-card-body' }}>
+    <Card classNames={{ body: 'stat-card-body' }} hoverable>
       <div className="stat-card-inner">
         <IconBadge icon={icon} size="lg" />
         <div className="stat-card-main">

@@ -1,5 +1,5 @@
 /* ============================================================
-   图表样式（dataviz 规范）：
+   图表样式（dataviz 规范）- 现代蓝紫品牌色系
    - 条形 ≤24px，数据端 4px 圆角、基线端直角
    - 折线 2px 圆角端点；端点 ≥8px 带 2px 表面色描边环
    - 网格线 1px 实线浅灰，退居背景
@@ -9,9 +9,9 @@
 
 .chart {
   --chart-surface: #ffffff;
-  --chart-grid: #e6e9f0;
-  --chart-track: #f4f6fa;
-  font-size: 12px;
+  --chart-grid: #f5f5f5;
+  --chart-track: #f5f5f5;
+  font-size: 14px;
 }
 
 /* ---- 图例（≥2 系列必备） ---- */
@@ -20,7 +20,7 @@
   flex-wrap: wrap;
   gap: 4px 16px;
   margin-bottom: 10px;
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(26, 26, 26, 0.65);
 }
 .chart-legend-item {
   display: inline-flex;
@@ -30,7 +30,7 @@
 .chart-swatch {
   width: 12px;
   height: 12px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--c);
   flex-shrink: 0;
 }
@@ -38,7 +38,7 @@
   width: 14px;
   height: 0;
   border-top: 2px solid var(--c);
-  border-radius: 2px;
+  border-radius: 4px;
   flex-shrink: 0;
 }
 .chart-dotkey {
@@ -65,8 +65,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   outline: none;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  transition: background 0.15s ease;
 }
 .chart-row:hover,
 .chart-row:focus-visible {
@@ -76,10 +79,11 @@
   width: 88px;
   flex-shrink: 0;
   text-align: right;
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(26, 26, 26, 0.65);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 500;
 }
 .chart-row-plot {
   flex: 1;
@@ -90,12 +94,13 @@
   gap: 6px;
 }
 .chart-row-value {
-  color: rgba(0, 0, 0, 0.88);
+  color: rgba(26, 26, 26, 0.9);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  font-weight: 600;
 }
 .chart-row-meta {
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(26, 26, 26, 0.45);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   width: 64px;
@@ -103,7 +108,8 @@
 }
 .chart-caption {
   margin-top: 8px;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(26, 26, 26, 0.45);
+  font-size: 14px;
 }
 
 /* ---- 单系列水平条 ---- */
@@ -111,9 +117,11 @@
   height: 16px;
   width: var(--w);
   min-width: 2px;
-  background: var(--c, #2a78d6);
+  background: var(--c, #2563EB);
   border-radius: 0 4px 4px 0; /* 数据端圆角，基线端直角 */
-  transition: width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 .chart-row:hover .chart-bar,
 .chart-row:focus-visible .chart-bar {
@@ -135,7 +143,7 @@
   background: var(--c);
   border-radius: 0 4px 4px 0;
   box-shadow: 0 0 0 2px var(--chart-surface);
-  transition: width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .chart-row:hover .chart-nest-bar,
 .chart-row:focus-visible .chart-nest-bar {
@@ -160,7 +168,7 @@
   min-width: 2px;
   background: var(--c);
   border-radius: 0 4px 4px 0;
-  transition: width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .chart-row:hover .chart-gbar,
 .chart-row:focus-visible .chart-gbar {
@@ -173,7 +181,7 @@
   bottom: -2px;
   width: 2px;
   border-radius: 1px;
-  background: rgba(0, 0, 0, 0.45); /* 基线刻度：墨色而非系列色 */
+  background: rgba(26, 26, 26, 0.35); /* 基线刻度：墨色而非系列色 */
 }
 .chart-group-vals {
   display: flex;
@@ -183,9 +191,9 @@
   flex-shrink: 0;
 }
 .chart-group-vals span {
-  font-size: 12px;
-  line-height: 14px;
-  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  line-height: 16px;
+  color: rgba(26, 26, 26, 0.85);
   font-variant-numeric: tabular-nums;
 }
 
@@ -211,23 +219,25 @@
   top: 50%;
   height: 2px;
   transform: translateY(-50%);
-  border-radius: 2px;
-  background: var(--c, #2a78d6);
+  border-radius: 4px;
+  background: var(--c, #2563EB);
 }
 .chart-lolli-dot {
   position: absolute;
   left: max(var(--x), 5px);
   top: 50%;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: var(--c, #2a78d6);
-  box-shadow: 0 0 0 2px var(--chart-surface);
+  background: var(--c, #2563EB);
+  box-shadow: 0 0 0 3px var(--chart-surface), 0 2px 6px rgba(37, 99, 235, 0.2);
+  transition: all 0.2s ease;
 }
 .chart-row:hover .chart-lolli-dot,
 .chart-row:focus-visible .chart-lolli-dot {
   filter: brightness(1.08);
+  transform: translate(-50%, -50%) scale(1.15);
 }
 
 /* ---- 哑铃图（阶段停留 P50→P90：同色两档 + 连接线） ---- */
@@ -250,33 +260,35 @@
   left: var(--x1);
   width: calc(var(--x2) - var(--x1));
   top: 50%;
-  height: 2px;
+  height: 4px;
   transform: translateY(-50%);
-  background: #6da7ec;
-  border-radius: 2px;
+  background: #e0e0e0;
+  border-radius: 4px;
 }
 .chart-dumbbell-dot {
   position: absolute;
   top: 50%;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   background: var(--c);
-  box-shadow: 0 0 0 2px var(--chart-surface); /* 表面色环：重叠时仍可分辨 */
+  box-shadow: 0 0 0 3px var(--chart-surface); /* 表面色环：重叠时仍可分辨 */
+  transition: all 0.2s ease;
 }
 .chart-dumbbell-dot--p50 {
   left: var(--x1);
-  background: #6da7ec;
+  background: #60A5FA;
 }
 .chart-dumbbell-dot--p90 {
   left: var(--x2);
-  background: #184f95;
+  background: #1E40AF;
   z-index: 1;
 }
 .chart-row:hover .chart-dumbbell-dot,
 .chart-row:focus-visible .chart-dumbbell-dot {
   filter: brightness(1.08);
+  transform: translate(-50%, -50%) scale(1.1);
 }
 
 /* ---- 趋势折线图 ---- */
@@ -284,19 +296,31 @@
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 8px;
+  container-type: inline-size;
+  padding-right: 24px; /* 终点直标（left:100% 外挂）的预留位，防溢出卡片 */
 }
 .trend-y {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: flex-end;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(26, 26, 26, 0.45);
   font-variant-numeric: tabular-nums;
   padding: 2px 0;
 }
 .trend-plot {
   position: relative;
-  height: 180px;
+  /* 高度随容器宽度自适应：宽屏不压扁、窄容器不细长，钳在 160-240 内 */
+  height: auto;
+  aspect-ratio: 5 / 1;
+  min-height: 160px;
+  max-height: 240px;
+}
+/* 窄容器：横轴只保留首末刻度（flex 两端对齐下位置仍然精确），避免 8 个日期挤爆 */
+@container (max-width: 520px) {
+  .trend-x span:not(:first-child):not(:last-child) {
+    display: none;
+  }
 }
 .trend-svg {
   position: absolute;
@@ -306,14 +330,14 @@
   overflow: visible;
 }
 .trend-gridline {
-  stroke: #e6e9f0;
+  stroke: #f5f5f5;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 .trend-line {
   fill: none;
   stroke: var(--c);
-  stroke-width: 2;
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -322,13 +346,14 @@
   position: absolute;
   left: 50%;
   top: var(--y);
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   background: var(--c);
-  box-shadow: 0 0 0 2px var(--chart-surface);
+  box-shadow: 0 0 0 3px var(--chart-surface);
   pointer-events: none;
+  transition: all 0.2s ease;
 }
 .trend-col {
   position: absolute;
@@ -346,17 +371,18 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(0, 0, 0, 0.25); /* 十字准线：命中列吸附 */
+  background: rgba(26, 26, 26, 0.2); /* 十字准线：命中列吸附 */
 }
 .trend-col:hover .trend-dot,
 .trend-col:focus-visible .trend-dot {
   filter: brightness(1.08);
+  transform: translate(-50%, -50%) scale(1.2);
 }
 .trend-x {
   grid-column: 2;
   display: flex;
   justify-content: space-between;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(26, 26, 26, 0.45);
   font-variant-numeric: tabular-nums;
 }
 .trend-endlabel {
@@ -364,10 +390,11 @@
   left: 100%;
   top: var(--y);
   transform: translate(8px, -50%);
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(26, 26, 26, 0.65);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
+  font-weight: 600;
 }
 
 /* ---- Tooltip 内容：数值为主、系列名为辅，短色条作系列键 ---- */
@@ -379,6 +406,7 @@
 .chart-tip-title {
   font-weight: 600;
   margin-bottom: 2px;
+  color: #1a1a1a;
 }
 .chart-tip-row {
   display: flex;
@@ -395,7 +423,9 @@
 .chart-tip-value {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: #1a1a1a;
 }
 .chart-tip-label {
-  opacity: 0.85;
+  opacity: 0.7;
+  color: rgba(26, 26, 26, 0.7);
 }

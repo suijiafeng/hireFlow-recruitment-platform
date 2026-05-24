@@ -9,14 +9,14 @@ import { EmptyBlock } from './ui';
  * - 空数据 → EmptyBlock 占位；条目过多 → 固定高度内滚 + 总数说明
  */
 
-/** 分类系列色（categorical slot 1/2，白底校验 PASS；aqua 2.82:1 需直接标签补偿） */
-export const SERIES = { blue: '#2a78d6', aqua: '#1baf7a' } as const;
-/** 有序四级阶梯（浅→深，--ordinal 校验 PASS）：投递 → 进面 → Offer → 入职 */
-export const ORDINAL_BLUE_4 = ['#86b6ef', '#5598e7', '#2a78d6', '#184f95'] as const;
-/** 哑铃两档（同色系两级，--ordinal 校验 PASS） */
-export const DUMBBELL = { p50: '#6da7ec', p90: '#184f95' } as const;
+/** 分类系列色（categorical slot 1/2，现代蓝紫品牌色系） */
+export const SERIES = { blue: '#2563EB', aqua: '#06B6D4' } as const;
+/** 有序四级阶梯（浅→深，现代蓝紫渐变）：投递 → 进面 → Offer → 入职 */
+export const ORDINAL_BLUE_4 = ['#93C5FD', '#60A5FA', '#2563EB', '#1E40AF'] as const;
+/** 哑铃两档（同色系两级） */
+export const DUMBBELL = { p50: '#60A5FA', p90: '#1E40AF' } as const;
 /** 基线刻度用墨色（参考标记不占用系列色） */
-const REF_INK = 'rgba(0, 0, 0, 0.45)';
+const REF_INK = 'rgba(15, 23, 42, 0.45)';
 
 /** 数据驱动的值仅以 CSS 变量传入（静态样式一律走 class） */
 const cssVars = (v: Record<string, string | number>) => v as CSSProperties;

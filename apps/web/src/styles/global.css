@@ -1,5 +1,6 @@
 /* ============================================================
-   浏览器默认样式重置（antd v6 组件自带样式但不做全局 reset）
+   浏览器默认样式重置 + 全局设计系统
+   HireFlow 现代企业级设计语言
    ============================================================ */
 *,
 *::before,
@@ -22,13 +23,14 @@ body {
   margin: 0;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  font-size: 14px;
-  line-height: 1.5714;
-  color: rgba(0, 0, 0, 0.88);
-  background: #eef1f6;
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Inter', sans-serif;
+  font-size: 16px;
+  line-height: 1.5; /* 16 -> 24，行高落 4px 网格 */
+  color: #1a1a1a;
+  background: #f5f5f5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 h1,
@@ -45,6 +47,11 @@ dd {
   margin: 0;
 }
 
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 img,
 picture,
 video {
@@ -53,31 +60,40 @@ video {
 
 a {
   text-decoration: none;
+  color: inherit;
 }
 
-/* ---- 全站细滚动条（主内容区/看板列/抽屉通用） ---- */
+/* ---- 全站细滚动条 - 现代极简风格 ---- */
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(13, 27, 62, 0.16);
+  background: rgba(26, 26, 26, 0.3);
   border-radius: 4px;
+  transition: background 0.2s ease;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 27, 62, 0.32);
+  background: rgba(26, 26, 26, 0.5);
 }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* ---- 可点击卡片/磁贴的悬浮反馈 ---- */
+/* ---- 可点击卡片/磁贴的悬浮反馈 - 柔和抬升 ---- */
 .hover-lift {
   transition:
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.25s ease;
 }
 .hover-lift:hover {
-  box-shadow: 0 6px 16px rgba(15, 30, 70, 0.1);
-  transform: translateY(-1px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
+}
+
+/* ---- 选中文字颜色 ---- */
+::selection {
+  background: rgba(37, 99, 235, 0.15);
+  color: #2563EB;
 }
