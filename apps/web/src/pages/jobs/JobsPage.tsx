@@ -1,4 +1,4 @@
-import { PlusOutlined, ProfileOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
 import {
@@ -25,11 +25,11 @@ import { useNavigate } from 'react-router';
 import { aiApi, departmentsApi, jobsApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Job, TalentPoolScanResult } from '../../api/types';
-import { CardTitle, EmptyBlock } from '../../components/ui';
+import { EmptyBlock } from '../../components/ui';
 import { BRAND } from '../../theme';
 import { useAuthStore } from '../../stores/auth';
 
-/** 岗位评分卡模板配置 */
+/** 岗位评分卡模板配置（详设 V2 3.4：动态表单引擎第一个兑现点） */
 function ScorecardModal({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -117,7 +117,7 @@ function ScorecardModal({ job, onClose }: { job: Job | null; onClose: () => void
   );
 }
 
-/** 人才库唤醒抽屉：打开即扫描，AI 打分推荐 + 一键激活 */
+/** 人才库唤醒抽屉（PRD 4.2.2）：打开即扫描，AI 打分推荐 + 一键激活 */
 function TalentPoolDrawer({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -172,16 +172,16 @@ function TalentPoolDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
           <Alert
             type="info"
             showIcon
-            className="u-mb-12"
+            className="u-mb-16"
             title={`已扫描 ${result.scanned} 位历史淘汰/撤回候选人，按匹配度推荐 ${result.recommendations.length} 位`}
             description={result.recommendations[0]?.aiMeta.degraded ? 'AI 引擎降级中，结果由规则引擎生成' : undefined}
           />
           {result.recommendations.map((rec) => (
-            <Card key={rec.candidate.id} size="small" className="u-mb-12">
+            <Card key={rec.candidate.id} size="small" className="u-mb-16 talent-pool-card">
               <div className="u-flex-between">
                 <Space>
-                  <Typography.Text strong>{rec.candidate.name}</Typography.Text>
-                  <Tag color={rec.score >= 85 ? 'green' : rec.score >= 70 ? 'blue' : 'default'}>
+                  <Typography.Text className="talent-pool-name">{rec.candidate.name}</Typography.Text>
+                  <Tag color={rec.score >= 85 ? 'success' : rec.score >= 70 ? 'processing' : 'default'}>
                     匹配 {rec.score}
                   </Tag>
                 </Space>
@@ -196,18 +196,18 @@ function TalentPoolDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
                   {activated.has(rec.candidate.id) ? '已激活' : '激活到本职位'}
                 </Button>
               </div>
-              <div className="kanban-card-tags">
+              <div className="kanban-card-tags u-mt-8">
                 {rec.hits.map((h) => (
                   <Tag key={h} className="tag-meta">
                     {h}
                   </Tag>
                 ))}
               </div>
-              <Typography.Paragraph type="secondary" className="u-meta u-mb-4">
+              <Typography.Paragraph className="talent-pool-highlights u-mb-4">
                 {rec.highlights}
               </Typography.Paragraph>
               {rec.lastApplication && (
-                <Typography.Text type="secondary" className="u-meta">
+                <Typography.Text className="talent-pool-meta">
                   上次：{rec.lastApplication.jobTitle} ·{' '}
                   {rec.lastApplication.status === 'WITHDRAWN' ? '已撤回' : '已淘汰'}
                   {rec.lastApplication.rejectReason ? `（${rec.lastApplication.rejectReason}）` : ''} ·{' '}
@@ -224,10 +224,10 @@ function TalentPoolDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
 
 const STATUS_COLOR: Record<JobStatus, string> = {
   DRAFT: 'default',
-  PENDING_APPROVAL: 'gold',
-  OPEN: 'green',
-  PAUSED: 'orange',
-  CLOSED: 'red',
+  PENDING_APPROVAL: 'warning',
+  OPEN: 'success',
+  PAUSED: 'processing',
+  CLOSED: 'error',
 };
 
 export function JobsPage() {
@@ -239,6 +239,7 @@ export function JobsPage() {
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Job | null>(null);
   const [talentPoolJob, setTalentPoolJob] = useState<Job | null>(null);
   const [scorecardJob, setScorecardJob] = useState<Job | null>(null);
   const [form] = Form.useForm();
@@ -264,6 +265,31 @@ export function JobsPage() {
     },
     onError: (error) => message.error(extractErrorMessage(error, '创建失败')),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; values: Parameters<typeof jobsApi.update>[1] }) =>
+      jobsApi.update(vars.id, vars.values),
+    onSuccess: (job) => {
+      message.success(`职位「${job.title}」已更新`);
+      setEditing(null);
+      form.resetFields();
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const openEdit = (job: Job) => {
+    setEditing(job);
+    form.setFieldsValue({
+      title: job.title,
+      departmentId: job.department.id,
+      hiringManagerId: job.hiringManager?.id,
+      headcount: job.headcount,
+      description: job.description ?? undefined,
+      requirement: job.requirement ?? undefined,
+      status: job.status,
+    });
+  };
 
   const generateJdMutation = useMutation({
     mutationFn: aiApi.generateJd,
@@ -293,138 +319,187 @@ export function JobsPage() {
   };
 
   return (
-    <Card
-      title={
-        <CardTitle icon={<ProfileOutlined />}>
-          职位管理
-        </CardTitle>
-      }
-      extra={
-        <Space>
-          <Input.Search
-            placeholder="搜索职位名称"
-            allowClear
-            onSearch={(value) => {
-              setPage(1);
-              setKeyword(value.trim());
-            }}
-            className="w-240"
-          />
+    <div className="jobs-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">职位管理</h1>
+          <p className="page-header-subtitle">管理所有招聘职位，查看招聘进度，配置评分卡</p>
+        </div>
+        <div className="page-header-actions">
           {hasPermission(PERMISSIONS.JOB_CREATE) && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               新建职位
             </Button>
           )}
-        </Space>
-      }
-    >
-      <Table<Job>
-        rowKey="id"
-        loading={jobsQuery.isLoading}
-        dataSource={jobsQuery.data?.items}
-        pagination={{
-          current: page,
-          pageSize: 10,
-          total: jobsQuery.data?.total,
-          onChange: setPage,
-          showTotal: (total) => `共 ${total} 个职位`,
-        }}
-        columns={[
-          { title: '职位名称', dataIndex: 'title' },
-          { title: '部门', dataIndex: ['department', 'name'], width: 120 },
-          {
-            title: '用人经理',
-            dataIndex: ['hiringManager', 'name'],
-            width: 140,
-            render: (name: string | undefined) => name ?? '-',
-          },
-          {
-            title: '状态',
-            dataIndex: 'status',
-            width: 100,
-            render: (status: JobStatus) => (
-              <Tag color={STATUS_COLOR[status]}>{JOB_STATUS_LABEL[status]}</Tag>
-            ),
-          },
-          {
-            title: 'HC（已用/编制）',
-            width: 140,
-            render: (_, record) => {
-              const used = (record as Job & { hcUsed?: number }).hcUsed ?? 0;
-              const pct = Math.min(100, Math.round((used / record.headcount) * 100));
-              return (
-                <Space size={6}>
-                  <Progress
-                    type="circle"
-                    size={26}
-                    percent={pct}
-                    strokeColor={pct >= 100 ? BRAND.error : BRAND.primary}
-                    format={() => ''}
-                  />
-                  <span className="u-tabular">
-                    {used}/{record.headcount}
-                  </span>
-                </Space>
-              );
+        </div>
+      </div>
+
+      {/* 筛选栏 */}
+      <div className="filter-bar">
+        <div className="filter-bar-row">
+          <Input.Search
+            placeholder="搜索职位名称、部门"
+            allowClear
+            onSearch={(value) => {
+              setPage(1);
+              setKeyword(value.trim());
+            }}
+            className="w-280"
+          />
+        </div>
+      </div>
+
+      {/* 职位列表 */}
+      <Card className="list-main-card">
+        <Table<Job>
+          rowKey="id"
+          scroll={{ x: 1200 }}
+          loading={jobsQuery.isLoading}
+          dataSource={jobsQuery.data?.items}
+          pagination={{
+            current: page,
+            pageSize: 10,
+            total: jobsQuery.data?.total,
+            onChange: setPage,
+            showTotal: (total) => `共 ${total} 个职位`,
+          }}
+          columns={[
+            {
+              title: '职位名称',
+              dataIndex: 'title',
+              render: (title: string) => (
+                <div className="job-title-cell">
+                  <span className="job-name">{title}</span>
+                </div>
+              ),
             },
-          },
-          {
-            title: '候选人',
-            width: 90,
-            render: (_, record) => record._count?.applications ?? 0,
-          },
-          {
-            title: '创建时间',
-            dataIndex: 'createdAt',
-            width: 120,
-            render: (v: string) => dayjs(v).format('YYYY-MM-DD'),
-          },
-          {
-            title: '操作',
-            width: 200,
-            render: (_, record) => (
-              <Space size={0}>
-                <Button type="link" size="small" onClick={() => navigate(`/pipeline?jobId=${record.id}`)}>
-                  查看看板
-                </Button>
-                {hasPermission(PERMISSIONS.APPLICATION_CREATE) && (
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<ThunderboltOutlined />}
-                    onClick={() => setTalentPoolJob(record)}
-                  >
-                    人才库唤醒
+            { title: '部门', dataIndex: ['department', 'name'], width: 130 },
+            {
+              title: '用人经理',
+              dataIndex: ['hiringManager', 'name'],
+              width: 140,
+              render: (name: string | undefined) => name ?? '-',
+            },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              width: 120,
+              render: (status: JobStatus) => (
+                <Tag color={STATUS_COLOR[status]} className="status-tag">
+                  {JOB_STATUS_LABEL[status]}
+                </Tag>
+              ),
+            },
+            {
+              title: 'HC 进度',
+              width: 160,
+              render: (_, record) => {
+                const used = (record as Job & { hcUsed?: number }).hcUsed ?? 0;
+                const pct = Math.min(100, Math.round((used / record.headcount) * 100));
+                return (
+                  <div className="hc-progress-cell">
+                    <Progress
+                      type="circle"
+                      size={28}
+                      percent={pct}
+                      strokeColor={pct >= 100 ? BRAND.error : pct >= 80 ? BRAND.warning : BRAND.primary}
+                      format={() => ''}
+                    />
+                    <span className="hc-text">
+                      <span className="hc-used">{used}</span>
+                      <span className="hc-sep">/</span>
+                      <span className="hc-total">{record.headcount}</span>
+                    </span>
+                  </div>
+                );
+              },
+            },
+            {
+              title: '候选人',
+              width: 90,
+              align: 'center',
+              render: (_, record) => (
+                <span className="candidate-count">{record._count?.applications ?? 0}</span>
+              ),
+            },
+            {
+              title: '创建时间',
+              dataIndex: 'createdAt',
+              width: 140,
+              render: (v: string) => <span className="u-meta">{dayjs(v).format('YYYY-MM-DD')}</span>,
+            },
+            {
+              title: '操作',
+              width: 300,
+              fixed: 'right',
+              render: (_, record) => (
+                <Space size={4} className="action-btns">
+                  <Button type="link" size="small" onClick={() => navigate(`/pipeline?jobId=${record.id}`)}>
+                    查看看板
                   </Button>
-                )}
-                {hasPermission(PERMISSIONS.JOB_UPDATE) && (
-                  <Button type="link" size="small" onClick={() => setScorecardJob(record)}>
-                    评分卡
-                  </Button>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+                  {hasPermission(PERMISSIONS.APPLICATION_CREATE) && (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<ThunderboltOutlined />}
+                      onClick={() => setTalentPoolJob(record)}
+                    >
+                      人才库
+                    </Button>
+                  )}
+                  {hasPermission(PERMISSIONS.JOB_UPDATE) && (
+                    <Button type="link" size="small" onClick={() => setScorecardJob(record)}>
+                      评分卡
+                    </Button>
+                  )}
+                  {hasPermission(PERMISSIONS.JOB_UPDATE) && (
+                    <Button type="link" size="small" onClick={() => openEdit(record)}>
+                      编辑
+                    </Button>
+                  )}
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </Card>
 
       <TalentPoolDrawer job={talentPoolJob} onClose={() => setTalentPoolJob(null)} />
       <ScorecardModal job={scorecardJob} onClose={() => setScorecardJob(null)} />
 
       <Modal
-        title="新建职位"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        title={editing ? `编辑职位：${editing.title}` : '新建职位'}
+        open={createOpen || editing != null}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditing(null);
+          form.resetFields();
+        }}
         onOk={() => form.submit()}
-        confirmLoading={createMutation.isPending}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
         destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
-          onFinish={(values) => createMutation.mutate(values)}
+          onFinish={(values) =>
+            editing
+              ? updateMutation.mutate({ id: editing.id, values })
+              : createMutation.mutate(values)
+          }
           initialValues={{ headcount: 1 }}
         >
+          {editing && (
+            <Form.Item name="status" label="职位状态">
+              <Select
+                options={Object.entries(JOB_STATUS_LABEL).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="title" label="职位名称" rules={[{ required: true, min: 2 }]}>
             <Input placeholder="如：后端工程师" />
           </Form.Item>
@@ -449,7 +524,7 @@ export function JobsPage() {
           <Form.Item name="keywords" label="核心诉求（供 AI 扩写用，可选）">
             <Input placeholder='如："需要一个懂 React 和 Node.js 的三年经验前端"' />
           </Form.Item>
-          <Form.Item className="u-mb-12">
+          <Form.Item className="u-mb-16">
             <Button
               icon={<RobotOutlined />}
               onClick={handleGenerateJd}
@@ -466,6 +541,6 @@ export function JobsPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </Card>
+    </div>
   );
 }

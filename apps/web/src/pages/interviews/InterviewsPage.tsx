@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClockCircleOutlined, LinkOutlined, PlusOutlined, ScheduleOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   EVALUATION_CONCLUSION_LABEL,
   INTERVIEW_STATUS_LABEL,
@@ -7,7 +7,7 @@ import {
   type EvaluationConclusion,
   type InterviewStatus,
 } from '@hireflow/shared';
-import { App, Button, Card, DatePicker, Form, Modal, Popconfirm, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, DatePicker, Form, Modal, Space, Table, Tag, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useState } from 'react';
 import { interviewsApi } from '../../api';
@@ -15,7 +15,6 @@ import { extractErrorMessage } from '../../api/client';
 import type { Interview } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { EvaluationModal } from '../../components/EvaluationModal';
-import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 /** 我的可约时段：面试官自维护空闲档，候选人自助选时的档期来源 */
@@ -49,20 +48,16 @@ function MySlotsCard() {
   });
 
   return (
-    <Card
-      size="small"
-      title={
-        <CardTitle icon={<ClockCircleOutlined />}>
-          我的可约时段
-        </CardTitle>
-      }
-      extra={
+    <Card className="slots-card" size="small">
+      <div className="section-header">
+        <div className="section-title">
+          <ClockCircleOutlined className="section-icon" />
+          <span>我的可约时段</span>
+        </div>
         <Button size="small" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
           添加时段
         </Button>
-      }
-      className="u-mb-16"
-    >
+      </div>
       {!slotsQuery.data?.length ? (
         <Typography.Text type="secondary" className="u-meta">
           尚未维护空闲时段。添加后，HR 发出的「候选人自助选时」链接将展示你的空闲档。
@@ -72,7 +67,7 @@ function MySlotsCard() {
           {slotsQuery.data.map((s) => (
             <Tag
               key={s.id}
-              color={s.bookedBy ? 'orange' : 'default'}
+              className={`slot-tag ${s.bookedBy ? 'slot-tag--booked' : ''}`}
               closable={!s.bookedBy}
               onClose={(e) => {
                 e.preventDefault();
@@ -94,21 +89,7 @@ function MySlotsCard() {
         destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={(v) => addMutation.mutate(v.range)}>
-          <Form.Item
-            name="range"
-            label="起止时间"
-            extra="不支持跨天：候选人门户仅展示结束时间的时分，跨天会显示成误导性的倒序时段"
-            rules={[
-              { required: true, message: '请选择时间段' },
-              {
-                validator: async (_, value: [Dayjs, Dayjs] | undefined) => {
-                  if (value && !value[0].isSame(value[1], 'day')) {
-                    throw new Error('起止时间须在同一天内，请拆分为多个时段');
-                  }
-                },
-              },
-            ]}
-          >
+          <Form.Item name="range" label="起止时间" rules={[{ required: true, message: '请选择时间段' }]}>
             <DatePicker.RangePicker
               showTime={{ format: 'HH:mm', minuteStep: 15 }}
               format="MM-DD HH:mm"
@@ -123,15 +104,14 @@ function MySlotsCard() {
 }
 
 const CONCLUSION_COLOR: Record<string, string> = {
-  STRONG_YES: 'green',
-  YES: 'cyan',
-  NO: 'orange',
-  STRONG_NO: 'red',
+  STRONG_YES: 'success',
+  YES: 'success',
+  NO: 'warning',
+  STRONG_NO: 'error',
 };
 
 export function InterviewsPage() {
   const { message, modal } = App.useApp();
-  const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const [evaluateFor, setEvaluateFor] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -139,15 +119,6 @@ export function InterviewsPage() {
   const interviewsQuery = useQuery({
     queryKey: ['interviews', 'all'],
     queryFn: () => interviewsApi.list(),
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: interviewsApi.cancel,
-    onSuccess: () => {
-      message.success('面试已取消，已通知面试官');
-      void queryClient.invalidateQueries({ queryKey: ['interviews'] });
-    },
-    onError: (error) => message.error(extractErrorMessage(error, '取消失败')),
   });
 
   /** 复制候选人自助选时链接 */
@@ -174,110 +145,136 @@ export function InterviewsPage() {
   };
 
   return (
-    <>
+    <div className="interviews-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">面试管理</h1>
+          <p className="page-header-subtitle">安排面试时间，提交面评，管理可约时段</p>
+        </div>
+      </div>
+
+      {/* 我的可约时段 */}
       <MySlotsCard />
-      <Card
-        title={
-          <CardTitle icon={<ScheduleOutlined />}>
-            面试管理
-          </CardTitle>
-        }
-      >
-      <Table<Interview>
-        rowKey="id"
-        loading={interviewsQuery.isLoading}
-        dataSource={interviewsQuery.data}
-        pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 场面试` }}
-        columns={[
-          {
-            title: '候选人',
-            width: 120,
-            render: (_, r) =>
-              r.application ? (
-                <Button
-                  type="link"
-                  size="small"
-                  className="u-p0"
-                  onClick={() => setDetailId(r.application!.candidate.id)}
-                >
-                  {r.application.candidate.name}
-                </Button>
-              ) : (
-                '-'
+
+      {/* 面试列表 */}
+      <Card className="list-main-card u-mt-16">
+        <Table<Interview>
+          rowKey="id"
+          scroll={{ x: 1200 }}
+          loading={interviewsQuery.isLoading}
+          dataSource={interviewsQuery.data}
+          pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 场面试` }}
+          columns={[
+            {
+              title: '候选人',
+              width: 140,
+              render: (_, r) =>
+                r.application ? (
+                  <div className="interview-candidate-cell">
+                    <Button
+                      type="link"
+                      size="small"
+                      className="candidate-name-link"
+                      onClick={() => setDetailId(r.application!.candidate.id)}
+                    >
+                      {r.application.candidate.name}
+                    </Button>
+                  </div>
+                ) : (
+                  '-'
+                ),
+            },
+            {
+              title: '职位',
+              width: 180,
+              render: (_, r) => <span className="job-name-text">{r.application?.job.title ?? '-'}</span>,
+            },
+            {
+              title: '轮次',
+              dataIndex: 'round',
+              width: 90,
+              render: (v: number) => <span className="round-badge">第 {v} 轮</span>,
+            },
+            {
+              title: '时间',
+              dataIndex: 'scheduledAt',
+              width: 140,
+              render: (v: string | null) =>
+                v ? (
+                  <div className="interview-time">
+                    <span className="time-date">{dayjs(v).format('MM-DD')}</span>
+                    <span className="time-hour">{dayjs(v).format('HH:mm')}</span>
+                  </div>
+                ) : (
+                  <Tag color="warning" className="pending-tag">待安排</Tag>
+                ),
+            },
+            {
+              title: '面试官',
+              render: (_, r) => (
+                <span className="interviewers-text">
+                  {r.interviewers.map((i) => i.user.name).join('、') || '-'}
+                </span>
               ),
-          },
-          { title: '职位', width: 160, render: (_, r) => r.application?.job.title ?? '-' },
-          { title: '轮次', dataIndex: 'round', width: 70, render: (v: number) => `第 ${v} 轮` },
-          {
-            title: '时间',
-            dataIndex: 'scheduledAt',
-            width: 140,
-            render: (v: string | null) => (v ? dayjs(v).format('MM-DD HH:mm') : '待定'),
-          },
-          {
-            title: '面试官',
-            render: (_, r) => r.interviewers.map((i) => i.user.name).join('、') || '-',
-          },
-          {
-            title: '状态',
-            dataIndex: 'status',
-            width: 90,
-            render: (v: string) => <Tag>{INTERVIEW_STATUS_LABEL[v as InterviewStatus] ?? v}</Tag>,
-          },
-          {
-            title: '面评',
-            render: (_, r) =>
-              r.evaluations.length === 0 ? (
-                <span className="u-muted">未提交</span>
-              ) : (
-                <Space size={4} wrap>
-                  {r.evaluations.map((ev) =>
-                    ev.conclusion ? (
-                      <Tag key={ev.id} color={CONCLUSION_COLOR[ev.conclusion]}>
-                        {ev.interviewer.name}:{' '}
-                        {EVALUATION_CONCLUSION_LABEL[ev.conclusion as EvaluationConclusion]}
-                      </Tag>
-                    ) : null,
+            },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              width: 120,
+              render: (v: string) => (
+                <Tag className="interview-status-tag" color={
+                  v === 'COMPLETED' ? 'success' : v === 'SCHEDULED' ? 'processing' : 'default'
+                }>
+                  {INTERVIEW_STATUS_LABEL[v as InterviewStatus] ?? v}
+                </Tag>
+              ),
+            },
+            {
+              title: '面评结果',
+              render: (_, r) =>
+                r.evaluations.length === 0 ? (
+                  <span className="u-meta">未提交</span>
+                ) : (
+                  <div className="evaluation-tags">
+                    {r.evaluations.map((ev) =>
+                      ev.conclusion ? (
+                        <Tag key={ev.id} className="evaluation-tag" color={CONCLUSION_COLOR[ev.conclusion]}>
+                          {ev.interviewer.name}: {EVALUATION_CONCLUSION_LABEL[ev.conclusion as EvaluationConclusion]}
+                        </Tag>
+                      ) : null,
+                    )}
+                  </div>
+                ),
+            },
+            {
+              title: '操作',
+              width: 180,
+              fixed: 'right',
+              render: (_, r) => (
+                <Space size={4}>
+                  {hasPermission(PERMISSIONS.EVALUATION_SUBMIT) && (
+                    <Button type="link" size="small" onClick={() => setEvaluateFor(r.id)}>
+                      提交面评
+                    </Button>
+                  )}
+                  {!r.scheduledAt && hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<LinkOutlined />}
+                      onClick={() => void copySelfScheduleLink(r.id)}
+                    >
+                      选时链接
+                    </Button>
                   )}
                 </Space>
               ),
-          },
-          {
-            title: '操作',
-            width: 230,
-            render: (_, r) => (
-              <Space size={0}>
-                {hasPermission(PERMISSIONS.EVALUATION_SUBMIT) && (
-                  <Button type="link" size="small" onClick={() => setEvaluateFor(r.id)}>
-                    提交面评
-                  </Button>
-                )}
-                {!r.scheduledAt && hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && (
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<LinkOutlined />}
-                    onClick={() => void copySelfScheduleLink(r.id)}
-                  >
-                    选时链接
-                  </Button>
-                )}
-                {hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) && r.status === 'SCHEDULED' && (
-                  <Popconfirm
-                    title="确认取消这场面试？"
-                    description="将通知全部被指派面试官"
-                    onConfirm={() => cancelMutation.mutate(r.id)}
-                  >
-                    <Button type="link" size="small" danger>
-                      取消
-                    </Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+            },
+          ]}
+        />
+      </Card>
+
       <EvaluationModal
         interviewId={evaluateFor}
         dimensions={interviewsQuery.data
@@ -286,7 +283,6 @@ export function InterviewsPage() {
         onClose={() => setEvaluateFor(null)}
       />
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
-      </Card>
-    </>
+    </div>
   );
 }
