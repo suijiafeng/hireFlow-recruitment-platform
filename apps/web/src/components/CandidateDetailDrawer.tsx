@@ -87,37 +87,37 @@ const CONCLUSION_COLOR: Record<string, string> = {
 /** 可解释的匹配度报告（AI 输出必须给出打分依据） */
 function MatchReportView({ report }: { report: MatchReport }) {
   return (
-    <div style={{ maxWidth: 340 }}>
-      <Typography.Paragraph style={{ marginBottom: 8, fontSize: 13 }}>
+    <div className="match-report">
+      <Typography.Paragraph className="match-report-line">
         <strong>亮点：</strong>
         {report.highlights}
       </Typography.Paragraph>
-      <Typography.Paragraph style={{ marginBottom: 8, fontSize: 13 }}>
+      <Typography.Paragraph className="match-report-line">
         <strong>风险：</strong>
         {report.risks}
       </Typography.Paragraph>
       {report.hits.length > 0 && (
-        <div style={{ marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: '#666' }}>命中要求：</span>
+        <div className="u-mb-4">
+          <span className="u-meta u-secondary">命中要求：</span>
           {report.hits.map((h) => (
-            <Tag key={h} color="green" style={{ fontSize: 11 }}>
+            <Tag key={h} color="green" className="u-meta">
               {h}
             </Tag>
           ))}
         </div>
       )}
       {report.misses.length > 0 && (
-        <div style={{ marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: '#666' }}>缺失要求：</span>
+        <div className="u-mb-4">
+          <span className="u-meta u-secondary">缺失要求：</span>
           {report.misses.map((m) => (
-            <Tag key={m} color="orange" style={{ fontSize: 11 }}>
+            <Tag key={m} color="orange" className="u-meta">
               {m}
             </Tag>
           ))}
         </div>
       )}
       {report.aiMeta && (
-        <div style={{ fontSize: 11, color: '#999' }}>
+        <div className="u-meta u-muted">
           来源：{report.aiMeta.provider}
           {report.aiMeta.provider === 'mock' && '（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型）'}
         </div>
@@ -136,25 +136,17 @@ function InterviewBlock({
   canEvaluate: boolean;
 }) {
   return (
-    <div
-      style={{
-        border: '1px solid #f0f0f0',
-        borderRadius: 6,
-        padding: '8px 12px',
-        marginTop: 8,
-        background: '#fafafa',
-      }}
-    >
-      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+    <div className="iv-block">
+      <Space className="space-between">
         <Space size={8}>
-          <Tag color="blue">第 {interview.round} 轮</Tag>
-          <span style={{ fontSize: 12 }}>
+          <Tag>第 {interview.round} 轮</Tag>
+          <span className="u-meta">
             {interview.scheduledAt
               ? dayjs(interview.scheduledAt).format('MM-DD HH:mm')
               : '待定时间'}
           </span>
           <Tag>{INTERVIEW_STATUS_LABEL[interview.status as InterviewStatus] ?? interview.status}</Tag>
-          <span style={{ fontSize: 12, color: '#666' }}>
+          <span className="u-meta u-secondary">
             面试官：{interview.interviewers.map((i) => i.user.name).join('、') || '-'}
           </span>
         </Space>
@@ -165,9 +157,9 @@ function InterviewBlock({
         )}
       </Space>
       {interview.evaluations.map((ev) => (
-        <div key={ev.id} style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e8e8e8' }}>
+        <div key={ev.id} className="iv-eval">
           <Space size={8} wrap>
-            <Typography.Text strong style={{ fontSize: 12 }}>
+            <Typography.Text strong className="u-meta">
               {ev.interviewer.name}
             </Typography.Text>
             {ev.conclusion && (
@@ -176,13 +168,13 @@ function InterviewBlock({
               </Tag>
             )}
             {ev.scorecard?.map((s) => (
-              <span key={s.dimension} style={{ fontSize: 12 }}>
-                {s.dimension} <Rate disabled value={s.score} style={{ fontSize: 10 }} />
+              <span key={s.dimension} className="u-meta">
+                {s.dimension} <Rate disabled value={s.score} className="u-meta" />
               </span>
             ))}
           </Space>
           {ev.comments && (
-            <Typography.Paragraph style={{ fontSize: 12, margin: '4px 0 0', color: '#555' }}>
+            <Typography.Paragraph className="iv-eval-comment">
               {ev.comments}
             </Typography.Paragraph>
           )}
@@ -197,17 +189,17 @@ function ApplicationCard({
   onSchedule,
   onEvaluate,
   onScore,
-  scoring,
   onOffer,
   onReject,
+  scoring,
 }: {
   application: DetailApplication;
   onSchedule: (id: string, rounds: number) => void;
   onEvaluate: (id: string) => void;
   onScore: (id: string) => void;
-  scoring: boolean;
   onOffer: (id: string) => void;
   onReject: (id: string) => void;
+  scoring: boolean;
 }) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const scoreTag =
@@ -219,15 +211,15 @@ function ApplicationCard({
   return (
     <Card
       size="small"
-      style={{ marginBottom: 12 }}
+      className="u-mb-12"
       title={
         <Space>
           {application.job.title}
-          <Tag color="geekblue">{application.stage.name}</Tag>
+          <Tag>{application.stage.name}</Tag>
           <Tag>{APPLICATION_STATUS_LABEL[application.status as ApplicationStatus]}</Tag>
           {application.matchReport ? (
             <Popover title="AI 匹配报告" content={<MatchReportView report={application.matchReport} />}>
-              <span style={{ cursor: 'pointer' }}>{scoreTag}</span>
+              <span className="u-pointer">{scoreTag}</span>
             </Popover>
           ) : (
             scoreTag
@@ -269,7 +261,7 @@ function ApplicationCard({
       }
     >
       {application.interviews.length === 0 ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <Typography.Text type="secondary" className="u-meta">
           暂无面试安排
         </Typography.Text>
       ) : (
@@ -423,7 +415,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
           <Space>
             {detail.name}
             {detail.tags.map((t) => (
-              <Tag key={t} color="blue">
+              <Tag key={t}>
                 {t}
               </Tag>
             ))}
@@ -438,12 +430,12 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
       destroyOnHidden
     >
       {detailQuery.isLoading || !detail ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
+        <div className="loading-center loading-center--lg">
           <Spin />
         </div>
       ) : (
         <>
-          <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
+          <Descriptions size="small" column={2} className="u-mb-16">
             <Descriptions.Item label="邮箱">{detail.email ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="电话">{detail.phone ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="来源">{detail.source ?? '-'}</Descriptions.Item>
@@ -464,7 +456,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                       <Button
                         size="small"
                         icon={<PlusOutlined />}
-                        style={{ marginBottom: 12 }}
+                        className="u-mb-12"
                         onClick={() => setApplyOpen(true)}
                       >
                         加入职位流程
@@ -480,9 +472,9 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                           onSchedule={(id, rounds) => setScheduleFor({ id, rounds })}
                           onEvaluate={setEvaluateFor}
                           onScore={(id) => scoreMutation.mutate(id)}
-                          scoring={scoreMutation.isPending}
                           onOffer={setOfferFor}
                           onReject={setRejectFor}
+                          scoring={scoreMutation.isPending}
                         />
                       ))
                     )}
@@ -498,7 +490,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                       <Button
                         size="small"
                         icon={<FileTextOutlined />}
-                        style={{ marginBottom: 12 }}
+                        className="u-mb-12"
                         onClick={() => setResumeOpen(true)}
                       >
                         导入简历文本
@@ -508,8 +500,8 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                       <Empty description="暂无简历" />
                     ) : (
                       detail.resumes.map((resume) => (
-                        <Card size="small" key={resume.id} style={{ marginBottom: 8 }}>
-                          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                        <Card size="small" key={resume.id} className="u-mb-12">
+                          <Space className="space-between">
                             <Space>
                               <FileTextOutlined />
                               {resume.fileName ?? '未命名简历'}
@@ -556,27 +548,27 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                                   {resume.parseStatus === 'DONE' ? '重新解析' : 'AI 解析'}
                                 </Button>
                               )}
-                              <span style={{ fontSize: 12, color: '#999' }}>
+                              <span className="u-meta u-muted">
                                 {dayjs(resume.createdAt).format('YYYY-MM-DD')}
                               </span>
                             </Space>
                           </Space>
                           {resume.skills.length > 0 && (
-                            <div style={{ marginTop: 8 }}>
+                            <div className="u-mt-8">
                               {resume.skills.map((s) => (
                                 <Tag key={s}>{s}</Tag>
                               ))}
                             </div>
                           )}
                           {resume.parsed?.summary && (
-                            <Typography.Paragraph style={{ fontSize: 12, margin: '8px 0 0' }}>
+                            <Typography.Paragraph className="resume-summary">
                               {resume.parsed.summary}
                             </Typography.Paragraph>
                           )}
                           {resume.rawText && (
                             <Typography.Paragraph
                               type="secondary"
-                              style={{ fontSize: 12, margin: '8px 0 0' }}
+                              className="resume-summary"
                               ellipsis={{ rows: 3, expandable: true, symbol: '展开全文' }}
                             >
                               {resume.rawText}
@@ -600,16 +592,16 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                         children: (
                           <div>
                             <Space size={8}>
-                              <Typography.Text strong style={{ fontSize: 13 }}>
+                              <Typography.Text strong>
                                 {ACTION_LABEL[item.action] ?? item.action}
                               </Typography.Text>
-                              <span style={{ fontSize: 12, color: '#999' }}>
+                              <span className="u-meta u-muted">
                                 {item.actor?.name ?? item.actorName ?? '系统'} ·{' '}
                                 {dayjs(item.createdAt).format('MM-DD HH:mm')}
                               </span>
                             </Space>
                             {item.action === 'application.stage_changed' && item.payload && (
-                              <div style={{ fontSize: 12, color: '#666' }}>
+                              <div className="u-meta u-secondary">
                                 {String(item.payload.from)} → {String(item.payload.to)}
                               </div>
                             )}
@@ -625,6 +617,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
           <Modal
             title="导入简历"
             open={resumeOpen}
+            classNames={{ body: 'modal-body-scroll' }}
             onCancel={() => {
               setResumeOpen(false);
               setResumeFile(null);
@@ -645,13 +638,13 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                 return false; // 不自动上传，点确定统一提交
               }}
               onRemove={() => setResumeFile(null)}
-              style={{ marginBottom: 16 }}
+              className="u-mb-16"
             >
               <p className="ant-upload-drag-icon">
                 <InboxOutlined />
               </p>
               <p className="ant-upload-text">点击或拖入简历原件（PDF / 文本，≤10MB）</p>
-              <p className="ant-upload-hint" style={{ fontSize: 12 }}>
+              <p className="ant-upload-hint u-meta">
                 原件入对象存储留档；PDF 自动抽取文字并进入 AI 解析
               </p>
             </Upload.Dragger>
@@ -659,7 +652,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
               form={resumeForm}
               layout="vertical"
               onFinish={(values) => addResumeMutation.mutate(values)}
-              style={{ marginTop: 16 }}
+              className="u-mt-16"
             >
               <Form.Item
                 name="rawText"
@@ -698,6 +691,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
           <Modal
             title={`发起 Offer · ${detail.name}`}
             open={Boolean(offerFor)}
+            classNames={{ body: 'modal-body-scroll' }}
             onCancel={() => setOfferFor(null)}
             onOk={() => offerForm.submit()}
             confirmLoading={offerMutation.isPending}
@@ -718,12 +712,12 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
                   min={1000}
                   max={1000000}
                   step={1000}
-                  style={{ width: '100%' }}
+                  className="u-w-full"
                   placeholder="如 30000"
                 />
               </Form.Item>
               <Form.Item name="bonusMonths" label="年终奖（月数）">
-                <InputNumber min={0} max={12} style={{ width: '100%' }} />
+                <InputNumber min={0} max={12} className="u-w-full" />
               </Form.Item>
               <Form.Item name="grade" label="职级">
                 <Input placeholder="如 P6" maxLength={20} />
@@ -744,7 +738,7 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
             confirmLoading={rejectMutation.isPending}
             destroyOnHidden
           >
-            <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Paragraph type="secondary" className="u-meta">
               淘汰为终态、不可逆（误操作需「重新激活」生成新应聘记录）；原因码用于漏斗分析与人才库回流。
             </Typography.Paragraph>
             <Form form={rejectForm} layout="vertical" onFinish={(values) => rejectMutation.mutate(values)}>
