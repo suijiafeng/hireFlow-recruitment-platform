@@ -114,7 +114,7 @@ export function OnboardingPortalPage() {
         </Card>
       ) : (
         <>
-          <Card className="u-mb-12">
+          <Card className="u-mb-16">
             <Typography.Title level={5} className="u-mt-0">
               {view.candidateName}，欢迎加入！
             </Typography.Title>
@@ -127,11 +127,11 @@ export function OnboardingPortalPage() {
               status={view.status === 'COMPLETED' ? 'success' : 'active'}
             />
             {view.status === 'COMPLETED' && (
-              <Alert type="success" showIcon title="入职流程已全部完成，期待您的到来！" className="u-mt-12" />
+              <Alert type="success" showIcon title="入职流程已全部完成，期待您的到来！" className="u-mt-16" />
             )}
           </Card>
 
-          <Card size="small" title="需要您完成的事项" className="u-mb-12">
+          <Card size="small" title="需要您完成的事项" className="u-mb-16">
             {myItems.map((item) => (
               <div key={item.key} className="portal-check-row">
                 <CheckCircleFilled className={item.done ? 'check-ico check-ico--done' : 'check-ico'} />
@@ -156,7 +156,7 @@ export function OnboardingPortalPage() {
           </Card>
 
           {view.documents.length > 0 && (
-            <Card size="small" title="已提交的材料" className="u-mb-12">
+            <Card size="small" title="已提交的材料" className="u-mb-16">
               {view.documents.map((doc) => (
                 <Card
                   size="small"
@@ -166,7 +166,7 @@ export function OnboardingPortalPage() {
                   title={
                     <Space size={6}>
                       {doc.label}
-                      {doc.needsReview && <Tag color="gold">已收到，人工核对中</Tag>}
+                      {doc.needsReview && <Tag color="warning">已收到，人工核对中</Tag>}
                     </Space>
                   }
                 >
@@ -203,7 +203,7 @@ export function OnboardingPortalPage() {
                 <FileProtectOutlined /> 劳动合同
               </>
             }
-            className="u-mb-12"
+            className="u-mb-16"
           >
             {!view.contract ? (
               <Typography.Text type="secondary">
@@ -214,7 +214,7 @@ export function OnboardingPortalPage() {
                 <Descriptions size="small" column={1} className="u-mb-8">
                   <Descriptions.Item label="模板">{view.contract.templateName}</Descriptions.Item>
                   <Descriptions.Item label="状态">
-                    <Tag color={view.contract.signStatus === 'SIGNED' ? 'green' : 'blue'}>
+                    <Tag color={view.contract.signStatus === 'SIGNED' ? 'success' : 'processing'}>
                       {CONTRACT_SIGN_STATUS_LABEL[view.contract.signStatus as ContractSignStatus] ??
                         view.contract.signStatus}
                     </Tag>

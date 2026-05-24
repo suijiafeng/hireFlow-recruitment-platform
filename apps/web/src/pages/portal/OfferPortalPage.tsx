@@ -159,7 +159,7 @@ export function OfferPortalPage() {
               {view.salary?.note && <Descriptions.Item label="备注">{view.salary.note}</Descriptions.Item>}
               {view.expiresAt && (
                 <Descriptions.Item label="答复截止">
-                  <Tag color={dayjs(view.expiresAt).diff(dayjs(), 'day') <= 1 ? 'red' : 'default'}>
+                  <Tag color={dayjs(view.expiresAt).diff(dayjs(), 'day') <= 1 ? 'error' : 'default'}>
                     {dayjs(view.expiresAt).format('YYYY-MM-DD')} 前（还剩 {Math.max(dayjs(view.expiresAt).diff(dayjs(), 'day'), 0)} 天）
                   </Tag>
                   {view.extendedOnce && (
@@ -170,7 +170,7 @@ export function OfferPortalPage() {
                 </Descriptions.Item>
               )}
             </Descriptions>
-            <div className="u-flex-gap-12">
+            <div className="u-flex-gap-16">
               <Button
                 type="primary"
                 size="large"

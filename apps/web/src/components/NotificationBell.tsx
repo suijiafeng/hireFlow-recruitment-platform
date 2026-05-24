@@ -62,7 +62,7 @@ export function NotificationBell() {
                   <div className="u-w-full">
                     <div className="notif-row">
                       <Typography.Text strong={!item.read}>
-                        {!item.read && <Badge status="processing" className="u-mr-6" />}
+                        {!item.read && <Badge status="processing" className="u-mr-8" />}
                         {item.title}
                       </Typography.Text>
                       <span className="notif-time">
