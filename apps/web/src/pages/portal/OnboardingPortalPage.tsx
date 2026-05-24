@@ -89,18 +89,18 @@ export function OnboardingPortalPage() {
 
   return (
     <PortalShell>
-      <div style={{ color: '#fff', marginBottom: 16, textAlign: 'center' }}>
-        <Typography.Title level={4} style={{ color: '#fff', marginBottom: 4 }}>
+      <div className="portal-head">
+        <Typography.Title level={4}>
           {view?.company ?? 'ART 科技有限公司'}
         </Typography.Title>
-        <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>
+        <Typography.Text className="portal-head-sub">
           入职资料填报
         </Typography.Text>
       </div>
 
       {viewQuery.isLoading ? (
         <Card>
-          <div style={{ textAlign: 'center', padding: 48 }}>
+          <div className="loading-center loading-center--lg">
             <Spin />
           </div>
         </Card>
@@ -114,11 +114,11 @@ export function OnboardingPortalPage() {
         </Card>
       ) : (
         <>
-          <Card style={{ marginBottom: 12 }}>
-            <Typography.Title level={5} style={{ marginTop: 0 }}>
+          <Card className="u-mb-12">
+            <Typography.Title level={5} className="u-mt-0">
               {view.candidateName}，欢迎加入！
             </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 8 }}>
+            <Typography.Paragraph type="secondary" className="u-mb-8">
               您入职的职位：{view.jobTitle}（{view.department}）
             </Typography.Paragraph>
             <Progress
@@ -127,19 +127,19 @@ export function OnboardingPortalPage() {
               status={view.status === 'COMPLETED' ? 'success' : 'active'}
             />
             {view.status === 'COMPLETED' && (
-              <Alert type="success" showIcon title="入职流程已全部完成，期待您的到来！" style={{ marginTop: 12 }} />
+              <Alert type="success" showIcon title="入职流程已全部完成，期待您的到来！" className="u-mt-12" />
             )}
           </Card>
 
-          <Card size="small" title="需要您完成的事项" style={{ marginBottom: 12 }}>
+          <Card size="small" title="需要您完成的事项" className="u-mb-12">
             {myItems.map((item) => (
-              <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
-                <CheckCircleFilled style={{ color: item.done ? '#52c41a' : '#d9d9d9' }} />
-                <span style={{ flex: 1, color: item.done ? '#999' : undefined, textDecoration: item.done ? 'line-through' : 'none' }}>
+              <div key={item.key} className="portal-check-row">
+                <CheckCircleFilled className={item.done ? 'check-ico check-ico--done' : 'check-ico'} />
+                <span className={item.done ? 'portal-check-label portal-check-label--done' : 'portal-check-label'}>
                   {item.label}
                 </span>
                 {item.doneAt && (
-                  <span style={{ fontSize: 11, color: '#bbb' }}>{dayjs(item.doneAt).format('MM-DD HH:mm')}</span>
+                  <span className="u-meta u-faint">{dayjs(item.doneAt).format('MM-DD HH:mm')}</span>
                 )}
               </div>
             ))}
@@ -147,7 +147,7 @@ export function OnboardingPortalPage() {
               type="primary"
               block
               icon={<PlusOutlined />}
-              style={{ marginTop: 8 }}
+              className="u-mt-8"
               onClick={() => setDocOpen(true)}
               disabled={view.status === 'COMPLETED'}
             >
@@ -156,12 +156,12 @@ export function OnboardingPortalPage() {
           </Card>
 
           {view.documents.length > 0 && (
-            <Card size="small" title="已提交的材料" style={{ marginBottom: 12 }}>
+            <Card size="small" title="已提交的材料" className="u-mb-12">
               {view.documents.map((doc) => (
                 <Card
                   size="small"
                   key={doc.type}
-                  style={{ marginBottom: 8 }}
+                  className="u-mb-8"
                   type="inner"
                   title={
                     <Space size={6}>
@@ -171,18 +171,7 @@ export function OnboardingPortalPage() {
                   }
                 >
                   {doc.fileUrl && (
-                    <img
-                      src={doc.fileUrl}
-                      alt={`${doc.label}照片`}
-                      style={{
-                        maxWidth: 120,
-                        maxHeight: 80,
-                        borderRadius: 6,
-                        border: '1px solid #eee',
-                        marginBottom: 8,
-                        display: 'block',
-                      }}
-                    />
+                    <img src={doc.fileUrl} alt={`${doc.label}照片`} className="portal-doc-img" />
                   )}
                   {Object.keys(doc.fields).length > 0 ? (
                     <>
@@ -193,12 +182,12 @@ export function OnboardingPortalPage() {
                           </Descriptions.Item>
                         ))}
                       </Descriptions>
-                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                      <Typography.Text type="secondary" className="u-meta">
                         请核对识别结果，如有误请重新提交同类型材料覆盖
                       </Typography.Text>
                     </>
                   ) : (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" className="u-meta">
                       照片已成功上传，HR 核对后会为您勾选对应事项，无需重复提交
                     </Typography.Text>
                   )}
@@ -214,15 +203,15 @@ export function OnboardingPortalPage() {
                 <FileProtectOutlined /> 劳动合同
               </>
             }
-            style={{ marginBottom: 12 }}
+            className="u-mb-12"
           >
             {!view.contract ? (
-              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              <Typography.Text type="secondary">
                 合同尚未生成，请先完成材料提交，HR 确认后会发起签署。
               </Typography.Text>
             ) : (
               <>
-                <Descriptions size="small" column={1} style={{ marginBottom: 8 }}>
+                <Descriptions size="small" column={1} className="u-mb-8">
                   <Descriptions.Item label="模板">{view.contract.templateName}</Descriptions.Item>
                   <Descriptions.Item label="状态">
                     <Tag color={view.contract.signStatus === 'SIGNED' ? 'green' : 'blue'}>
@@ -237,7 +226,7 @@ export function OnboardingPortalPage() {
                   )}
                   {view.contract.evidenceNo && (
                     <Descriptions.Item label="存证号">
-                      <Typography.Text code style={{ fontSize: 12 }}>
+                      <Typography.Text code className="u-meta">
                         {view.contract.evidenceNo}
                       </Typography.Text>
                     </Descriptions.Item>
@@ -267,10 +256,10 @@ export function OnboardingPortalPage() {
 
           <Card size="small" title="公司同步为您准备中">
             {companyItems.map((item) => (
-              <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                <CheckCircleFilled style={{ color: item.done ? '#52c41a' : '#d9d9d9' }} />
-                <span style={{ flex: 1, fontSize: 13, color: '#666' }}>{item.label}</span>
-                <Tag style={{ fontSize: 11 }}>{OWNER_LABEL[item.owner]}</Tag>
+              <div key={item.key} className="portal-check-row">
+                <CheckCircleFilled className={item.done ? 'check-ico check-ico--done' : 'check-ico'} />
+                <span className="portal-company-item">{item.label}</span>
+                <Tag className="tag-meta">{OWNER_LABEL[item.owner]}</Tag>
               </div>
             ))}
           </Card>
@@ -323,7 +312,7 @@ export function OnboardingPortalPage() {
           </Modal>
         </>
       )}
-      <Typography.Paragraph type="secondary" style={{ textAlign: 'center', fontSize: 12, marginTop: 12 }}>
+      <Typography.Paragraph type="secondary" className="portal-foot">
         本页面为免登录安全链接，请勿转发给他人
       </Typography.Paragraph>
     </PortalShell>

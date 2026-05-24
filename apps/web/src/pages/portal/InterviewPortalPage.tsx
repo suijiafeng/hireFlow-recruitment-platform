@@ -30,7 +30,7 @@ export function InterviewPortalPage() {
       message.success('面试时间已确认，请准时参加！');
     },
     onError: (error) => {
-      // 并发抢占（409）：刷新剩余时段供重选（冲突给替代时段）
+      // 并发抢占（409）：刷新剩余时段供重选
       if ((error as AxiosError)?.response?.status === 409) {
         message.warning('该时段刚被约走，已为您刷新剩余时段');
         setSlotId(null);
@@ -45,17 +45,17 @@ export function InterviewPortalPage() {
 
   return (
     <PortalShell>
-      <div style={{ color: '#fff', marginBottom: 16, textAlign: 'center' }}>
-        <Typography.Title level={4} style={{ color: '#fff', marginBottom: 4 }}>
+      <div className="portal-head">
+        <Typography.Title level={4}>
           {view?.company ?? 'ART 科技有限公司'}
         </Typography.Title>
-        <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>
+        <Typography.Text className="portal-head-sub">
           面试时间确认
         </Typography.Text>
       </div>
       <Card>
         {viewQuery.isLoading ? (
-          <div style={{ textAlign: 'center', padding: 48 }}>
+          <div className="loading-center loading-center--lg">
             <Spin />
           </div>
         ) : viewQuery.isError || !view ? (
@@ -75,10 +75,10 @@ export function InterviewPortalPage() {
           />
         ) : (
           <>
-            <Typography.Title level={5} style={{ marginTop: 0 }}>
+            <Typography.Title level={5} className="u-mt-0">
               {view.candidateName}，您好！
             </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+            <Typography.Paragraph type="secondary">
               诚邀您参加「{view.jobTitle}」第 {view.round} 轮面试（约 {view.durationMins} 分钟）。
               请从以下时段中选择一个方便的时间：
             </Typography.Paragraph>
@@ -89,7 +89,7 @@ export function InterviewPortalPage() {
                 <Radio.Group
                   value={slotId}
                   onChange={(e) => setSlotId(e.target.value)}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}
+                  className="portal-slot-group"
                 >
                   {view.slots.map((s) => {
                     // 防御性补日期：结束时间跨天时只显 HH:mm 会渲染成误导性的「23:00 - 01:00」倒序时段
@@ -99,11 +99,11 @@ export function InterviewPortalPage() {
                       ? end.format('HH:mm')
                       : end.format('MM-DD HH:mm');
                     return (
-                      <Radio key={s.id} value={s.id} style={{ padding: '6px 0' }}>
+                      <Radio key={s.id} value={s.id} className="portal-slot">
                         <Space>
                           <CalendarOutlined />
                           {start.format('MM-DD（ddd）HH:mm')} - {endLabel}
-                          {start.diff(dayjs(), 'day') <= 1 && <Tag color="blue">最近</Tag>}
+                          {start.diff(dayjs(), 'day') <= 1 && <Tag>最近</Tag>}
                         </Space>
                       </Radio>
                     );
@@ -131,7 +131,7 @@ export function InterviewPortalPage() {
           </>
         )}
       </Card>
-      <Typography.Paragraph type="secondary" style={{ textAlign: 'center', fontSize: 12, marginTop: 12 }}>
+      <Typography.Paragraph type="secondary" className="portal-foot">
         本页面为免登录安全链接，请勿转发给他人
       </Typography.Paragraph>
     </PortalShell>

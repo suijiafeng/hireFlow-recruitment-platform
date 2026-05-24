@@ -10,28 +10,19 @@ import { extractErrorMessage } from '../../api/client';
 /** 免登录 H5 外壳：移动端单列卡片 */
 export function PortalShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(160deg, #0d1b3e 0%, #1f3f8f 45%, #eef1f6 45.1%)',
-        padding: '32px 16px',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: 480 }}>{children}</div>
+    <div className="portal-shell">
+      <div className="portal-body">{children}</div>
     </div>
   );
 }
 
 function PortalHeader({ company, subtitle }: { company: string; subtitle: string }) {
   return (
-    <div style={{ color: '#fff', marginBottom: 16, textAlign: 'center' }}>
-      <Typography.Title level={4} style={{ color: '#fff', marginBottom: 4 }}>
+    <div className="portal-head">
+      <Typography.Title level={4}>
         {company}
       </Typography.Title>
-      <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>{subtitle}</Typography.Text>
+      <Typography.Text className="portal-head-sub">{subtitle}</Typography.Text>
     </div>
   );
 }
@@ -106,7 +97,7 @@ export function OfferPortalPage() {
       <PortalHeader company={view?.company ?? 'ART 科技有限公司'} subtitle="录用通知（Offer Letter）" />
       <Card>
         {viewQuery.isLoading ? (
-          <div style={{ textAlign: 'center', padding: 48 }}>
+          <div className="loading-center loading-center--lg">
             <Spin />
           </div>
         ) : viewQuery.isError || !view ? (
@@ -149,13 +140,13 @@ export function OfferPortalPage() {
           />
         ) : (
           <>
-            <Typography.Title level={5} style={{ marginTop: 0 }}>
+            <Typography.Title level={5} className="u-mt-0">
               亲爱的 {view.candidateName}：
             </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+            <Typography.Paragraph type="secondary">
               我们诚挚地邀请您加入 {view.company}，以下是您的录用方案：
             </Typography.Paragraph>
-            <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
+            <Descriptions column={1} size="small" bordered className="u-mb-16">
               <Descriptions.Item label="职位">
                 {view.jobTitle}（{view.department}）
               </Descriptions.Item>
@@ -168,18 +159,18 @@ export function OfferPortalPage() {
               {view.salary?.note && <Descriptions.Item label="备注">{view.salary.note}</Descriptions.Item>}
               {view.expiresAt && (
                 <Descriptions.Item label="答复截止">
-                  <Tag color={dayjs(view.expiresAt).diff(dayjs(), 'day') <= 1 ? 'red' : 'blue'}>
+                  <Tag color={dayjs(view.expiresAt).diff(dayjs(), 'day') <= 1 ? 'red' : 'default'}>
                     {dayjs(view.expiresAt).format('YYYY-MM-DD')} 前（还剩 {Math.max(dayjs(view.expiresAt).diff(dayjs(), 'day'), 0)} 天）
                   </Tag>
                   {view.extendedOnce && (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" className="u-meta">
                       已续期
                     </Typography.Text>
                   )}
                 </Descriptions.Item>
               )}
             </Descriptions>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div className="u-flex-gap-12">
               <Button
                 type="primary"
                 size="large"
@@ -211,7 +202,7 @@ export function OfferPortalPage() {
           </>
         )}
       </Card>
-      <Typography.Paragraph type="secondary" style={{ textAlign: 'center', fontSize: 12, marginTop: 12 }}>
+      <Typography.Paragraph type="secondary" className="portal-foot">
         本页面为免登录安全链接，请勿转发给他人
       </Typography.Paragraph>
     </PortalShell>

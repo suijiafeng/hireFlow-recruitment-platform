@@ -6,7 +6,7 @@ import { portalApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { PortalShell } from './OfferPortalPage';
 
-/** AI 预筛：邀约前核实硬性条件三问；不符项仅提示 HR，绝不自动淘汰 */
+/** AI 预筛（V2 1.2）：邀约前核实硬性条件三问；不符项仅提示 HR，绝不自动淘汰 */
 export function PrescreenPortalPage() {
   const { token = '' } = useParams();
   const { message } = App.useApp();
@@ -44,17 +44,17 @@ export function PrescreenPortalPage() {
 
   return (
     <PortalShell>
-      <div style={{ color: '#fff', marginBottom: 16, textAlign: 'center' }}>
-        <Typography.Title level={4} style={{ color: '#fff', marginBottom: 4 }}>
+      <div className="portal-head">
+        <Typography.Title level={4}>
           {view?.company ?? 'ART 科技有限公司'}
         </Typography.Title>
-        <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>
+        <Typography.Text className="portal-head-sub">
           应聘意向确认
         </Typography.Text>
       </div>
       <Card>
         {viewQuery.isLoading ? (
-          <div style={{ textAlign: 'center', padding: 48 }}>
+          <div className="loading-center loading-center--lg">
             <Spin />
           </div>
         ) : viewQuery.isError || !view ? (
@@ -73,10 +73,10 @@ export function PrescreenPortalPage() {
           />
         ) : (
           <>
-            <Typography.Title level={5} style={{ marginTop: 0 }}>
+            <Typography.Title level={5} className="u-mt-0">
               {view.candidateName}，您好！
             </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+            <Typography.Paragraph type="secondary">
               感谢您应聘「{view.jobTitle}」。为高效安排后续面试，请确认以下信息（约 1 分钟）：
             </Typography.Paragraph>
             <Form form={form} layout="vertical" onFinish={(v) => submitMutation.mutate(v)}>
@@ -89,7 +89,7 @@ export function PrescreenPortalPage() {
                   min={1000}
                   max={1_000_000}
                   step={1000}
-                  style={{ width: '100%' }}
+                  className="u-w-full"
                   placeholder="如 30000"
                 />
               </Form.Item>
@@ -98,7 +98,7 @@ export function PrescreenPortalPage() {
                 label="最早可到岗日期"
                 rules={[{ required: true, message: '请选择日期' }]}
               >
-                <DatePicker style={{ width: '100%' }} minDate={dayjs()} />
+                <DatePicker className="u-w-full" minDate={dayjs()} />
               </Form.Item>
               <Form.Item
                 name="travelOk"
@@ -122,7 +122,7 @@ export function PrescreenPortalPage() {
           </>
         )}
       </Card>
-      <Typography.Paragraph type="secondary" style={{ textAlign: 'center', fontSize: 12, marginTop: 12 }}>
+      <Typography.Paragraph type="secondary" className="portal-foot">
         本页面为免登录安全链接，信息仅用于招聘流程
       </Typography.Paragraph>
     </PortalShell>
