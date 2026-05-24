@@ -74,22 +74,16 @@ export function EvaluationModal({ interviewId, dimensions, onClose }: Props) {
       title="提交面试评价"
       open={Boolean(interviewId)}
       onCancel={onClose}
+      classNames={{ body: 'modal-body-scroll' }}
       onOk={() => form.submit()}
       confirmLoading={submitMutation.isPending}
       destroyOnHidden
     >
-      <div
-        style={{
-          background: '#f6f8fa',
-          borderRadius: 8,
-          padding: '10px 12px',
-          marginBottom: 16,
-        }}
-      >
-        <Typography.Text strong style={{ fontSize: 13 }}>
+      <div className="copilot-box">
+        <Typography.Text strong>
           <RobotOutlined /> 面试 Copilot
         </Typography.Text>
-        <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+        <Typography.Paragraph type="secondary" className="copilot-desc">
           粘贴面试记录/要点，AI 生成评分卡草稿（最终以你修改确认的为准；三期接入实时转写）
         </Typography.Paragraph>
         <Input.TextArea
@@ -101,7 +95,7 @@ export function EvaluationModal({ interviewId, dimensions, onClose }: Props) {
         <Button
           size="small"
           icon={<RobotOutlined />}
-          style={{ marginTop: 8 }}
+          className="u-mt-8"
           loading={draftMutation.isPending}
           disabled={notes.trim().length < 10}
           onClick={() => draftMutation.mutate()}
