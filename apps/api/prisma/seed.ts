@@ -30,18 +30,31 @@ async function seedRbac() {
   }
 
   for (const [code, def] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+    const existed = await prisma.role.findUnique({ where: { code } });
     const role = await prisma.role.upsert({
       where: { code },
       create: { code, name: def.name, dataScope: def.dataScope },
       update: { name: def.name, dataScope: def.dataScope },
     });
-    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
-    const permissions = await prisma.permission.findMany({
-      where: { code: { in: [...def.permissions] } },
-    });
-    await prisma.rolePermission.createMany({
-      data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })),
-    });
+    // ADMIN 始终全量对齐（新增权限点自动补上，设置页也锁定不可编辑）；
+    // 其余角色仅首次创建时写入默认值，此后不再覆盖——设置页的自定义权限要在重启/重部署后存活
+    if (!existed && code !== RoleCode.ADMIN) {
+      const permissions = await prisma.permission.findMany({
+        where: { code: { in: [...def.permissions] } },
+      });
+      await prisma.rolePermission.createMany({
+        data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })),
+      });
+    }
+    if (code === RoleCode.ADMIN) {
+      await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+      const permissions = await prisma.permission.findMany({
+        where: { code: { in: [...def.permissions] } },
+      });
+      await prisma.rolePermission.createMany({
+        data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })),
+      });
+    }
   }
   console.log(`✔ RBAC：${PERMISSION_DEFS.length} 个权限点 / ${Object.keys(DEFAULT_ROLE_PERMISSIONS).length} 个角色`);
 }

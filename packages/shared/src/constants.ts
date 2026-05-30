@@ -49,6 +49,8 @@ export const ACTIVITY_ACTIONS = {
   WEBHOOK_FIRED: 'webhook.fired',
   APPLICATION_REJECTED: 'application.rejected',
   APPLICATION_STAGE_REVERTED: 'application.stage_reverted',
+  ROLE_PERMISSIONS_UPDATED: 'role.permissions_updated',
+  USER_ROLES_UPDATED: 'user.roles_updated',
 } as const;
 
 /** 入职三方待办清单默认模板，owner: HR / IT / NEW_HIRE */
