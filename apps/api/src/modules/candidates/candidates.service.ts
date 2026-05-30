@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -107,6 +108,19 @@ export class CandidatesService {
   }
 
   async create(dto: CreateCandidateDto, user: JwtUser) {
+    // 去重：手机号/邮箱强匹配 → 拦截并指向已有档案
+    const orConditions: Prisma.CandidateWhereInput[] = [];
+    if (dto.phone?.trim()) orConditions.push({ phone: dto.phone.trim() });
+    if (dto.email?.trim()) orConditions.push({ email: dto.email.trim() });
+    if (orConditions.length > 0) {
+      const duplicate = await this.prisma.candidate.findFirst({ where: { OR: orConditions } });
+      if (duplicate) {
+        const matched = duplicate.phone === dto.phone?.trim() ? '手机号' : '邮箱';
+        throw new ConflictException(
+          `${matched}与已有候选人「${duplicate.name}」重复，请在原档案上追加应聘记录（去重合并规则）`,
+        );
+      }
+    }
     const candidate = await this.prisma.candidate.create({
       data: { ...dto, tags: dto.tags ?? [] },
     });
