@@ -1,0 +1,76 @@
+# HireFlow Render Blueprint
+# 部署：Render 控制台 -> New -> Blueprint -> 选择本仓库，会自动读取此文件建服务。
+#
+# 覆盖范围：Postgres + API + Web 静态反代三件套。
+# 不含 Redis（代码里未真正使用）与 MinIO（Render 无对象存储产品，
+# 需要文件上传功能的话请改用 Cloudflare R2 / AWS S3 等 S3 兼容服务，
+# 只需在 hireflow-api 的环境变量里填 S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET，
+# 代码零改动——见 apps/api/src/modules/storage）。
+#
+# 首次部署前手动在 Render 环境变量里补上（标了 sync: false 的项，控制台里填，不进 git）：
+#   hireflow-api:  ANTHROPIC_API_KEY（留空则自动降级 mock 引擎，全链路仍可用）
+#                  S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / S3_BUCKET（不填则文件上传功能不可用，其余功能不受影响）
+#
+# hireflow-web 反代 /api 到 hireflow-api 依赖 Render 同区域私有网络（同 region 的
+# Web Service 之间可用 `http://<service-name>:<port>` 互通）。若你的账号/区域没有私网，
+# 把 API_ORIGIN 改成 hireflow-api 的公网域名（如 hireflow-api.onrender.com，走 443/TLS，
+# 并把 nginx.conf.template 里的 proxy_pass 协议改成 https）。
+
+databases:
+  - name: hireflow-postgres
+    databaseName: arthr
+    user: arthr
+    plan: starter
+    region: singapore
+
+services:
+  - type: web
+    name: hireflow-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hireflow-postgres
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: AI_PROVIDER
+        value: auto
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-4-8
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_BASE_URL
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_PUBLIC_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+
+  - type: web
+    name: hireflow-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    envVars:
+      - key: API_ORIGIN
+        value: hireflow-api:3000

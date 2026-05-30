@@ -36,6 +36,8 @@ ENTRYPOINT ["api-entrypoint.sh"]
 
 # ---- Web 运行时：nginx 托管静态产物并反代 /api ----
 FROM nginx:1.27-alpine AS web
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+# 默认值对齐 docker-compose 的服务名（api:3000）；Render 等平台按需覆盖
+ENV API_ORIGIN=api:3000
+COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
