@@ -85,8 +85,8 @@ export function NotificationBell() {
         </div>
       }
     >
-      <Badge count={query.data?.unread ?? 0} size="small">
-        <Button type="text" icon={<BellOutlined className="bell-icon" />} />
+      <Badge count={query.data?.unread ?? 0} size="small" offset={[-10, 10]}>
+        <BellOutlined className="bell-icon" />
       </Badge>
     </Popover>
   );

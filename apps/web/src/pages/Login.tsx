@@ -1,4 +1,4 @@
-import { LockOutlined, MailOutlined, RocketOutlined, ThunderboltOutlined, TeamOutlined, BarChartOutlined } from '@ant-design/icons';
+import { BarChartOutlined, LockOutlined, MailOutlined, RocketOutlined, TeamOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
 import { App, Button, Card, Form, Input } from 'antd';
 import { Navigate, useNavigate } from 'react-router';
@@ -25,19 +25,19 @@ export function LoginPage() {
 
   return (
     <div className="login-bg">
-      {/* 左侧品牌展示区 */}
-      <div className="login-brand-side">
-        <div className="login-brand-content">
+      {/* 居中双栏卡：左品牌面板 + 右表单面板 */}
+      <div className="login-shell">
+        <div className="login-brand-side">
           <div className="login-brand-logo">
             <div className="login-brand-logo-mark">
               <RocketOutlined />
             </div>
             <div className="login-brand-logo-text">
-              <h1>HireFlow</h1>
+              <h1>ART 智能招聘</h1>
               <p>AI Recruiting Platform</p>
             </div>
           </div>
-          
+
           <div className="login-brand-hero">
             <h2>
               让招聘更智能<br />
@@ -79,14 +79,7 @@ export function LoginPage() {
             </div>
           </div>
         </div>
-        
-        <div className="login-brand-footer">
-          © 2024 HireFlow. AI-Powered Recruitment Platform
-        </div>
-      </div>
 
-      {/* 右侧登录表单区 */}
-      <div className="login-form-side">
         <Card className="login-card" variant="borderless">
           <div className="login-welcome">
             <div className="login-logo">
@@ -127,12 +120,15 @@ export function LoginPage() {
               💡 开发环境测试账号
             </div>
             <div className="login-tip-content">
-              admin / hr / manager / interviewer @arthr.local<br />
+              admin / hr / manager / interviewer
+              <br />
+              @arthr.local<br />
               统一密码：Admin@123456
             </div>
           </div>
         </Card>
       </div>
+      <div className="login-footer">© 2026 ART 智能招聘 · AI Recruiting Platform</div>
     </div>
   );
 }

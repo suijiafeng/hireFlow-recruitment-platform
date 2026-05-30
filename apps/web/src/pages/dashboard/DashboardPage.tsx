@@ -83,7 +83,7 @@ function TodoCenter() {
           {visible.map((meta) => {
             const count = data?.[meta.key] ?? 0;
             return (
-              <Col span={6} key={meta.key}>
+              <Col xs={12} lg={8} xl={6} key={meta.key}>
                 <div
                   className={count > 0 ? 'todo-tile todo-tile--hot hover-lift' : 'todo-tile hover-lift'}
                   onClick={() => navigate(meta.link)}
@@ -189,7 +189,7 @@ export function DashboardPage() {
       <TrendCard />
 
       <Row gutter={[16, 16]} className="u-mt-16">
-        <Col span={14}>
+        <Col xs={24} xl={14}>
           <Card className="funnel-card" classNames={{ body: 'card-body-chart' }}>
             <div className="section-header">
               <div className="section-title">
@@ -229,7 +229,7 @@ export function DashboardPage() {
             )}
           </Card>
         </Col>
-        <Col span={10}>
+        <Col xs={24} xl={10}>
           <Card className="ai-insight-card" classNames={{ body: 'card-body-chart' }}>
             <div className="section-header">
               <div className="section-title">

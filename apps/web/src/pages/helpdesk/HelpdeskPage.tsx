@@ -182,7 +182,7 @@ export function HelpdeskPage() {
       </div>
 
       <Row gutter={16}>
-        <Col span={17}>
+        <Col xs={24} lg={16} xl={17}>
           <Card className="chat-card" classNames={{ body: 'chat-card-body' }}>
             <div className="section-header">
               <div className="section-title">
@@ -281,7 +281,7 @@ export function HelpdeskPage() {
             </div>
           </Card>
         </Col>
-        <Col span={7}>
+        <Col xs={24} lg={8} xl={7}>
           <Card className="faq-card u-mb-16" size="small">
             <div className="section-header">
               <div className="section-title">

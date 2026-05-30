@@ -50,7 +50,7 @@ export function InsightsPage() {
 
       {/* 第一排：规模总览 */}
       <Row gutter={[16, 16]}>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             title="招聘中职位"
             value={overview?.openJobs ?? '-'}
@@ -59,7 +59,7 @@ export function InsightsPage() {
             extra={overview?.pausedJobs ? `另有 ${overview.pausedJobs} 个职位满编暂停` : undefined}
           />
         </Col>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             title="候选人总数"
             value={overview?.candidates ?? '-'}
@@ -67,7 +67,7 @@ export function InsightsPage() {
             loading={overviewQuery.isLoading}
           />
         </Col>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             title="待进行面试"
             value={overview?.upcomingInterviews ?? '-'}
@@ -75,7 +75,7 @@ export function InsightsPage() {
             loading={overviewQuery.isLoading}
           />
         </Col>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             title="已入职"
             value={overview?.hired ?? '-'}
@@ -87,7 +87,7 @@ export function InsightsPage() {
 
       {/* 第二排：效率与质量指标 */}
       <Row gutter={[16, 16]} className="u-mt-16">
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             icon={<FieldTimeOutlined />}
             loading={loading}
@@ -100,7 +100,7 @@ export function InsightsPage() {
             suffix={data?.tth.hiredCount ? `· ${data.tth.hiredCount} 人样本` : undefined}
           />
         </Col>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             icon={<LikeOutlined />}
             loading={loading}
@@ -109,7 +109,7 @@ export function InsightsPage() {
             suffix={data?.offer.sent ? `% · ${data.offer.accepted}/${data.offer.sent}` : undefined}
           />
         </Col>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             icon={<WarningOutlined />}
             loading={loading}
@@ -118,7 +118,7 @@ export function InsightsPage() {
             suffix={`% · ${data?.offer.renegeCount ?? 0} 人`}
           />
         </Col>
-        <Col span={6}>
+        <Col xs={12} lg={8} xl={6}>
           <StatCard
             icon={<CheckCircleOutlined />}
             loading={loading}
@@ -130,7 +130,7 @@ export function InsightsPage() {
       </Row>
 
       <Row gutter={[16, 16]} className="u-mt-16">
-        <Col span={12}>
+        <Col xs={24} xl={12}>
           <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
             <div className="section-header">
               <div className="section-title">
@@ -168,7 +168,7 @@ export function InsightsPage() {
             />
           </Card>
         </Col>
-        <Col span={12}>
+        <Col xs={24} xl={12}>
           <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
             <div className="section-header">
               <div className="section-title">
@@ -216,7 +216,7 @@ export function InsightsPage() {
       </Row>
 
       <Row gutter={[16, 16]} className="u-mt-16">
-        <Col span={12}>
+        <Col xs={24} xl={12}>
           <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
             <div className="section-header">
               <Tooltip title="基于 ActivityLog 阶段变更回放计算（精确口径，非快照）">
@@ -248,7 +248,7 @@ export function InsightsPage() {
             />
           </Card>
         </Col>
-        <Col span={12}>
+        <Col xs={24} xl={12}>
           <Card className="chart-card" size="small" loading={loading} classNames={{ body: 'card-body-chart' }}>
             <div className="section-header">
               <div className="section-title">

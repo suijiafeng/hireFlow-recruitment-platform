@@ -135,7 +135,7 @@ export function MainLayout() {
   return (
     // 外层锁定视口高度：左侧菜单栏固定，右侧主内容区独立滚动
     <Layout className="layout-root">
-      <Sider width={220}>
+      <Sider width={220} breakpoint="xl" collapsedWidth={64}>
         <div className="sider-inner">
           <div className="sider-logo">
             <div className="sider-logo-mark">
@@ -160,7 +160,7 @@ export function MainLayout() {
       <Layout className="layout-main">
         <Header className="layout-header">
           <Breadcrumb items={breadcrumbItems} />
-          <Space size={12}>
+          <Space>
             <NotificationBell />
             <Dropdown
               menu={{
@@ -177,7 +177,7 @@ export function MainLayout() {
                 ],
               }}
             >
-              <Space size={8} className="header-user hover-lift">
+              <Space size={8} className="header-user">
                 <Avatar size="small" className="header-avatar" icon={<UserOutlined />} />
                 <Typography.Text>{user?.name}</Typography.Text>
                 {primaryRole && ROLE_LABEL[primaryRole] && (
