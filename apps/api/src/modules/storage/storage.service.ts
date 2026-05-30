@@ -19,20 +19,27 @@ import { randomBytes } from 'node:crypto';
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private readonly client: S3Client;
+  /** 预签名专用 client：容器化部署时 API 内网访问与浏览器公网访问的端点不同（SigV4 签 Host，必须按浏览器可达地址签名） */
+  private readonly presignClient: S3Client;
   private readonly bucket: string;
   private available = false;
 
   constructor(config: ConfigService) {
     this.bucket = config.get<string>('S3_BUCKET') ?? 'arthr';
-    this.client = new S3Client({
-      endpoint: config.get<string>('S3_ENDPOINT') ?? 'http://localhost:9000',
+    const endpoint = config.get<string>('S3_ENDPOINT') ?? 'http://localhost:9000';
+    const clientConfig = {
       region: config.get<string>('S3_REGION') ?? 'us-east-1',
       forcePathStyle: true, // MinIO 必需：路径风格寻址
       credentials: {
         accessKeyId: config.get<string>('S3_ACCESS_KEY') ?? 'arthr',
         secretAccessKey: config.get<string>('S3_SECRET_KEY') ?? 'arthr_dev_password',
       },
-    });
+    };
+    this.client = new S3Client({ ...clientConfig, endpoint });
+    // 预签名是离线计算，不要求 API 能访问该端点；未配置时与内网端点一致（本地开发零变化）
+    const publicEndpoint = config.get<string>('S3_PUBLIC_ENDPOINT') ?? endpoint;
+    this.presignClient =
+      publicEndpoint === endpoint ? this.client : new S3Client({ ...clientConfig, endpoint: publicEndpoint });
   }
 
   async onModuleInit() {
@@ -91,7 +98,7 @@ export class StorageService implements OnModuleInit {
         ? { ResponseContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}` }
         : {}),
     });
-    return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+    return getSignedUrl(this.presignClient, command, { expiresIn: expiresInSeconds });
   }
 
   /** 安全版：key 为空或存储不可用时返回 null，供列表批量拼 URL 用 */

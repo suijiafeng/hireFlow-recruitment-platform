@@ -27,7 +27,7 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('HireFlow API')
-    .setDescription('智能招聘 AI 辅助平台后端接口')
+    .setDescription('AI-Powered Recruitment Platform Backend API')
     .setVersion('0.1.0')
     .addBearerAuth()
     .build();
@@ -36,7 +36,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  console.log(`HireFlow API 已启动: http://localhost:${port}/api  文档: http://localhost:${port}/api/docs`);
+  console.log(`HireFlow API started: http://localhost:${port}/api | Docs: http://localhost:${port}/api/docs`);
 }
 
 void bootstrap();
