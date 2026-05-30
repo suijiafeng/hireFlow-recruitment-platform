@@ -19,6 +19,7 @@ import { CandidatesService } from './candidates.service';
 import { AddResumeDto } from './dto/add-resume.dto';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
+import { UpdateCandidateDto } from './dto/update-candidate.dto';
 
 @ApiTags('candidates')
 @ApiBearerAuth()
@@ -49,8 +50,8 @@ export class CandidatesController {
 
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.CANDIDATE_UPDATE)
-  @ApiOperation({ summary: '更新候选人' })
-  update(@Param('id') id: string, @Body() dto: CreateCandidateDto, @CurrentUser() user: JwtUser) {
+  @ApiOperation({ summary: '更新候选人（局部字段）' })
+  update(@Param('id') id: string, @Body() dto: UpdateCandidateDto, @CurrentUser() user: JwtUser) {
     return this.candidatesService.update(id, dto, user);
   }
 
