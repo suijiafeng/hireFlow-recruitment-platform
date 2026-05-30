@@ -2,8 +2,9 @@
 # Web 入口：静态站点 + /api 反代。API_ORIGIN 由容器环境变量注入（nginx 官方镜像的
 # /etc/nginx/templates 会在启动时对本文件做 envsubst，只替换实际存在的环境变量，
 # 不会误伤 $host/$uri 等 nginx 内置变量）。
-# docker-compose demo：API_ORIGIN=api:3000（默认值见下方 Dockerfile ENV）
-# Render：API_ORIGIN=<api 服务名>:<内部端口>（同区域私有网络可达）
+# docker-compose demo：API_ORIGIN=api:3000（默认值见 Dockerfile ENV）
+# Render：API_ORIGIN=<api 服务 Internal Address>（如 hireflow-api:3000，以控制台
+# api 服务页 Connect 面板展示的为准；手动创建的服务不会读 render.yaml，须自行配置）
 server {
   listen 80;
   server_name _;
@@ -16,9 +17,18 @@ server {
   gzip on;
   gzip_types text/css application/javascript application/json image/svg+xml;
 
-  # 后端接口：保留 /api 前缀转发（api 服务已 setGlobalPrefix('api')）
+  # 上游必须请求期解析：写死主机名时 nginx 启动即解析一次，api 未就绪会直接退出
+  # （host not found in upstream），且 Render 私网 IP 每次部署都变，旧 IP 会 502。
+  # resolver 列表由镜像入口 15-local-resolvers.envsh 从 /etc/resolv.conf 生成，
+  # 需 NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1（见 Dockerfile web stage）。
+  resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+
+  # 后端接口：保留 /api 前缀转发（api 服务已 setGlobalPrefix('api')）。
+  # proxy_pass 带变量且不带 URI 时原样透传请求 URI，与写死主机名行为一致；
+  # api 不可达仅 /api 返回 502，静态站点不受影响。
   location /api/ {
-    proxy_pass http://${API_ORIGIN};
+    set $api_upstream http://${API_ORIGIN};
+    proxy_pass $api_upstream;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

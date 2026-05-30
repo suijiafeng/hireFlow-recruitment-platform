@@ -72,5 +72,8 @@ services:
     plan: starter
     region: singapore
     envVars:
+      # 值 = api 服务的 Internal Address（api 服务页 Connect 面板可查）。
+      # 手动创建（非 Blueprint）的服务不会读本文件，必须在控制台 Environment
+      # 里自行添加，否则落到镜像默认值 api:3000，Render 上解析不到。
       - key: API_ORIGIN
         value: hireflow-api:3000

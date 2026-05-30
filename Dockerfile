@@ -38,6 +38,9 @@ ENTRYPOINT ["api-entrypoint.sh"]
 FROM nginx:1.27-alpine AS web
 # 默认值对齐 docker-compose 的服务名（api:3000）；Render 等平台按需覆盖
 ENV API_ORIGIN=api:3000
+# 令入口脚本把 /etc/resolv.conf 的 nameserver 导出为 NGINX_LOCAL_RESOLVERS，
+# 供模板 resolver 指令做请求期 DNS 解析（api 未就绪/换 IP 时 web 仍能启动）
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
