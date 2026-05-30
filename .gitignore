@@ -14,5 +14,4 @@ apps/api/src/generated/
 .DS_Store
 coverage/
 .vite/
-.replay
 .claude
