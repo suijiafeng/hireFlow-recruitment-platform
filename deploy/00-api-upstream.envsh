@@ -1,0 +1,11 @@
+#!/bin/sh
+# 将 API_ORIGIN 归一化为带协议的 API_UPSTREAM（供 nginx 模板 envsubst）：
+#   api:3000                     -> http://api:3000          docker-compose / Render 付费档私网
+#   https://xxx.onrender.com     -> https://xxx.onrender.com Render 免费档走公网反代——
+#                                   免费实例休眠后只有公网流量能唤醒，私网地址会一直 502
+# 由 nginx 官方镜像入口在 envsubst（20-envsubst-on-templates.sh）之前 source。
+case "${API_ORIGIN:-}" in
+  http://*|https://*) export API_UPSTREAM="${API_ORIGIN}" ;;
+  "") export API_UPSTREAM="http://api:3000" ;;
+  *) export API_UPSTREAM="http://${API_ORIGIN}" ;;
+esac

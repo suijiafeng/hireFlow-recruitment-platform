@@ -3,8 +3,11 @@
 # /etc/nginx/templates 会在启动时对本文件做 envsubst，只替换实际存在的环境变量，
 # 不会误伤 $host/$uri 等 nginx 内置变量）。
 # docker-compose demo：API_ORIGIN=api:3000（默认值见 Dockerfile ENV）
-# Render：API_ORIGIN=<api 服务 Internal Address>（如 hireflow-api:3000，以控制台
-# api 服务页 Connect 面板展示的为准；手动创建的服务不会读 render.yaml，须自行配置）
+# Render 付费档：API_ORIGIN=<api 服务 Internal Address>（控制台 Connect 面板可查，
+#   注意内部主机名可能带随机后缀，不能想当然按服务名填）
+# Render 免费档：API_ORIGIN=<api 服务公网 URL>（如 https://xxx.onrender.com——免费实例
+#   休眠后只有公网流量能唤醒，走私网会一直 502）
+# API_ORIGIN -> API_UPSTREAM 的协议归一化见 00-api-upstream.envsh
 server {
   listen 80;
   server_name _;
@@ -27,9 +30,11 @@ server {
   # proxy_pass 带变量且不带 URI 时原样透传请求 URI，与写死主机名行为一致；
   # api 不可达仅 /api 返回 502，静态站点不受影响。
   location /api/ {
-    set $api_upstream http://${API_ORIGIN};
+    set $api_upstream ${API_UPSTREAM};
     proxy_pass $api_upstream;
-    proxy_set_header Host $host;
+    # 不覆盖 Host：默认 $proxy_host 对私网无所谓，对 onrender.com 公网上游是必需
+    # （Render 边缘按 Host 路由）；https 上游同理需要 SNI，对 http 上游无副作用
+    proxy_ssl_server_name on;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;

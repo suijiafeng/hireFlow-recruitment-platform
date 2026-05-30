@@ -41,6 +41,9 @@ ENV API_ORIGIN=api:3000
 # 令入口脚本把 /etc/resolv.conf 的 nameserver 导出为 NGINX_LOCAL_RESOLVERS，
 # 供模板 resolver 指令做请求期 DNS 解析（api 未就绪/换 IP 时 web 仍能启动）
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+# API_ORIGIN -> API_UPSTREAM 协议归一化（envsh 须有执行位才会被入口 source）
+COPY deploy/00-api-upstream.envsh /docker-entrypoint.d/00-api-upstream.envsh
+RUN chmod +x /docker-entrypoint.d/00-api-upstream.envsh
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80

@@ -72,8 +72,11 @@ services:
     plan: starter
     region: singapore
     envVars:
-      # 值 = api 服务的 Internal Address（api 服务页 Connect 面板可查）。
-      # 手动创建（非 Blueprint）的服务不会读本文件，必须在控制台 Environment
-      # 里自行添加，否则落到镜像默认值 api:3000，Render 上解析不到。
+      # 反代上游，两种填法（协议归一化见 deploy/00-api-upstream.envsh）：
+      #   付费档（不休眠）：api 服务的 Internal Address，如 hireflow-api-xxxx:3000
+      #     ——以控制台 Connect 面板为准，主机名可能带随机后缀，不能想当然填服务名
+      #   免费档：api 服务的公网 URL，如 https://hireflow-api-xxxx.onrender.com
+      #     ——免费实例休眠后只有公网流量能唤醒，填私网地址会一直 502
+      # 手动创建（非 Blueprint）的服务不会读本文件，必须在控制台 Environment 里配置。
       - key: API_ORIGIN
-        value: hireflow-api:3000
+        sync: false
