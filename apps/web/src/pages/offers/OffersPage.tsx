@@ -1,4 +1,4 @@
-import { AuditOutlined, FieldTimeOutlined, InfoCircleOutlined, RobotOutlined } from '@ant-design/icons';
+import { FieldTimeOutlined, InfoCircleOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   OFFER_APPROVAL_STATUS_LABEL,
@@ -33,16 +33,15 @@ import { offersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { Offer, RetentionHint } from '../../api/types';
-import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: 'default',
-  PENDING: 'gold',
-  APPROVED: 'blue',
-  REJECTED: 'red',
-  SENT: 'cyan',
-  EXPIRED: 'volcano',
+  PENDING: 'warning',
+  APPROVED: 'success',
+  REJECTED: 'error',
+  SENT: 'processing',
+  EXPIRED: 'error',
 };
 
 /** AI 留存预测气泡（辅助参考） */
@@ -67,7 +66,7 @@ function RetentionPopover({ offerId }: { offerId: string }) {
             <Typography.Text strong className="u-num-20">
               {Math.round(hint.probability * 100)}%
             </Typography.Text>
-            <Typography.Text type="secondary" className="u-ml-6 u-meta">
+            <Typography.Text type="secondary" className="u-ml-8 u-meta">
               预计通过试用期并留存
             </Typography.Text>
             <ul className="retention-list">
@@ -308,182 +307,222 @@ export function OffersPage() {
   const canViewSalary = hasPermission(PERMISSIONS.SALARY_VIEW);
 
   return (
-    <Card
-      title={
-        <CardTitle icon={<AuditOutlined />}>
-          录用管理
-        </CardTitle>
-      }
-    >
-      {offersQuery.isError ? (
-        <QueryErrorResult error={offersQuery.error} />
-      ) : (
-        <>
-      <Typography.Paragraph type="secondary" className="u-meta u-mb-12">
-        流程：HR 发起 → 用人经理审批（驳回带意见可修改重提）→ HR 发送（候选人免登录链接，5 个工作日答复期，可续期一次）→
-        候选人在线答复或 HR 代录；接受后自动生成入职单并移卡「待入职」
-      </Typography.Paragraph>
-      <Table<Offer>
-        rowKey="id"
-        loading={offersQuery.isLoading}
-        dataSource={offersQuery.data}
-        pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 份 Offer` }}
-        columns={[
-          { title: '候选人', width: 110, render: (_, r) => r.application.candidate.name },
-          {
-            title: '职位',
-            render: (_, r) => `${r.application.job.title}（${r.application.job.department.name}）`,
-          },
-          { title: '职级', dataIndex: 'grade', width: 80, render: (v?: string) => v ?? '-' },
-          {
-            title: '薪资',
-            width: 150,
-            render: (_, r) =>
-              !canViewSalary ? (
-                <Typography.Text type="secondary" className="u-meta">
-                  无权查看
-                </Typography.Text>
-              ) : r.salary ? (
-                <span className="u-tabular">
-                  ¥{r.salary.base.toLocaleString()} × {12 + (r.salary.bonusMonths ?? 0)} 薪
-                </span>
-              ) : (
-                '-'
-              ),
-          },
-          {
-            title: '审批状态',
-            dataIndex: 'approvalStatus',
-            width: 110,
-            render: (v: string, r) => (
-              <Space size={4}>
-                <Tag color={STATUS_COLOR[v]}>{OFFER_APPROVAL_STATUS_LABEL[v as OfferApprovalStatus] ?? v}</Tag>
-                {v === 'REJECTED' && r.approvalNote && (
-                  <Tooltip title={`驳回意见：${r.approvalNote}`}>
-                    <InfoCircleOutlined className="ico-warning" />
-                  </Tooltip>
-                )}
-              </Space>
-            ),
-          },
-          {
-            title: '候选人答复',
-            width: 150,
-            render: (_, r) => {
-              if (r.decision) {
-                return (
+    <div className="offers-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">录用管理</h1>
+          <p className="page-header-subtitle">发起 Offer、审批流转、发送候选人、跟踪答复状态</p>
+        </div>
+      </div>
+
+      {/* 流程说明 */}
+      <div className="process-flow-card">
+        <div className="process-flow-title">
+          <InfoCircleOutlined className="process-flow-icon" />
+          <span>Offer 流程说明</span>
+        </div>
+        <div className="process-flow-steps">
+          <span className="flow-step">HR 发起</span>
+          <span className="flow-arrow">→</span>
+          <span className="flow-step">审批（可驳回重提）</span>
+          <span className="flow-arrow">→</span>
+          <span className="flow-step">发送候选人</span>
+          <span className="flow-arrow">→</span>
+          <span className="flow-step">在线答复</span>
+          <span className="flow-arrow">→</span>
+          <span className="flow-step flow-step--final">自动生成入职单</span>
+        </div>
+      </div>
+
+      {/* Offer 列表 */}
+      <Card className="list-main-card u-mt-16">
+        {offersQuery.isError ? (
+          <QueryErrorResult error={offersQuery.error} />
+        ) : (
+          <Table<Offer>
+            rowKey="id"
+            scroll={{ x: 1300 }}
+            loading={offersQuery.isLoading}
+            dataSource={offersQuery.data}
+            pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 份 Offer` }}
+            columns={[
+              {
+                title: '候选人',
+                width: 140,
+                render: (_, r) => (
+                  <div className="offer-candidate-cell">
+                    <span className="candidate-name-text">{r.application.candidate.name}</span>
+                  </div>
+                ),
+              },
+              {
+                title: '职位',
+                render: (_, r) => (
+                  <div className="offer-job-cell">
+                    <div className="job-title-text">{r.application.job.title}</div>
+                    <div className="job-dept-text">{r.application.job.department.name}</div>
+                  </div>
+                ),
+              },
+              {
+                title: '职级',
+                dataIndex: 'grade',
+                width: 90,
+                render: (v?: string) => v ? <span className="grade-badge">{v}</span> : '-',
+              },
+              {
+                title: '薪资',
+                width: 180,
+                render: (_, r) =>
+                  !canViewSalary ? (
+                    <Typography.Text type="secondary" className="u-meta">
+                      无权查看
+                    </Typography.Text>
+                  ) : r.salary ? (
+                    <span className="salary-text">
+                      ¥{r.salary.base.toLocaleString()} <span className="salary-months">× {12 + (r.salary.bonusMonths ?? 0)} 薪</span>
+                    </span>
+                  ) : (
+                    '-'
+                  ),
+              },
+              {
+                title: '审批状态',
+                dataIndex: 'approvalStatus',
+                width: 130,
+                render: (v: string, r) => (
                   <Space size={4}>
-                    <Tag color={r.decision === 'ACCEPTED' ? 'green' : 'red'}>
-                      {OFFER_DECISION_LABEL[r.decision as OfferDecision] ?? r.decision}
+                    <Tag className="approval-tag" color={STATUS_COLOR[v]}>
+                      {OFFER_APPROVAL_STATUS_LABEL[v as OfferApprovalStatus] ?? v}
                     </Tag>
-                    {r.decision === 'DECLINED' && r.decisionReason && (
-                      <Tooltip title={`原因：${r.decisionReason}`}>
-                        <InfoCircleOutlined className="ico-error" />
+                    {v === 'REJECTED' && r.approvalNote && (
+                      <Tooltip title={`驳回意见：${r.approvalNote}`}>
+                        <InfoCircleOutlined className="ico-warning" />
                       </Tooltip>
                     )}
                   </Space>
-                );
-              }
-              if (r.approvalStatus === 'SENT' && r.expiresAt) {
-                const daysLeft = dayjs(r.expiresAt).diff(dayjs(), 'day');
-                return (
-                  <Tooltip title={`答复截止：${dayjs(r.expiresAt).format('YYYY-MM-DD HH:mm')}${r.extendedOnce ? '（已续期）' : ''}`}>
-                    <Tag color={daysLeft <= 1 ? 'red' : 'default'} icon={<FieldTimeOutlined />}>
-                      剩 {Math.max(daysLeft, 0)} 天
-                    </Tag>
-                  </Tooltip>
-                );
-              }
-              if (r.approvalStatus === 'EXPIRED') {
-                return <Tag color="volcano">超期未答复</Tag>;
-              }
-              return <span className="u-muted">待答复</span>;
-            },
-          },
-          {
-            title: '更新时间',
-            dataIndex: 'updatedAt',
-            width: 110,
-            render: (v: string) => dayjs(v).format('MM-DD HH:mm'),
-          },
-          {
-            title: '操作',
-            width: 260,
-            render: (_, r) => (
-              <Space size={8} wrap>
-                {r.approvalStatus === 'PENDING' && <RetentionPopover offerId={r.id} />}
-                {r.approvalStatus === 'PENDING' && canApprove && (
-                  <>
-                    <Popconfirm title="批准该 Offer？" onConfirm={() => act(() => offersApi.approve(r.id), '已批准')}>
-                      <Button size="small" type="link" className="u-p0">
-                        通过
+                ),
+              },
+              {
+                title: '候选人答复',
+                width: 160,
+                render: (_, r) => {
+                  if (r.decision) {
+                    return (
+                      <Space size={4}>
+                        <Tag className="decision-tag" color={r.decision === 'ACCEPTED' ? 'success' : 'error'}>
+                          {OFFER_DECISION_LABEL[r.decision as OfferDecision] ?? r.decision}
+                        </Tag>
+                        {r.decision === 'DECLINED' && r.decisionReason && (
+                          <Tooltip title={`原因：${r.decisionReason}`}>
+                            <InfoCircleOutlined className="ico-error" />
+                          </Tooltip>
+                        )}
+                      </Space>
+                    );
+                  }
+                  if (r.approvalStatus === 'SENT' && r.expiresAt) {
+                    const daysLeft = dayjs(r.expiresAt).diff(dayjs(), 'day');
+                    return (
+                      <Tooltip title={`答复截止：${dayjs(r.expiresAt).format('YYYY-MM-DD HH:mm')}${r.extendedOnce ? '（已续期）' : ''}`}>
+                        <Tag className="expire-tag" color={daysLeft <= 1 ? 'error' : 'default'} icon={<FieldTimeOutlined />}>
+                          剩 {Math.max(daysLeft, 0)} 天
+                        </Tag>
+                      </Tooltip>
+                    );
+                  }
+                  if (r.approvalStatus === 'EXPIRED') {
+                    return <Tag color="error" className="expired-tag">超期未答复</Tag>;
+                  }
+                  return <span className="u-meta">待答复</span>;
+                },
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'updatedAt',
+                width: 140,
+                render: (v: string) => <span className="u-meta">{dayjs(v).format('MM-DD HH:mm')}</span>,
+              },
+              {
+                title: '操作',
+                width: 280,
+                fixed: 'right',
+                render: (_, r) => (
+                  <Space size={4} wrap>
+                    {r.approvalStatus === 'PENDING' && <RetentionPopover offerId={r.id} />}
+                    {r.approvalStatus === 'PENDING' && canApprove && (
+                      <>
+                        <Popconfirm title="批准该 Offer？" onConfirm={() => act(() => offersApi.approve(r.id), '已批准')}>
+                          <Button size="small" type="link" className="action-link">
+                            通过
+                          </Button>
+                        </Popconfirm>
+                        <Button size="small" type="link" danger className="action-link" onClick={() => setRejectTarget(r)}>
+                          驳回
+                        </Button>
+                      </>
+                    )}
+                    {r.approvalStatus === 'REJECTED' && canInitiate && (
+                      <Button size="small" type="link" className="action-link" onClick={() => setResubmitTarget(r)}>
+                        修改重提
                       </Button>
-                    </Popconfirm>
-                    <Button size="small" type="link" danger className="u-p0" onClick={() => setRejectTarget(r)}>
-                      驳回
-                    </Button>
-                  </>
-                )}
-                {r.approvalStatus === 'REJECTED' && canInitiate && (
-                  <Button size="small" type="link" className="u-p0" onClick={() => setResubmitTarget(r)}>
-                    修改重提
-                  </Button>
-                )}
-                {r.approvalStatus === 'APPROVED' && canInitiate && (
-                  <Popconfirm
-                    title="电子发送 Offer？"
-                    description="将生成候选人免登录链接，答复期 5 个工作日"
-                    onConfirm={() => act(() => offersApi.send(r.id), 'Offer 已发送，可复制候选人链接')}
-                  >
-                    <Button size="small" type="link" className="u-p0">
-                      发送
-                    </Button>
-                  </Popconfirm>
-                )}
-                {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') && canInitiate && (
-                  <Button size="small" type="link" className="u-p0" onClick={() => void copyPortalLink(r)}>
-                    复制链接
-                  </Button>
-                )}
-                {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') &&
-                  !r.decision &&
-                  !r.extendedOnce &&
-                  canInitiate && (
-                    <Popconfirm
-                      title="续期该 Offer？"
-                      description="重新给予 5 个工作日答复期（仅可续期一次）"
-                      onConfirm={() => act(() => offersApi.extend(r.id), '已续期 5 个工作日')}
-                    >
-                      <Button size="small" type="link" className="u-p0">
-                        续期
+                    )}
+                    {r.approvalStatus === 'APPROVED' && canInitiate && (
+                      <Popconfirm
+                        title="电子发送 Offer？"
+                        description="将生成候选人免登录链接，答复期 5 个工作日"
+                        onConfirm={() => act(() => offersApi.send(r.id), 'Offer 已发送，可复制候选人链接')}
+                      >
+                        <Button size="small" type="link" className="action-link">
+                          发送
+                        </Button>
+                      </Popconfirm>
+                    )}
+                    {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') && canInitiate && (
+                      <Button size="small" type="link" className="action-link" onClick={() => void copyPortalLink(r)}>
+                        复制链接
                       </Button>
-                    </Popconfirm>
-                  )}
-                {r.approvalStatus === 'SENT' && !r.decision && canInitiate && (
-                  <>
-                    <Popconfirm
-                      title="候选人已接受 Offer？将自动创建入职单"
-                      onConfirm={() => act(() => offersApi.respond(r.id, 'ACCEPTED'), '已录入：接受，入职单已创建')}
-                    >
-                      <Button size="small" type="link" className="u-p0">
-                        录入接受
-                      </Button>
-                    </Popconfirm>
-                    <Button size="small" type="link" className="u-p0" onClick={() => setDeclineTarget(r)}>
-                      录入拒绝
-                    </Button>
-                  </>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
-      <RejectApprovalModal offer={rejectTarget} onClose={() => setRejectTarget(null)} onDone={invalidate} />
-      <ResubmitModal offer={resubmitTarget} onClose={() => setResubmitTarget(null)} onDone={invalidate} />
-      <DeclineEntryModal offer={declineTarget} onClose={() => setDeclineTarget(null)} onDone={invalidate} />
-        </>
-      )}
-    </Card>
+                    )}
+                    {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') &&
+                      !r.decision &&
+                      !r.extendedOnce &&
+                      canInitiate && (
+                        <Popconfirm
+                          title="续期该 Offer？"
+                          description="重新给予 5 个工作日答复期（仅可续期一次）"
+                          onConfirm={() => act(() => offersApi.extend(r.id), '已续期 5 个工作日')}
+                        >
+                          <Button size="small" type="link" className="action-link">
+                            续期
+                          </Button>
+                        </Popconfirm>
+                      )}
+                    {r.approvalStatus === 'SENT' && !r.decision && canInitiate && (
+                      <>
+                        <Popconfirm
+                          title="候选人已接受 Offer？将自动创建入职单"
+                          onConfirm={() => act(() => offersApi.respond(r.id, 'ACCEPTED'), '已录入：接受，入职单已创建')}
+                        >
+                          <Button size="small" type="link" className="action-link">
+                            录入接受
+                          </Button>
+                        </Popconfirm>
+                        <Button size="small" type="link" className="action-link" onClick={() => setDeclineTarget(r)}>
+                          录入拒绝
+                        </Button>
+                      </>
+                    )}
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        )}
+        <RejectApprovalModal offer={rejectTarget} onClose={() => setRejectTarget(null)} onDone={invalidate} />
+        <ResubmitModal offer={resubmitTarget} onClose={() => setResubmitTarget(null)} onDone={invalidate} />
+        <DeclineEntryModal offer={declineTarget} onClose={() => setDeclineTarget(null)} onDone={invalidate} />
+      </Card>
+    </div>
   );
 }

@@ -29,7 +29,7 @@ import { EmptyBlock } from '../../components/ui';
 import { BRAND } from '../../theme';
 import { useAuthStore } from '../../stores/auth';
 
-/** 岗位评分卡模板配置（详设 V2 3.4：动态表单引擎第一个兑现点） */
+/** 岗位评分卡模板配置 */
 function ScorecardModal({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -117,7 +117,7 @@ function ScorecardModal({ job, onClose }: { job: Job | null; onClose: () => void
   );
 }
 
-/** 人才库唤醒抽屉（PRD 4.2.2）：打开即扫描，AI 打分推荐 + 一键激活 */
+/** 人才库唤醒抽屉：打开即扫描，AI 打分推荐 + 一键激活 */
 function TalentPoolDrawer({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();

@@ -11,7 +11,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppstoreOutlined, CheckSquareOutlined } from '@ant-design/icons';
+import { CheckSquareOutlined } from '@ant-design/icons';
 import { PERMISSIONS, REJECT_REASONS, STAGE_STAY_SLA } from '@hireflow/shared';
 import {
   Alert,
@@ -39,7 +39,6 @@ import { applicationsApi, boardApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { BatchResult, BoardCard, BoardData, CompareData } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
-import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 /** 乐观更新：在本地缓存里把卡片从旧列挪到新列尾部 */
@@ -70,7 +69,7 @@ function StayTag({ card }: { card: BoardCard }) {
   const days = dayjs().diff(dayjs(card.stageEnteredAt), 'day');
   if (days <= STAGE_STAY_SLA.warnDays) return null;
   return (
-    <Tag color={days > STAGE_STAY_SLA.dangerDays ? 'red' : 'gold'} className="tag-meta u-mr-0">
+    <Tag color={days > STAGE_STAY_SLA.dangerDays ? 'error' : 'warning'} className="tag-meta u-mr-0">
       停留 {days} 天
     </Tag>
   );
@@ -201,8 +200,8 @@ function BoardColumnView({
             }
           />
         )}
-        <span>
-          {stage.name} <Badge count={cards.length} color="#8c8c8c" />
+        <span className="kanban-col-title">
+          {stage.name} <Badge count={cards.length} className="kanban-badge" />
         </span>
       </div>
       <div className="kanban-col-scroll">
@@ -219,7 +218,7 @@ function BoardColumnView({
   );
 }
 
-/** 候选人对比：2-4 人并排 + AI 综合意见；AI 是辅助，终审在人 */
+/** 候选人对比（V2 页面清单）：2-4 人并排 + AI 综合意见；AI 是辅助，终审在人 */
 function CompareModal({ data, loading, onClose }: { data: CompareData | null; loading: boolean; onClose: () => void }) {
   const CONCLUSION_TEXT: Record<string, string> = {
     STRONG_YES: '强烈推荐',
@@ -254,13 +253,13 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
                   title={
                     <Space>
                       {c.name}
-                      {rank === 1 && <Tag color="blue">AI 首推</Tag>}
+                      {rank === 1 && <Tag color="processing">AI 首推</Tag>}
                     </Space>
                   }
                 >
                   <p className="compare-line">
                     匹配分：
-                    {c.matchScore != null ? <Tag color={c.matchScore >= 85 ? 'green' : c.matchScore >= 70 ? 'blue' : 'default'}>{c.matchScore}</Tag> : '未评分'}
+                    {c.matchScore != null ? <Tag color={c.matchScore >= 85 ? 'success' : c.matchScore >= 70 ? 'processing' : 'default'}>{c.matchScore}</Tag> : '未评分'}
                   </p>
                   <div className="u-mb-4">
                     {c.tags.slice(0, 4).map((t) => (
@@ -280,7 +279,7 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
                       <span className="u-muted">暂无</span>
                     ) : (
                       c.evaluations.map((e, i) => (
-                        <Tag key={i} color={e.conclusion?.includes('YES') ? 'green' : 'orange'} className="tag-meta">
+                        <Tag key={i} color={e.conclusion?.includes('YES') ? 'success' : 'warning'} className="tag-meta">
                           {CONCLUSION_TEXT[e.conclusion ?? ''] ?? '无结论'}
                           {e.avgScore != null ? ` ${e.avgScore}分` : ''}
                         </Tag>
@@ -533,123 +532,127 @@ export function PipelinePage() {
   };
 
   return (
-    <Card
-      title={
-        <Space size={12}>
-          <CardTitle icon={<AppstoreOutlined />}>
-            招聘看板
-          </CardTitle>
-          <Select
-            className="w-260"
-            placeholder="选择职位"
-            loading={jobsQuery.isLoading}
-            value={jobId || undefined}
-            onChange={(value) => setSearchParams({ jobId: value })}
-            options={jobsQuery.data?.items.map((j) => ({
-              value: j.id,
-              label: `${j.title}（${j.department.name}）`,
-            }))}
-          />
-        </Space>
-      }
-      extra={
-        <Space>
-          {!canMove && <Typography.Text type="secondary">当前角色仅可查看，不可移动卡片</Typography.Text>}
-          {canMove &&
-            (batchMode ? (
-              <Button onClick={exitBatch}>退出批量</Button>
-            ) : (
-              <Button icon={<CheckSquareOutlined />} onClick={() => setBatchMode(true)}>
-                批量操作
-              </Button>
-            ))}
-        </Space>
-      }
-    >
-      {batchMode && (
-        <Alert
-          type="info"
-          className="u-mb-12"
-          message={
-            <Space wrap>
-              <span>
-                已选 <b>{selected.size}</b> 人（点卡片或列头复选框选择）
-              </span>
-              <Button
-                size="small"
-                danger
-                disabled={selected.size === 0}
-                onClick={() => setBatchRejectOpen(true)}
-              >
-                批量淘汰
-              </Button>
-              <Button
-                size="small"
-                type="primary"
-                disabled={selected.size === 0}
-                onClick={() => setBatchMoveOpen(true)}
-              >
-                批量移动
-              </Button>
-              <Button
-                size="small"
-                disabled={selected.size < 2 || selected.size > 4}
-                loading={compareMutation.isPending}
-                onClick={() => compareMutation.mutate()}
-              >
-                AI 对比（2-4 人）
-              </Button>
-              <Button size="small" disabled={selected.size !== 1} onClick={() => void sendPrescreen()}>
-                预筛链接
-              </Button>
-              <Button size="small" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
-                清空选择
-              </Button>
-            </Space>
-          }
-        />
-      )}
-      {!jobId || boardQuery.isLoading ? (
-        <div className="loading-center loading-center--lg">
-          {jobsQuery.isLoading || boardQuery.isLoading ? (
-            <Spin />
-          ) : (
-            <Empty description="暂无职位，请先创建职位" />
-          )}
+    <div className="pipeline-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">招聘看板</h1>
+          <p className="page-header-subtitle">拖拽卡片管理候选人流程，支持批量操作与AI对比</p>
         </div>
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={pointerWithin}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragCancel={() => setActiveCard(null)}
-        >
-          <div className="kanban-board">
-            {boardQuery.data?.columns.map((column) => (
-              <BoardColumnView
-                key={column.stage.id}
-                stage={column.stage}
-                cards={column.applications}
-                dragDisabled={!canMove || batchMode}
-                onOpen={setDetailId}
-                batchMode={batchMode}
-                selected={selected}
-                onToggle={toggleSelected}
-                onToggleColumn={toggleColumn}
-              />
-            ))}
+        <div className="page-header-actions">
+          <Space size={12}>
+            <Select
+              className="w-260"
+              placeholder="选择职位"
+              loading={jobsQuery.isLoading}
+              value={jobId || undefined}
+              onChange={(value) => setSearchParams({ jobId: value })}
+              options={jobsQuery.data?.items.map((j) => ({
+                value: j.id,
+                label: `${j.title}（${j.department.name}）`,
+              }))}
+            />
+            {!canMove && <Typography.Text type="secondary" className="pipeline-readonly-tip">仅查看</Typography.Text>}
+            {canMove &&
+              (batchMode ? (
+                <Button onClick={exitBatch}>退出批量</Button>
+              ) : (
+                <Button icon={<CheckSquareOutlined />} onClick={() => setBatchMode(true)}>
+                  批量操作
+                </Button>
+              ))}
+          </Space>
+        </div>
+      </div>
+
+      {/* 看板区域 */}
+      <Card className="kanban-board-card">
+        {batchMode && (
+          <Alert
+            type="info"
+            showIcon
+            className="batch-alert"
+            message={
+              <Space wrap>
+                <span>
+                  已选 <b>{selected.size}</b> 人（点卡片或列头复选框选择）
+                </span>
+                <Button
+                  size="small"
+                  danger
+                  disabled={selected.size === 0}
+                  onClick={() => setBatchRejectOpen(true)}
+                >
+                  批量淘汰
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
+                  disabled={selected.size === 0}
+                  onClick={() => setBatchMoveOpen(true)}
+                >
+                  批量移动
+                </Button>
+                <Button
+                  size="small"
+                  disabled={selected.size < 2 || selected.size > 4}
+                  loading={compareMutation.isPending}
+                  onClick={() => compareMutation.mutate()}
+                >
+                  AI 对比（2-4 人）
+                </Button>
+                <Button size="small" disabled={selected.size !== 1} onClick={() => void sendPrescreen()}>
+                  预筛链接
+                </Button>
+                <Button size="small" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+                  清空选择
+                </Button>
+              </Space>
+            }
+          />
+        )}
+        {!jobId || boardQuery.isLoading ? (
+          <div className="loading-center loading-center--lg">
+            {jobsQuery.isLoading || boardQuery.isLoading ? (
+              <Spin />
+            ) : (
+              <Empty description="暂无职位，请先创建职位" />
+            )}
           </div>
-          {/* 拖拽浮层：脱离列容器渲染，修复卡片被 overflow 裁剪/异常位移的问题 */}
-          <DragOverlay dropAnimation={null}>
-            {activeCard ? (
-              <div className="drag-overlay-card">
-                <CardView card={activeCard} overlay />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      )}
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={pointerWithin}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDragCancel={() => setActiveCard(null)}
+          >
+            <div className="kanban-board">
+              {boardQuery.data?.columns.map((column) => (
+                <BoardColumnView
+                  key={column.stage.id}
+                  stage={column.stage}
+                  cards={column.applications}
+                  dragDisabled={!canMove || batchMode}
+                  onOpen={setDetailId}
+                  batchMode={batchMode}
+                  selected={selected}
+                  onToggle={toggleSelected}
+                  onToggleColumn={toggleColumn}
+                />
+              ))}
+            </div>
+            {/* 拖拽浮层：脱离列容器渲染，修复卡片被 overflow 裁剪/异常位移的问题 */}
+            <DragOverlay dropAnimation={null}>
+              {activeCard ? (
+                <div className="drag-overlay-card">
+                  <CardView card={activeCard} overlay />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
+      </Card>
 
       <Modal
         title="回退阶段需填写原因"
@@ -756,6 +759,6 @@ export function PipelinePage() {
       />
 
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
-    </Card>
+    </div>
   );
 }

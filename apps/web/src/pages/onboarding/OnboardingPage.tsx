@@ -1,4 +1,4 @@
-import { FileProtectOutlined, IdcardOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
+import { FileProtectOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CONTRACT_SIGN_STATUS_LABEL,
@@ -32,10 +32,10 @@ import {
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { onboardingApi } from '../../api';
+import { BRAND } from '../../theme';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { ChecklistItem, Onboarding } from '../../api/types';
-import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 const OWNER_LABEL: Record<ChecklistItem['owner'], string> = {
@@ -59,7 +59,7 @@ function ChecklistGroup({
 }) {
   const items = onboarding.checklist.filter((i) => i.owner === owner);
   return (
-    <Card size="small" title={OWNER_LABEL[owner]} className="u-mb-12">
+    <Card size="small" title={OWNER_LABEL[owner]} className="u-mb-16">
       <Space orientation="vertical" size={6} className="u-w-full">
         {items.map((item) => (
           <div key={item.key} className="check-row">
@@ -166,7 +166,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
         detail ? (
           <Space>
             {detail.application.candidate.name} · 入职流程
-            <Tag color={detail.status === 'COMPLETED' ? 'green' : 'blue'}>
+            <Tag color={detail.status === 'COMPLETED' ? 'success' : 'processing'}>
               {ONBOARDING_STATUS_LABEL[detail.status as OnboardingStatus] ?? detail.status}
             </Tag>
           </Space>
@@ -194,7 +194,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
             <Button
               size="small"
               icon={<LinkOutlined />}
-              className="u-mb-12"
+              className="u-mb-16"
               onClick={() => void copyPortalLink(detail.id)}
             >
               复制新员工资料填报链接（免登录 H5）
@@ -249,7 +249,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                 title={
                   <Space size={8}>
                     {doc.label}
-                    {doc.needsReview && <Tag color="gold">待人工核对</Tag>}
+                    {doc.needsReview && <Tag color="warning">待人工核对</Tag>}
                   </Space>
                 }
                 extra={
@@ -270,7 +270,7 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
                   </Descriptions>
                 ) : (
                   <Typography.Text type="warning" className="u-meta">
-                    仅上传了图片、未识别出字段（低置信度阻断）：请打开原件人工核对，确认无误后手动勾选对应待办
+                    仅上传了图片、未识别出字段：请打开原件人工核对，确认无误后手动勾选对应待办
                   </Typography.Text>
                 )}
                 <div className="doc-meta">
@@ -301,10 +301,10 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
               )
             ) : (
               <>
-                <Descriptions size="small" column={2} className="u-mb-12">
+                <Descriptions size="small" column={2} className="u-mb-16">
                   <Descriptions.Item label="模板">{contract.templateName}</Descriptions.Item>
                   <Descriptions.Item label="状态">
-                    <Tag color={contract.signStatus === 'SIGNED' ? 'green' : 'blue'}>
+                    <Tag color={contract.signStatus === 'SIGNED' ? 'success' : 'processing'}>
                       {CONTRACT_SIGN_STATUS_LABEL[contract.signStatus as ContractSignStatus] ?? contract.signStatus}
                     </Tag>
                   </Descriptions.Item>
@@ -399,91 +399,116 @@ export function OnboardingPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const listQuery = useQuery({ queryKey: ['onboardings'], queryFn: onboardingApi.list, retry: false });
 
-  const pageTitle = (
-    <CardTitle icon={<IdcardOutlined />}>
-      入职管理
-    </CardTitle>
-  );
-
   if (listQuery.isError) {
     return (
-      <Card title={pageTitle}>
-        <QueryErrorResult error={listQuery.error} />
-      </Card>
+      <div className="onboarding-page">
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-header-title">入职管理</h1>
+          </div>
+        </div>
+        <Card className="list-main-card">
+          <QueryErrorResult error={listQuery.error} />
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Card title={pageTitle}>
-      <Typography.Paragraph type="secondary" className="u-meta u-mb-12">
-        Offer 接受后自动生成入职单：三方清单（HR/IT/新员工）+ 材料收集（OCR）+ 电子签合同；全部完成即闭环为「已入职」
-      </Typography.Paragraph>
-      <Table<Onboarding>
-        rowKey="id"
-        loading={listQuery.isLoading}
-        dataSource={listQuery.data}
-        pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 张入职单` }}
-        columns={[
-          {
-            title: '候选人',
-            width: 120,
-            render: (_, r) => (
-              <Button type="link" size="small" className="u-p0" onClick={() => setDetailId(r.id)}>
-                {r.application.candidate.name}
-              </Button>
-            ),
-          },
-          {
-            title: '职位',
-            render: (_, r) => `${r.application.job.title}（${r.application.job.department.name}）`,
-          },
-          {
-            title: '清单进度',
-            width: 180,
-            render: (_, r) => (
-              <Progress percent={Math.round((r.progress.done / r.progress.total) * 100)} size="small" />
-            ),
-          },
-          {
-            title: '合同',
-            width: 100,
-            render: (_, r) =>
-              r.contract ? (
-                <Tag color={r.contract.signStatus === 'SIGNED' ? 'green' : 'blue'}>
-                  {CONTRACT_SIGN_STATUS_LABEL[r.contract.signStatus as ContractSignStatus]}
-                </Tag>
-              ) : (
-                <span className="u-muted">未生成</span>
+    <div className="onboarding-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">入职管理</h1>
+          <p className="page-header-subtitle">三方待办清单、材料收集 OCR、电子签合同，完成后自动标记已入职</p>
+        </div>
+      </div>
+
+      {/* 入职列表 */}
+      <Card className="list-main-card">
+        <Table<Onboarding>
+          rowKey="id"
+          scroll={{ x: 1100 }}
+          loading={listQuery.isLoading}
+          dataSource={listQuery.data}
+          pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 张入职单` }}
+          columns={[
+            {
+              title: '候选人',
+              width: 140,
+              render: (_, r) => (
+                <div className="onboarding-candidate-cell">
+                  <Button type="link" size="small" className="candidate-name-link" onClick={() => setDetailId(r.id)}>
+                    {r.application.candidate.name}
+                  </Button>
+                </div>
               ),
-          },
-          {
-            title: '状态',
-            dataIndex: 'status',
-            width: 90,
-            render: (v: string) => (
-              <Tag color={v === 'COMPLETED' ? 'green' : 'processing'}>
-                {ONBOARDING_STATUS_LABEL[v as OnboardingStatus] ?? v}
-              </Tag>
-            ),
-          },
-          {
-            title: '创建时间',
-            dataIndex: 'createdAt',
-            width: 110,
-            render: (v: string) => dayjs(v).format('MM-DD HH:mm'),
-          },
-          {
-            title: '操作',
-            width: 80,
-            render: (_, r) => (
-              <Button type="link" size="small" onClick={() => setDetailId(r.id)}>
-                详情
-              </Button>
-            ),
-          },
-        ]}
-      />
+            },
+            {
+              title: '职位',
+              render: (_, r) => (
+                <div className="onboarding-job-cell">
+                  <div className="job-title-text">{r.application.job.title}</div>
+                  <div className="job-dept-text">{r.application.job.department.name}</div>
+                </div>
+              ),
+            },
+            {
+              title: '清单进度',
+              width: 220,
+              render: (_, r) => (
+                <div className="progress-cell">
+                  <Progress
+                    percent={Math.round((r.progress.done / r.progress.total) * 100)}
+                    size="small"
+                    strokeColor={BRAND.primary}
+                  />
+                  <span className="progress-text">{r.progress.done}/{r.progress.total}</span>
+                </div>
+              ),
+            },
+            {
+              title: '合同',
+              width: 110,
+              render: (_, r) =>
+                r.contract ? (
+                  <Tag className="contract-tag" color={r.contract.signStatus === 'SIGNED' ? 'success' : 'processing'}>
+                    {CONTRACT_SIGN_STATUS_LABEL[r.contract.signStatus as ContractSignStatus]}
+                  </Tag>
+                ) : (
+                  <span className="u-meta">未生成</span>
+                ),
+            },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              width: 110,
+              render: (v: string) => (
+                <Tag className="onboarding-status-tag" color={v === 'COMPLETED' ? 'success' : 'processing'}>
+                  {ONBOARDING_STATUS_LABEL[v as OnboardingStatus] ?? v}
+                </Tag>
+              ),
+            },
+            {
+              title: '创建时间',
+              dataIndex: 'createdAt',
+              width: 140,
+              render: (v: string) => <span className="u-meta">{dayjs(v).format('MM-DD HH:mm')}</span>,
+            },
+            {
+              title: '操作',
+              width: 100,
+              fixed: 'right',
+              render: (_, r) => (
+                <Button type="link" size="small" onClick={() => setDetailId(r.id)}>
+                  详情
+                </Button>
+              ),
+            },
+          ]}
+        />
+      </Card>
       <OnboardingDetail id={detailId} onClose={() => setDetailId(null)} />
-    </Card>
+    </div>
   );
 }

@@ -14,7 +14,7 @@ import dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { helpdeskApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import { CardTitle, EmptyBlock } from '../../components/ui';
+import { EmptyBlock } from '../../components/ui';
 
 interface ChatMessage {
   role: 'user' | 'bot';
@@ -172,167 +172,171 @@ export function HelpdeskPage() {
   };
 
   return (
-    <Row gutter={16}>
-      <Col span={17}>
-        <Card
-          title={
-            <CardTitle icon={<CommentOutlined />}>
-              入职问答助手
-            </CardTitle>
-          }
-          extra={
-            messages.length > 0 && (
-              <Popconfirm title="清空当前对话记录？" okText="清空" onConfirm={clearChat}>
-                <Button type="link" size="small" className="u-p0">
-                  清空对话
-                </Button>
-              </Popconfirm>
-            )
-          }
-          classNames={{ body: 'chat-card-body' }}
-        >
-          {messages.length === 0 ? (
-            <div className="chat-welcome">
-              <span className="chat-welcome-icon">
-                <RobotOutlined />
-              </span>
-              <div className="chat-welcome-title">有入职问题，直接问我</div>
-              <p className="chat-welcome-desc">
-                回答基于公司制度文档并附出处，覆盖 WiFi、五险一金、休假、报销、考勤、试用期等主题。
-              </p>
-              <div className="chat-welcome-qs">
-                {QUICK_QUESTIONS.map((q) => (
-                  <Button key={q} shape="round" onClick={() => ask(q)}>
-                    {q}
+    <div className="helpdesk-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">入职问答</h1>
+          <p className="page-header-subtitle">AI 入职助手，基于公司制度文档回答新员工问题</p>
+        </div>
+      </div>
+
+      <Row gutter={16}>
+        <Col span={17}>
+          <Card className="chat-card" classNames={{ body: 'chat-card-body' }}>
+            <div className="section-header">
+              <div className="section-title">
+                <CommentOutlined className="section-icon" />
+                <span>入职问答助手</span>
+              </div>
+              {messages.length > 0 && (
+                <Popconfirm title="清空当前对话记录？" okText="清空" onConfirm={clearChat}>
+                  <Button type="link" size="small" className="u-p0">
+                    清空对话
                   </Button>
+                </Popconfirm>
+              )}
+            </div>
+            {messages.length === 0 ? (
+              <div className="chat-welcome">
+                <span className="chat-welcome-icon">
+                  <RobotOutlined />
+                </span>
+                <div className="chat-welcome-title">有入职问题，直接问我</div>
+                <p className="chat-welcome-desc">
+                  回答基于公司制度文档并附出处，覆盖 WiFi、五险一金、休假、报销、考勤、试用期等主题。
+                </p>
+                <div className="chat-welcome-qs">
+                  {QUICK_QUESTIONS.map((q) => (
+                    <Button key={q} shape="round" onClick={() => ask(q)}>
+                      {q}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div ref={listRef} className="chat-list">
+                {messages.map((m, i) => (
+                  <ChatRow key={`${m.at}-${i}`} msg={m} onCopy={copyAnswer} />
                 ))}
+                {askMutation.isPending && (
+                  <div className="chat-row">
+                    <span className="chat-avatar chat-avatar--bot">
+                      <RobotOutlined />
+                    </span>
+                    <div className="chat-bubble chat-bubble--typing">
+                      <Spin size="small" />
+                      正在检索制度文档…
+                    </div>
+                  </div>
+                )}
+                {failedQuestion && !askMutation.isPending && (
+                  <div className="chat-row">
+                    <span className="chat-avatar chat-avatar--bot">
+                      <RobotOutlined />
+                    </span>
+                    <div className="chat-bubble chat-bubble--error">
+                      这条没有回答成功，可能是网络或服务波动。
+                      <Button type="link" size="small" onClick={retry}>
+                        重试
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="chat-composer">
+              <Input.TextArea
+                value={input}
+                variant="borderless"
+                autoSize={{ minRows: 3, maxRows: 8 }}
+                onChange={(e) => setInput(e.target.value)}
+                onCompositionStart={() => {
+                  composingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  composingRef.current = false;
+                }}
+                onPressEnter={(e) => {
+                  if (e.shiftKey || composingRef.current) return;
+                  e.preventDefault();
+                  ask(input);
+                }}
+                placeholder="输入问题，如：试用期多久可以转正？"
+              />
+              <div className="chat-composer-foot">
+                <span className="chat-input-hint">
+                  Enter 发送，Shift + Enter 换行 · 回答仅供参考，重要事项请与 HR 确认
+                </span>
+                <Button
+                  type="primary"
+                  icon={<SendOutlined />}
+                  onClick={() => ask(input)}
+                  loading={askMutation.isPending}
+                  disabled={!input.trim()}
+                >
+                  发送
+                </Button>
               </div>
             </div>
-          ) : (
-            <div ref={listRef} className="chat-list">
-              {messages.map((m, i) => (
-                <ChatRow key={`${m.at}-${i}`} msg={m} onCopy={copyAnswer} />
-              ))}
-              {askMutation.isPending && (
-                <div className="chat-row">
-                  <span className="chat-avatar chat-avatar--bot">
-                    <RobotOutlined />
-                  </span>
-                  <div className="chat-bubble chat-bubble--typing">
-                    <Spin size="small" />
-                    正在检索制度文档…
+          </Card>
+        </Col>
+        <Col span={7}>
+          <Card className="faq-card u-mb-16" size="small">
+            <div className="section-header">
+              <div className="section-title">
+                <QuestionCircleOutlined className="section-icon" />
+                <span>常见问题</span>
+              </div>
+            </div>
+            {QUICK_QUESTIONS.map((q) => (
+              <div key={q} className="faq-item" onClick={() => ask(q)}>
+                <QuestionCircleOutlined />
+                <span>{q}</span>
+              </div>
+            ))}
+          </Card>
+          <Card className="docs-card" size="small">
+            <div className="section-header">
+              <div className="section-title">
+                <BookOutlined className="section-icon" />
+                <span>知识库范围</span>
+              </div>
+            </div>
+            {docsQuery.isLoading ? (
+              <div className="loading-center">
+                <Spin size="small" />
+              </div>
+            ) : !docsQuery.data?.length ? (
+              <EmptyBlock minHeight={120} description="暂无知识库文档，由 HR 在后台维护" />
+            ) : (
+              <div className="docs-scroll">
+                {docsQuery.data.map((doc) => (
+                  <div key={doc.id} className="doc-item">
+                    <Space size={6}>
+                      <FileTextOutlined className="u-muted" />
+                      <Typography.Text>{doc.title}</Typography.Text>
+                    </Space>
+                    <div>
+                      {doc.tags.map((t) => (
+                        <Tag key={t} className="tag-meta u-mt-4">
+                          {t}
+                        </Tag>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              {failedQuestion && !askMutation.isPending && (
-                <div className="chat-row">
-                  <span className="chat-avatar chat-avatar--bot">
-                    <RobotOutlined />
-                  </span>
-                  <div className="chat-bubble chat-bubble--error">
-                    这条没有回答成功，可能是网络或服务波动。
-                    <Button type="link" size="small" onClick={retry}>
-                      重试
-                    </Button>
-                  </div>
-                </div>
-              )}
+                ))}
+              </div>
+            )}
+            <Typography.Text type="secondary" className="u-meta">
+              机器人仅依据以上文档作答，答案附出处
+            </Typography.Text>
+            <div className="helpdesk-escalation">
+              没找到答案或拿不准？联系 HR：hr@arthr.local（工作日 10:00 - 18:00）
             </div>
-          )}
-          <div className="chat-composer">
-            <Input.TextArea
-              value={input}
-              variant="borderless"
-              autoSize={{ minRows: 3, maxRows: 8 }}
-              onChange={(e) => setInput(e.target.value)}
-              onCompositionStart={() => {
-                composingRef.current = true;
-              }}
-              onCompositionEnd={() => {
-                composingRef.current = false;
-              }}
-              onPressEnter={(e) => {
-                if (e.shiftKey || composingRef.current) return;
-                e.preventDefault();
-                ask(input);
-              }}
-              placeholder="输入问题，如：试用期多久可以转正？"
-            />
-            <div className="chat-composer-foot">
-              <span className="chat-input-hint">
-                Enter 发送，Shift + Enter 换行 · 回答仅供参考，重要事项请与 HR 确认
-              </span>
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={() => ask(input)}
-                loading={askMutation.isPending}
-                disabled={!input.trim()}
-              >
-                发送
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </Col>
-      <Col span={7}>
-        <Card
-          title={
-            <CardTitle icon={<QuestionCircleOutlined />}>
-              常见问题
-            </CardTitle>
-          }
-          size="small"
-          className="u-mb-16"
-        >
-          {QUICK_QUESTIONS.map((q) => (
-            <div key={q} className="faq-item" onClick={() => ask(q)}>
-              <QuestionCircleOutlined />
-              <span>{q}</span>
-            </div>
-          ))}
-        </Card>
-        <Card
-          title={
-            <CardTitle icon={<BookOutlined />}>
-              知识库范围
-            </CardTitle>
-          }
-          size="small"
-        >
-          {docsQuery.isLoading ? (
-            <div className="loading-center">
-              <Spin size="small" />
-            </div>
-          ) : !docsQuery.data?.length ? (
-            <EmptyBlock minHeight={120} description="暂无知识库文档，由 HR 在后台维护" />
-          ) : (
-            <div className="docs-scroll">
-              {docsQuery.data.map((doc) => (
-                <div key={doc.id} className="doc-item">
-                  <Space size={6}>
-                    <FileTextOutlined className="u-muted" />
-                    <Typography.Text>{doc.title}</Typography.Text>
-                  </Space>
-                  <div>
-                    {doc.tags.map((t) => (
-                      <Tag key={t} className="tag-meta u-mt-4">
-                        {t}
-                      </Tag>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <Typography.Text type="secondary" className="u-meta">
-            机器人仅依据以上文档作答，答案附出处
-          </Typography.Text>
-          <div className="helpdesk-escalation">
-            没找到答案或拿不准？联系 HR：hr@arthr.local（工作日 10:00 - 18:00）
-          </div>
-        </Card>
-      </Col>
-    </Row>
+          </Card>
+        </Col>
+      </Row>
+    </div>
   );
 }

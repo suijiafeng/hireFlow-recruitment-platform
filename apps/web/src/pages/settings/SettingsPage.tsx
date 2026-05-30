@@ -1,4 +1,3 @@
-import { SettingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { PERMISSIONS } from '@hireflow/shared';
 import { Card, Table, Tabs, Tag, Typography } from 'antd';
@@ -6,7 +5,6 @@ import dayjs from 'dayjs';
 import { useState } from 'react';
 import { auditApi, rbacApi } from '../../api';
 import type { ActivityItem, Role } from '../../api/types';
-import { CardTitle } from '../../components/ui';
 import { useAuthStore } from '../../stores/auth';
 
 const DATA_SCOPE_LABEL: Record<string, string> = {
@@ -21,16 +19,17 @@ function RolesTab() {
   return (
     <Table<Role>
       rowKey="id"
+      scroll={{ x: 900 }}
       loading={rolesQuery.isLoading}
       dataSource={rolesQuery.data}
       pagination={false}
       columns={[
         { title: '角色', dataIndex: 'name', width: 160 },
-        { title: '角色码', dataIndex: 'code', width: 160, render: (v: string) => <code>{v}</code> },
+        { title: '角色码', dataIndex: 'code', width: 180, render: (v: string) => <code>{v}</code> },
         {
           title: '数据范围',
           dataIndex: 'dataScope',
-          width: 120,
+          width: 130,
           render: (v: string) => <Tag>{DATA_SCOPE_LABEL[v] ?? v}</Tag>,
         },
         { title: '成员数', width: 90, render: (_, r) => r._count.users },
@@ -59,6 +58,7 @@ function AuditTab() {
   return (
     <Table<ActivityItem>
       rowKey="id"
+      scroll={{ x: 1100 }}
       loading={auditQuery.isLoading}
       dataSource={auditQuery.data?.items}
       pagination={{
@@ -72,16 +72,16 @@ function AuditTab() {
         {
           title: '时间',
           dataIndex: 'createdAt',
-          width: 150,
+          width: 170,
           render: (v: string) => dayjs(v).format('MM-DD HH:mm:ss'),
         },
         {
           title: '操作人',
-          width: 120,
+          width: 130,
           render: (_, r) => r.actor?.name ?? r.actorName ?? '系统',
         },
-        { title: '动作', dataIndex: 'action', width: 220, render: (v: string) => <code>{v}</code> },
-        { title: '实体', dataIndex: 'entityType', width: 110, render: (v?: string) => v ?? '-' },
+        { title: '动作', dataIndex: 'action', width: 240, render: (v: string) => <code>{v}</code> },
+        { title: '实体', dataIndex: 'entityType', width: 120, render: (v?: string) => v ?? '-' },
         {
           title: '详情',
           render: (_, r) => (
@@ -104,14 +104,19 @@ export function SettingsPage() {
       : []),
   ];
   return (
-    <Card
-      title={
-        <CardTitle icon={<SettingOutlined />}>
-          系统设置
-        </CardTitle>
-      }
-    >
-      <Tabs items={items} />
-    </Card>
+    <div className="settings-page">
+      {/* 页面头部 */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-header-title">系统设置</h1>
+          <p className="page-header-subtitle">管理角色权限、查看操作审计日志</p>
+        </div>
+      </div>
+
+      {/* 设置内容 */}
+      <Card className="settings-content-card">
+        <Tabs items={items} className="settings-tabs" />
+      </Card>
+    </div>
   );
 }
