@@ -2,7 +2,7 @@
   "name": "hireflow",
   "version": "0.1.0",
   "private": true,
-  "description": "HireFlow - AI-Powered Recruitment Platform| 智能招聘 AI 辅助平台",
+  "description": "HireFlow - AI-Powered Recruitment Platform (Open Source ATS) | 智能招聘 AI 辅助平台",
   "workspaces": [
     "apps/*",
     "packages/*"

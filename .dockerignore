@@ -1,0 +1,21 @@
+# 依赖与构建产物（镜像内重新安装/构建，保证可复现）
+node_modules
+**/node_modules
+**/dist
+apps/web/dist
+
+# Prisma 生成物（gitignore 项，镜像内 db:generate 重新生成）
+apps/api/src/generated
+
+# 环境与密钥
+.env
+**/.env
+**/.env.local
+
+# 版本库与工具目录
+.git
+.claude
+**/*.log
+
+# 文档（不参与构建）
+README.md
