@@ -25,6 +25,7 @@ import type {
   Onboarding,
   OnboardingPortalView,
   Paginated,
+  PermissionDef,
   PrescreenView,
   Resume,
   RetentionHint,
@@ -32,7 +33,7 @@ import type {
   TalentPoolScanResult,
   TodoSummary,
   TrendData,
-  UserBrief,
+  UserItem,
 } from './types';
 
 export const authApi = {
@@ -282,11 +283,16 @@ export const departmentsApi = {
 
 export const usersApi = {
   list: (role?: string) =>
-    http.get<UserBrief[]>('/users', { params: role ? { role } : undefined }).then((r) => r.data),
+    http.get<UserItem[]>('/users', { params: role ? { role } : undefined }).then((r) => r.data),
+  updateRoles: (userId: string, roleCodes: string[]) =>
+    http.patch<UserItem>(`/users/${userId}/roles`, { roleCodes }).then((r) => r.data),
 };
 
 export const rbacApi = {
   roles: () => http.get<Role[]>('/roles').then((r) => r.data),
+  permissions: () => http.get<PermissionDef[]>('/permissions').then((r) => r.data),
+  updateRolePermissions: (roleId: string, codes: string[]) =>
+    http.patch<Role>(`/roles/${roleId}/permissions`, { codes }).then((r) => r.data),
 };
 
 export const auditApi = {

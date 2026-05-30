@@ -18,6 +18,15 @@ export interface UserBrief {
   email?: string;
 }
 
+/** GET /users 的完整行（设置页成员管理用；选择器场景只取 id/name/email） */
+export interface UserItem extends UserBrief {
+  email: string;
+  status: string;
+  department: { id: string; name: string } | null;
+  roles: Array<{ role: { code: string; name: string } }>;
+  createdAt: string;
+}
+
 export interface ScorecardDimension {
   dimension: string;
   weight: number;
@@ -104,12 +113,19 @@ export interface ActivityItem {
   createdAt: string;
 }
 
+export interface PermissionDef {
+  id: string;
+  code: string;
+  name: string;
+  group: string;
+}
+
 export interface Role {
   id: string;
   code: string;
   name: string;
   dataScope: string;
-  permissions: Array<{ permission: { id: string; code: string; name: string; group: string } }>;
+  permissions: Array<{ permission: PermissionDef }>;
   _count: { users: number };
 }
 
