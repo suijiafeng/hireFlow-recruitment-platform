@@ -2856,15 +2856,16 @@
   overflow: hidden;
 }
 
-/* 常见问题卡片 */
+/* 常见问题卡片：条目数固定不多，按自身内容高度，不参与拉伸 */
 .faq-card {
   border-radius: 8px;
+  flex-shrink: 0;
 }
 .faq-card .ant-card-body {
   padding: 16px;
 }
 
-/* 知识库卡片 */
+/* 知识库卡片：窄屏按自身内容堆叠；并排断点下吃掉右栏剩余高度（见文件末尾 @media） */
 .docs-card {
   border-radius: 8px;
 }
@@ -2899,7 +2900,7 @@
   color: #2563EB;
 }
 
-/* 知识库文档项 */
+/* 知识库文档项：默认固定高度自滚动；≥992px 并排断点下改吃 .docs-card 剩余空间（见上方 @media） */
 .docs-scroll {
   max-height: 350px;
   overflow-y: auto;
@@ -2912,6 +2913,38 @@
 }
 .doc-item:last-child {
   border-bottom: none;
+}
+
+/* 入职问答右栏：常见问题（自身高度）+ 知识库（吃剩余空间），
+   跟左侧 .chat-card 用同一套「视口减头尾留白」公式，两栏底边对齐。
+   只在跟聊天卡并排显示时生效（对齐 Col 的 lg 断点 992px）——窄屏两栏上下堆叠时
+   两栏顶不对齐这件事本来就不存在，撑到视口高度只会让常见问题下面空出一截还要多滑一屏。
+   必须写在 .helpdesk-sidebar/.docs-card/.docs-scroll 各自的基础规则之后——
+   同选择器同特异性时 CSS 按源码顺序生效，写前面会被后面的基础规则盖掉 */
+@media (min-width: 992px) {
+  .helpdesk-sidebar {
+    height: calc(100vh - 180px);
+    display: flex;
+    flex-direction: column;
+  }
+  .docs-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .docs-card .ant-card-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .docs-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
 /* 升级提示 */

@@ -281,7 +281,7 @@ export function HelpdeskPage() {
             </div>
           </Card>
         </Col>
-        <Col xs={24} lg={8} xl={7}>
+        <Col xs={24} lg={8} xl={7} className="helpdesk-sidebar">
           <Card className="faq-card u-mb-16" size="small">
             <div className="section-header">
               <div className="section-title">
