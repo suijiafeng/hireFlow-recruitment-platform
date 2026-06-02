@@ -9,7 +9,9 @@ import type {
   CompareData,
   Candidate,
   CandidateDetail,
+  CompanyDoc,
   Department,
+  DepartmentItem,
   EvaluationDraft,
   FunnelData,
   ActivityItem,
@@ -278,7 +280,21 @@ export const interviewsApi = {
 };
 
 export const departmentsApi = {
-  list: () => http.get<Department[]>('/departments').then((r) => r.data),
+  list: () => http.get<DepartmentItem[]>('/departments').then((r) => r.data),
+  create: (data: { name: string; parentId?: string }) =>
+    http.post<Department>('/departments', data).then((r) => r.data),
+  update: (id: string, data: { name: string }) =>
+    http.patch<Department>(`/departments/${id}`, data).then((r) => r.data),
+  remove: (id: string) => http.delete<void>(`/departments/${id}`).then((r) => r.data),
+};
+
+export const companyDocsApi = {
+  list: () => http.get<CompanyDoc[]>('/company-docs').then((r) => r.data),
+  create: (data: { title: string; content: string; tags?: string[] }) =>
+    http.post<CompanyDoc>('/company-docs', data).then((r) => r.data),
+  update: (id: string, data: Partial<{ title: string; content: string; tags: string[] }>) =>
+    http.patch<CompanyDoc>(`/company-docs/${id}`, data).then((r) => r.data),
+  remove: (id: string) => http.delete<void>(`/company-docs/${id}`).then((r) => r.data),
 };
 
 export const usersApi = {

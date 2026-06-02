@@ -12,6 +12,21 @@ export interface Department {
   name: string;
 }
 
+/** GET /departments 的完整行（设置页部门管理用） */
+export interface DepartmentItem extends Department {
+  parentId: string | null;
+  _count: { users: number; jobs: number; children: number };
+}
+
+export interface CompanyDoc {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserBrief {
   id: string;
   name: string;

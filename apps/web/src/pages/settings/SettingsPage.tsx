@@ -1,11 +1,35 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS, RoleCode } from '@hireflow/shared';
-import { Alert, App, Button, Card, Checkbox, Modal, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Checkbox,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
-import { auditApi, rbacApi, usersApi } from '../../api';
+import { auditApi, companyDocsApi, departmentsApi, rbacApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import type { ActivityItem, PermissionDef, Role, UserItem } from '../../api/types';
+import type {
+  ActivityItem,
+  CompanyDoc,
+  DepartmentItem,
+  PermissionDef,
+  Role,
+  UserItem,
+} from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
 
 const DATA_SCOPE_LABEL: Record<string, string> = {
@@ -311,6 +335,265 @@ function MembersTab() {
   );
 }
 
+/** 部门管理：改名随时可做；删除要求职位/成员/子部门均为空，避免破坏引用 */
+function DepartmentsTab() {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<DepartmentItem | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form] = Form.useForm();
+  const departmentsQuery = useQuery({ queryKey: ['departments', 'settings'], queryFn: departmentsApi.list });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['departments'] });
+
+  const createMutation = useMutation({
+    mutationFn: (values: { name: string }) => departmentsApi.create(values),
+    onSuccess: () => {
+      message.success('部门已创建');
+      setCreateOpen(false);
+      form.resetFields();
+      void invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '创建失败')),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; name: string }) => departmentsApi.update(vars.id, { name: vars.name }),
+    onSuccess: () => {
+      message.success('部门已更新');
+      setEditing(null);
+      form.resetFields();
+      void invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (id: string) => departmentsApi.remove(id),
+    onSuccess: () => {
+      message.success('部门已删除');
+      void invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '删除失败')),
+  });
+
+  const openEdit = (dept: DepartmentItem) => {
+    setEditing(dept);
+    form.setFieldsValue({ name: dept.name });
+  };
+
+  return (
+    <>
+      <div className="u-flex-between u-mb-16">
+        <span className="u-secondary">共 {departmentsQuery.data?.length ?? 0} 个部门</span>
+        <Button size="small" type="primary" onClick={() => setCreateOpen(true)}>
+          新建部门
+        </Button>
+      </div>
+      <Table<DepartmentItem>
+        rowKey="id"
+        size="small"
+        loading={departmentsQuery.isLoading}
+        dataSource={departmentsQuery.data}
+        pagination={false}
+        columns={[
+          { title: '部门名称', dataIndex: 'name', width: 200 },
+          { title: '成员数', width: 90, render: (_, d) => d._count.users },
+          { title: '职位数', width: 90, render: (_, d) => d._count.jobs },
+          { title: '子部门数', width: 90, render: (_, d) => d._count.children },
+          {
+            title: '操作',
+            width: 140,
+            render: (_, d) => {
+              const empty = d._count.users + d._count.jobs + d._count.children === 0;
+              return (
+                <Space size={0}>
+                  <Button type="link" size="small" onClick={() => openEdit(d)}>
+                    改名
+                  </Button>
+                  {empty ? (
+                    <Popconfirm title={`删除部门「${d.name}」？`} onConfirm={() => removeMutation.mutate(d.id)}>
+                      <Button type="link" size="small" danger>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  ) : (
+                    <Tooltip title="部门下还有职位/成员/子部门，需先清空或转移">
+                      <Button type="link" size="small" danger disabled>
+                        删除
+                      </Button>
+                    </Tooltip>
+                  )}
+                </Space>
+              );
+            },
+          },
+        ]}
+      />
+      <Modal
+        title={editing ? `部门改名：${editing.name}` : '新建部门'}
+        open={createOpen || editing != null}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditing(null);
+          form.resetFields();
+        }}
+        onOk={() => form.submit()}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        destroyOnHidden
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values: { name: string }) =>
+            editing ? updateMutation.mutate({ id: editing.id, name: values.name }) : createMutation.mutate(values)
+          }
+        >
+          <Form.Item name="name" label="部门名称" rules={[{ required: true, min: 1 }]}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+/** 制度文档管理：入职问答机器人按标题/标签/正文做关键词检索作答的知识库来源 */
+function CompanyDocsTab() {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<CompanyDoc | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form] = Form.useForm();
+  const docsQuery = useQuery({ queryKey: ['company-docs'], queryFn: companyDocsApi.list });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['company-docs'] });
+
+  const createMutation = useMutation({
+    mutationFn: (values: { title: string; content: string; tags?: string[] }) => companyDocsApi.create(values),
+    onSuccess: () => {
+      message.success('文档已创建');
+      setCreateOpen(false);
+      form.resetFields();
+      void invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '创建失败')),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; values: Parameters<typeof companyDocsApi.update>[1] }) =>
+      companyDocsApi.update(vars.id, vars.values),
+    onSuccess: () => {
+      message.success('文档已更新');
+      setEditing(null);
+      form.resetFields();
+      void invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (id: string) => companyDocsApi.remove(id),
+    onSuccess: () => {
+      message.success('文档已删除');
+      void invalidate();
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '删除失败')),
+  });
+
+  const openEdit = (doc: CompanyDoc) => {
+    setEditing(doc);
+    form.setFieldsValue({ title: doc.title, content: doc.content, tags: doc.tags });
+  };
+
+  return (
+    <>
+      <div className="u-flex-between u-mb-16">
+        <span className="u-secondary">共 {docsQuery.data?.length ?? 0} 篇 · 入职问答机器人按此内容检索作答</span>
+        <Button size="small" type="primary" onClick={() => setCreateOpen(true)}>
+          新建文档
+        </Button>
+      </div>
+      <Table<CompanyDoc>
+        rowKey="id"
+        size="small"
+        loading={docsQuery.isLoading}
+        dataSource={docsQuery.data}
+        pagination={false}
+        columns={[
+          { title: '标题', dataIndex: 'title', width: 200 },
+          {
+            title: '标签',
+            render: (_, d) => (
+              <>
+                {d.tags.map((t) => (
+                  <Tag key={t} className="u-mb-4">
+                    {t}
+                  </Tag>
+                ))}
+                {d.tags.length === 0 && <span className="u-meta">-</span>}
+              </>
+            ),
+          },
+          {
+            title: '更新时间',
+            dataIndex: 'updatedAt',
+            width: 150,
+            render: (v: string) => dayjs(v).format('YYYY-MM-DD HH:mm'),
+          },
+          {
+            title: '操作',
+            width: 140,
+            render: (_, d) => (
+              <Space size={0}>
+                <Button type="link" size="small" onClick={() => openEdit(d)}>
+                  编辑
+                </Button>
+                <Popconfirm title={`删除文档「${d.title}」？`} onConfirm={() => removeMutation.mutate(d.id)}>
+                  <Button type="link" size="small" danger>
+                    删除
+                  </Button>
+                </Popconfirm>
+              </Space>
+            ),
+          },
+        ]}
+      />
+      <Modal
+        title={editing ? `编辑文档：${editing.title}` : '新建制度文档'}
+        open={createOpen || editing != null}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditing(null);
+          form.resetFields();
+        }}
+        onOk={() => form.submit()}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        width={640}
+        destroyOnHidden
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values: { title: string; content: string; tags?: string[] }) =>
+            editing ? updateMutation.mutate({ id: editing.id, values }) : createMutation.mutate(values)
+          }
+        >
+          <Form.Item name="title" label="标题" rules={[{ required: true, min: 1 }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="tags" label="标签（命中即可被检索到，建议覆盖同义词）">
+            <Select mode="tags" placeholder="输入后回车，可多个" />
+          </Form.Item>
+          <Form.Item name="content" label="正文" rules={[{ required: true, min: 1 }]}>
+            <Input.TextArea rows={8} placeholder="入职问答机器人将依据这段内容回答员工提问" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
 /** 审计日志：全实体操作留痕检索 */
 function AuditTab() {
   const [page, setPage] = useState(1);
@@ -363,7 +646,11 @@ export function SettingsPage() {
       ? [{ key: 'members', label: '成员管理', children: <MembersTab /> }]
       : []),
     ...(hasPermission(PERMISSIONS.CONFIG_MANAGE)
-      ? [{ key: 'audit', label: '审计日志', children: <AuditTab /> }]
+      ? [
+          { key: 'departments', label: '部门管理', children: <DepartmentsTab /> },
+          { key: 'company-docs', label: '制度文档', children: <CompanyDocsTab /> },
+          { key: 'audit', label: '审计日志', children: <AuditTab /> },
+        ]
       : []),
   ];
   return (
