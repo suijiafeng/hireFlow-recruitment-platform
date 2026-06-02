@@ -7,7 +7,7 @@ import {
   type EvaluationConclusion,
   type InterviewStatus,
 } from '@hireflow/shared';
-import { App, Button, Card, DatePicker, Form, Modal, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, DatePicker, Form, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useState } from 'react';
 import { interviewsApi } from '../../api';
@@ -17,12 +17,19 @@ import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { EvaluationModal } from '../../components/EvaluationModal';
 import { useAuthStore } from '../../stores/auth';
 
+/** 15 分钟一档的全天时间选项：下拉单击即选，不用在时间轮盘上滚动+确认 */
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
+  const value = `${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}`;
+  return { value, label: value };
+});
+
 /** 我的可约时段：面试官自维护空闲档，候选人自助选时的档期来源 */
 function MySlotsCard() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
-  const [form] = Form.useForm<{ range: [Dayjs, Dayjs] }>();
+  const [form] = Form.useForm<{ date: Dayjs; startTime: string; endTime: string }>();
+  const startTime = Form.useWatch('startTime', form);
 
   const slotsQuery = useQuery({ queryKey: ['my-slots'], queryFn: interviewsApi.mySlots });
 
@@ -88,15 +95,40 @@ function MySlotsCard() {
         confirmLoading={addMutation.isPending}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" onFinish={(v) => addMutation.mutate(v.range)}>
-          <Form.Item name="range" label="起止时间" rules={[{ required: true, message: '请选择时间段' }]}>
-            <DatePicker.RangePicker
-              showTime={{ format: 'HH:mm', minuteStep: 15 }}
-              format="MM-DD HH:mm"
-              minDate={dayjs()}
-              className="u-w-full"
-            />
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(v) => {
+            const [h1, m1] = v.startTime.split(':').map(Number);
+            const [h2, m2] = v.endTime.split(':').map(Number);
+            const start = v.date.hour(h1).minute(m1).second(0).millisecond(0);
+            const end = v.date.hour(h2).minute(m2).second(0).millisecond(0);
+            addMutation.mutate([start, end]);
+          }}
+        >
+          <Form.Item name="date" label="日期" rules={[{ required: true, message: '请选择日期' }]}>
+            <DatePicker minDate={dayjs()} className="w-160" />
           </Form.Item>
+          <Space className="u-flex-row" align="start">
+            <Form.Item name="startTime" label="开始时间" rules={[{ required: true, message: '请选择开始时间' }]}>
+              <Select
+                className="w-120"
+                showSearch
+                placeholder="00:00"
+                options={TIME_OPTIONS}
+                onChange={() => form.setFieldValue('endTime', undefined)}
+              />
+            </Form.Item>
+            <Form.Item name="endTime" label="结束时间" rules={[{ required: true, message: '请选择结束时间' }]}>
+              <Select
+                className="w-120"
+                showSearch
+                placeholder="00:00"
+                disabled={!startTime}
+                options={TIME_OPTIONS.filter((t) => !startTime || t.value > startTime)}
+              />
+            </Form.Item>
+          </Space>
         </Form>
       </Modal>
     </Card>
