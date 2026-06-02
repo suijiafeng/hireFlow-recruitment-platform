@@ -40,54 +40,6 @@ services:
     volumes:
       - miniodata:/data
 
-  # ── 一键演示环境（默认不启动，不影响日常 `docker compose up -d` 只起基础设施）──
-  # 启动：docker compose --profile demo up -d --build   访问 http://localhost:8080
-  # 测试账号：admin@arthr.local / Admin@123456 等，见 apps/api/prisma/seed.ts
-  api:
-    profiles: ['demo']
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: api
-    container_name: hireflow-api
-    environment:
-      DATABASE_URL: postgresql://arthr:arthr_dev_password@postgres:5432/arthr?schema=public
-      JWT_SECRET: demo-only-jwt-secret-change-me
-      # 内网访问 MinIO 用服务名；预签名 URL 按浏览器可达地址签（SigV4 签 Host）
-      S3_ENDPOINT: http://minio:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
-      S3_ACCESS_KEY: arthr
-      S3_SECRET_KEY: arthr_dev_password
-      S3_BUCKET: arthr
-      # 不配 key 时 AI 网关自动降级规则引擎，全链路仍可演示
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-8}
-      AI_PROVIDER: ${AI_PROVIDER:-auto}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_started
-    healthcheck:
-      test: ['CMD-SHELL', 'wget -qO /dev/null http://127.0.0.1:3000/api/docs || exit 1']
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 15s
-
-  web:
-    profiles: ['demo']
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: web
-    container_name: hireflow-web
-    ports:
-      - '8080:80'
-    depends_on:
-      api:
-        condition: service_healthy
-
 volumes:
   pgdata:
   miniodata:

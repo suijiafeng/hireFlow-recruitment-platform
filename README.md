@@ -44,16 +44,6 @@ npm run dev                   # shared 监听编译 + api(:3000) + web(:5173)
 
 打开 http://localhost:5173 ，接口文档在 http://localhost:3000/api/docs 。
 
-### 一键演示环境（Docker）
-
-不装 Node 也能跑起来看效果：
-
-```bash
-docker compose --profile demo up -d --build   # 构建 api + web 镜像并启动全套
-```
-
-访问 http://localhost:8080 （迁移与种子在容器启动时自动执行）。
-
 ### 测试账号（密码统一 `Admin@123456`）
 
 | 账号 | 角色 | 数据范围 |
@@ -99,9 +89,9 @@ ANTHROPIC_MODEL="claude-opus-4-8"   # 成本敏感可换 claude-haiku-4-5
 
 ## 部署
 
-- **Docker Compose**：`docker compose --profile demo up -d --build`，单机全套（nginx 静态站 + API + 基础设施），适合内网演示。
-- **Render**：仓库根目录带 [render.yaml](render.yaml) Blueprint（Managed Postgres + API + Web 三服务），控制台 New → Blueprint 选择本仓库即可；免费档实例休眠后仅公网流量可唤醒，`API_ORIGIN` 填 API 服务公网 URL（nginx 反代已做协议归一化）。对象存储需另配 S3 兼容服务（如 Cloudflare R2），环境变量见 [apps/api/.env.example](apps/api/.env.example)。
-- **其他平台**：`Dockerfile` 多阶段构建产出 `api` / `web` 两个 target（Render 不支持 target 选择的场景用独立的 `Dockerfile.api`）；web 镜像的 nginx 反代目标通过环境变量 `API_ORIGIN` 注入，无平台耦合。
+推荐部署到 [Render](https://render.com)：仓库根目录带 [render.yaml](render.yaml) Blueprint（Managed Postgres + API + Web 三服务），控制台 New → Blueprint 选择本仓库即可自动建齐。免费档实例休眠后仅公网流量可唤醒，`API_ORIGIN` 填 API 服务公网 URL（nginx 反代已做协议归一化，私网/公网地址都能用）。对象存储需另配 S3 兼容服务（如 Cloudflare R2），环境变量见 [apps/api/.env.example](apps/api/.env.example)。
+
+API 用 [Dockerfile.api](Dockerfile.api)，Web 用根目录 [Dockerfile](Dockerfile)（两个文件分开，是因为 Render 目前不支持给多阶段 Dockerfile 指定 target——两者的 deps/build 层完全一致，改动时需同步维护）。
 
 ## 设计原则
 
