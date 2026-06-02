@@ -392,7 +392,7 @@ function DepartmentsTab() {
       </div>
       <Table<DepartmentItem>
         rowKey="id"
-        size="small"
+        scroll={{ x: 700 }}
         loading={departmentsQuery.isLoading}
         dataSource={departmentsQuery.data}
         pagination={false}
@@ -516,7 +516,7 @@ function CompanyDocsTab() {
       </div>
       <Table<CompanyDoc>
         rowKey="id"
-        size="small"
+        scroll={{ x: 700 }}
         loading={docsQuery.isLoading}
         dataSource={docsQuery.data}
         pagination={false}
