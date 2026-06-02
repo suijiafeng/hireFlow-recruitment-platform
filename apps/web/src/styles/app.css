@@ -1380,8 +1380,12 @@
   border-radius: 8px;
   border: 1px solid #f5f5f5;
   box-shadow: 0 1px 3px 0 rgba(26, 26, 26, 0.04), 0 1px 2px -1px rgba(26, 26, 26, 0.03);
-  /* Row 默认 align-items: stretch 会把同行 Col 撑到等高，卡片自身也要跟着填满，
-     否则内容短的卡片会在撑高的 Col 里留出空白，跟邻居卡片底边对不齐 */
+}
+/* Row 默认 align-items: stretch 会把同行 Col 撑到等高；Col 里只有一张卡片时让它填满，
+   跟邻居卡片底边对齐。限定 :only-child——如果一列里堆了多张卡片（如入职问答页
+   常见问题+知识库范围），每张都撑 100% 会互相打架、无限增高，那种场景要让卡片按
+   自身内容天然堆叠，不能填满整列 */
+.ant-col > .ant-card:only-child {
   height: 100%;
 }
 .ant-card-head {
