@@ -1384,8 +1384,10 @@
 /* Row 默认 align-items: stretch 会把同行 Col 撑到等高；Col 里只有一张卡片时让它填满，
    跟邻居卡片底边对齐。限定 :only-child——如果一列里堆了多张卡片（如入职问答页
    常见问题+知识库范围），每张都撑 100% 会互相打架、无限增高，那种场景要让卡片按
-   自身内容天然堆叠，不能填满整列 */
-.ant-col > .ant-card:only-child {
+   自身内容天然堆叠，不能填满整列。排除 .chat-card：它自己按视口算高度
+   （height: calc(100vh - 180px)），这条规则的选择器特异性比 .chat-card 单类名高，
+   不排除的话会反过来盖掉它自己的公式，被邻列（常见问题+知识库范围）内容多少牵着走 */
+.ant-col > .ant-card:only-child:not(.chat-card) {
   height: 100%;
 }
 .ant-card-head {
