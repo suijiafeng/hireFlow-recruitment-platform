@@ -7,15 +7,6 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
-  // 临时排查：记录所有写请求的来源（定位 stray PATCH 问题后可移除）
-  app.use((req: { method: string; url: string; headers: Record<string, string> }, _res: unknown, next: () => void) => {
-    if (req.method !== 'GET' && req.method !== 'OPTIONS') {
-      console.log(
-        `[REQ] ${new Date().toISOString()} ${req.method} ${req.url} ua="${req.headers['user-agent']?.slice(0, 40)}" referer="${req.headers.referer ?? '-'}"`,
-      );
-    }
-    next();
-  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
