@@ -10,6 +10,11 @@ apps/api/src/generated/
 .env.local
 .env.*.local
 
+# 本地 PGlite 数据目录（npm run dev 自动创建；要重来就 npm run db:reset）
+apps/api/.pgdata/
+# 迁移前从旧库导出的备份
+.backup/
+
 *.log
 .DS_Store
 coverage/

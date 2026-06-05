@@ -56,8 +56,8 @@
 
 🤖 AI Gateway: Anthropic SDK + Fallback Rule Engine
 💾 Storage: MinIO (dev) | S3-compatible (prod)
-🗄️ Database: PostgreSQL 18 | Redis
-🐳 Infrastructure: Docker Compose
+🗄️ Database: PostgreSQL 18 — PGlite/WASM (dev, 零安装) | 任意 Postgres (prod)
+🐳 Infrastructure: Docker Compose (可选)
 ```
 
 | 层 | 技术选型 | 说明 |
@@ -75,8 +75,9 @@
 
 ### 前置条件
 - Node.js ≥ 20.19
-- Docker & Docker Compose
-- npm 或 yarn
+- npm
+
+**不需要装 Docker，也不需要装 PostgreSQL。** 本地数据库用的是 [PGlite](https://pglite.dev)——把 PostgreSQL 18.3 编译成 WASM，随 `npm install` 一起下载（约 8MB），由 `npm run dev` 自动拉起，数据存在 `apps/api/.pgdata/`。
 
 ### 步骤 1：克隆并安装依赖
 
@@ -86,37 +87,48 @@ cd ai-powered-pecruitment-platform
 npm install
 ```
 
-### 步骤 2：启动基础设施
-
-```bash
-docker compose up -d
-# 启动 PostgreSQL 18 | Redis | MinIO
-```
-
-### 步骤 3：配置环境变量
+### 步骤 2：配置环境变量
 
 ```bash
 cp apps/api/.env.example apps/api/.env
-# 编辑 .env，配置数据库连接等（默认已适配 docker compose）
 ```
 
-### 步骤 4：初始化数据库
+默认值开箱即用，不用改。
 
-```bash
-npm run db:migrate            # 执行迁移脚本
-npm run db:generate           # 生成 Prisma Client
-npm run db:seed               # 写入角色、权限、测试账号
-```
-
-### 步骤 5：启动开发服务
+### 步骤 3：启动
 
 ```bash
 npm run dev
-# 自动启动：
-#   - shared 文件监听编译
-#   - API 服务 → http://localhost:3000
-#   - Web 服务 → http://localhost:5173
 ```
+
+首次运行会自动建库、跑迁移、灌演示数据（约 6 秒），然后启动：
+
+```
+db     → PGlite      127.0.0.1:5433
+api    → NestJS      http://localhost:3000
+web    → Vite        http://localhost:5173
+```
+
+### 数据库常用命令
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run db:reset` | 删库重建并重新灌演示数据 |
+| `npm run db:import <file.sql>` | 导入 `pg_dump --data-only --inserts` 生成的 SQL（会先清空现有业务数据） |
+| `npm run db:setup` | 只建库/补迁移，不启动服务 |
+
+> **一次只能跑一个。** PGlite 对数据目录没有跨进程锁——两个进程同时打开同一个 `.pgdata` 会写坏 WAL 且不可恢复。脚本会在打开数据目录前先探端口 5433 并拦下，但别绕过它手动起第二个实例。真被写坏了就 `npm run db:reset`。
+
+### 想用真 Postgres？
+
+把 `apps/api/.env` 里的 `DATABASE_URL` 换成你的连接串，然后：
+
+```bash
+docker compose up -d          # 或者用你自己的 Postgres
+npm run dev:external-db       # 不拉起 PGlite，直连 DATABASE_URL
+```
+
+生产环境本来就走这条路（见 [render.yaml](render.yaml)），schema 和迁移完全一致。
 
 ### 验证安装
 
