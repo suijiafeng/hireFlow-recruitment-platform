@@ -44,6 +44,11 @@
   justify-content: space-between;
   align-items: center;
 }
+.u-flex-end {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
 .u-flex-row {
   display: flex;
 }
@@ -90,6 +95,7 @@
 .u-mt-8 { margin-top: 8px; }
 .u-mt-16 { margin-top: 16px; }
 .u-mt-24 { margin-top: 24px; }
+.u-mr-16 { margin-right: 16px; }
 .u-mb-4 { margin-bottom: 4px; }
 .u-mb-8 { margin-bottom: 8px; }
 .u-mb-16 { margin-bottom: 16px; }

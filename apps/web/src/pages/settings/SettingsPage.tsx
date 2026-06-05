@@ -384,8 +384,7 @@ function DepartmentsTab() {
 
   return (
     <>
-      <div className="u-flex-between u-mb-16">
-        <span className="u-secondary">共 {departmentsQuery.data?.length ?? 0} 个部门</span>
+      <div className="u-flex-end u-mb-16 u-mt-16">
         <Button size="small" type="primary" onClick={() => setCreateOpen(true)}>
           新建部门
         </Button>
@@ -508,8 +507,7 @@ function CompanyDocsTab() {
 
   return (
     <>
-      <div className="u-flex-between u-mb-16">
-        <span className="u-secondary">共 {docsQuery.data?.length ?? 0} 篇 · 入职问答机器人按此内容检索作答</span>
+      <div className="u-flex-end u-mb-16 u-mt-16">
         <Button size="small" type="primary" onClick={() => setCreateOpen(true)}>
           新建文档
         </Button>
