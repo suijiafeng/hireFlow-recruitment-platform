@@ -13,6 +13,8 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
+  // 内部通讯录：候选人/新员工/IT 无正当理由拉取全公司名单，用「能看大盘」的常规员工权限作为门槛
+  @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
   @ApiOperation({ summary: '内部用户列表（可按角色过滤，如 ?role=INTERVIEWER）' })
   @ApiQuery({ name: 'role', required: false })
   list(@Query('role') role?: string) {

@@ -129,9 +129,12 @@ describe('OffersService 状态机守卫', () => {
       makeOffer({ expiresAt: new Date(Date.now() - 1000) }),
     );
     await expect(service.respond('o1', { decision: 'ACCEPTED' }, HR)).rejects.toThrow('已超过答复期');
-    // 懒过期落库 + 通知 HR
-    expect(prisma.offer.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { approvalStatus: 'EXPIRED' } }),
+    // 懒过期落库（写入条件带状态前置，并发懒扫描只生效一次）+ 通知 HR
+    expect(prisma.offer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'o1', approvalStatus: 'SENT', decision: null }),
+        data: { approvalStatus: 'EXPIRED' },
+      }),
     );
     expect(notifications.pushToRole).toHaveBeenCalled();
   });

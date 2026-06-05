@@ -32,8 +32,8 @@ export class JobsController {
   @Get(':id')
   @RequirePermissions(PERMISSIONS.JOB_READ)
   @ApiOperation({ summary: '职位详情（含阶段）' })
-  findOne(@Param('id') id: string) {
-    return this.jobsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.jobsService.findOne(id, user);
   }
 
   @Patch(':id')
@@ -46,8 +46,8 @@ export class JobsController {
   @Get(':id/stages')
   @RequirePermissions(PERMISSIONS.JOB_READ)
   @ApiOperation({ summary: '职位的 Pipeline 阶段列表' })
-  getStages(@Param('id') id: string) {
-    return this.jobsService.getStages(id);
+  getStages(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.jobsService.getStages(id, user);
   }
 
   @Put(':id/stages')

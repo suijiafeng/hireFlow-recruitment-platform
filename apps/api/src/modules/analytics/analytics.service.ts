@@ -14,10 +14,12 @@ export class AnalyticsService {
   /** 待办事项聚合 To-Do Center */
   async todos(user: JwtUser) {
     const now = new Date();
-    // 待处理新简历：停留在各职位第一阶段的在途应聘
-    const newResumes = await this.prisma.application.count({
-      where: { status: 'ACTIVE', stage: { order: 0 }, job: { status: 'OPEN' } },
-    });
+    // 待处理新简历：停留在各职位第一阶段的在途应聘（无 job:read 的角色如 IT/新员工不该看到这个数字）
+    const newResumes = user.permissions.includes(PERMISSIONS.JOB_READ)
+      ? await this.prisma.application.count({
+          where: { status: 'ACTIVE', stage: { order: 0 }, job: { status: 'OPEN' } },
+        })
+      : null;
     // 我的待提交面评：我被指派、面试时间已过、且我尚未提交评价
     const myPendingEvaluations = await this.prisma.interview.count({
       where: {
@@ -49,18 +51,21 @@ export class AnalyticsService {
           },
         })
       : null;
-    const onboardingInProgress = await this.prisma.onboarding.count({
-      where: { status: 'IN_PROGRESS' },
-    });
+    const canReadOnboarding = user.permissions.includes(PERMISSIONS.ONBOARDING_READ);
+    const onboardingInProgress = canReadOnboarding
+      ? await this.prisma.onboarding.count({ where: { status: 'IN_PROGRESS' } })
+      : null;
     // 待人工核对材料（低置信度阻断）：documents 为 JSON 数组，量小直接内存过滤
-    const inProgress = await this.prisma.onboarding.findMany({
-      where: { status: 'IN_PROGRESS' },
-      select: { documents: true },
-    });
-    const docsNeedReview = inProgress.reduce((sum, o) => {
-      const docs = (o.documents as Array<{ needsReview?: boolean }> | null) ?? [];
-      return sum + docs.filter((d) => d.needsReview).length;
-    }, 0);
+    const docsNeedReview = canReadOnboarding
+      ? await this.prisma.onboarding
+          .findMany({ where: { status: 'IN_PROGRESS' }, select: { documents: true } })
+          .then((inProgress) =>
+            inProgress.reduce((sum, o) => {
+              const docs = (o.documents as Array<{ needsReview?: boolean }> | null) ?? [];
+              return sum + docs.filter((d) => d.needsReview).length;
+            }, 0),
+          )
+      : null;
     return {
       newResumes,
       myPendingEvaluations,

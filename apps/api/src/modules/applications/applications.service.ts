@@ -57,6 +57,7 @@ export class ApplicationsService {
       },
     });
     if (!application) throw new NotFoundException('应聘记录不存在');
+    await this.assertJobDepartmentScope(application.jobId, user);
 
     const resume = application.candidate.resumes[0];
     const resumeText = resume?.rawText ?? (resume?.parsed ? JSON.stringify(resume.parsed) : '');
@@ -193,6 +194,7 @@ export class ApplicationsService {
       include: { stage: true, candidate: { select: { name: true } } },
     });
     if (!application) throw new NotFoundException('应聘记录不存在');
+    await this.assertJobDepartmentScope(application.jobId, user);
     if (application.status !== 'ACTIVE') {
       throw new BadRequestException('已淘汰/已入职的应聘记录不可再流转（终态不可逆，可重新激活生成新应聘）');
     }
@@ -279,6 +281,7 @@ export class ApplicationsService {
       include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
     });
     if (!application) throw new NotFoundException('应聘记录不存在');
+    await this.assertJobDepartmentScope(application.jobId, user);
     if (application.status !== 'ACTIVE') throw new BadRequestException('该应聘已不在流程中');
 
     const updated = await this.prisma.application.update({
@@ -342,6 +345,7 @@ export class ApplicationsService {
     if (new Set(apps.map((a) => a.jobId)).size > 1) {
       throw new BadRequestException('仅支持同一职位内的候选人对比');
     }
+    await this.assertJobDepartmentScope(apps[0].jobId, user);
 
     const candidates = apps.map((a) => {
       const evaluations = a.interviews
@@ -387,6 +391,7 @@ export class ApplicationsService {
       include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
     });
     if (!application) throw new NotFoundException('应聘记录不存在');
+    await this.assertJobDepartmentScope(application.jobId, user);
     if (application.status !== 'ACTIVE') throw new BadRequestException('该应聘已不在流程中');
 
     let token = application.prescreenToken;
@@ -430,15 +435,19 @@ export class ApplicationsService {
       include: { candidate: { select: { name: true } }, job: { select: { id: true, title: true } } },
     });
     if (!application) throw new NotFoundException('链接无效或已失效，请联系 HR');
+    if (application.status !== 'ACTIVE') throw new BadRequestException('该应聘已不在流程中，预筛链接已失效');
     if (application.prescreen) throw new BadRequestException('预筛信息已提交过，如需更正请联系 HR');
 
     const flags: string[] = [];
-    const topOffer = await this.prisma.offer.findFirst({
+    // salary 是 JSON 字段，取「最高」只能在应用层比较（DB 侧 orderBy 只能按 createdAt，选不出最高 base）
+    const sentOffers = await this.prisma.offer.findMany({
       where: { application: { jobId: application.job.id }, sentAt: { not: null } },
-      orderBy: { createdAt: 'desc' },
       select: { salary: true },
     });
-    const band = (topOffer?.salary as { base?: number } | null)?.base;
+    const band = sentOffers.reduce<number | undefined>((max, o) => {
+      const base = (o.salary as { base?: number } | null)?.base;
+      return base != null && (max === undefined || base > max) ? base : max;
+    }, undefined);
     if (band && dto.expectedSalary > band * 1.2) {
       flags.push(`期望薪资 ¥${dto.expectedSalary} 超出该职位近期 Offer 水平（¥${band}）20% 以上`);
     }
@@ -537,5 +546,13 @@ export class ApplicationsService {
       _max: { position: true },
     });
     return (last._max.position ?? 0) + 1;
+  }
+
+  /** 数据行级权限：应聘记录所属职位需落在调用者部门内（与 board() 同规则，仅 DEPARTMENT scope 生效） */
+  private async assertJobDepartmentScope(jobId: string, user: JwtUser) {
+    const deptScope = departmentScopeOf(user);
+    if (!deptScope) return;
+    const owned = await this.prisma.job.findFirst({ where: { id: jobId, departmentId: deptScope }, select: { id: true } });
+    if (!owned) throw new ForbiddenException('无权操作其他部门的应聘记录（数据范围：本部门）');
   }
 }

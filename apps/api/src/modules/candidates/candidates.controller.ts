@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { fileTypeFilter, RESUME_MIME_TYPES } from '../../common/upload';
 import { CandidatesService } from './candidates.service';
 import { AddResumeDto } from './dto/add-resume.dto';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
@@ -64,7 +65,12 @@ export class CandidatesController {
 
   @Post(':id/resumes/file')
   @RequirePermissions(PERMISSIONS.CANDIDATE_UPDATE)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: fileTypeFilter(RESUME_MIME_TYPES),
+    }),
+  )
   @ApiOperation({ summary: '上传简历原件（PDF/文本自动抽取文字进入解析链路，原件入对象存储）' })
   addResumeFile(
     @Param('id') id: string,

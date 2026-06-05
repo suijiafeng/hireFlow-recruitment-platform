@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   ACTIVITY_ACTIONS,
   DEFAULT_ONBOARDING_CHECKLIST,
@@ -9,7 +15,7 @@ import {
 } from '@hireflow/shared';
 import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
-import { candidateActor, newPortalToken } from '../../common/portal';
+import { candidateActor, CN_TZ_OFFSET_MS, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ApplicationsService } from '../applications/applications.service';
@@ -158,6 +164,15 @@ export class OnboardingService {
       include: ONBOARDING_INCLUDE,
     });
     if (!onboarding) throw new NotFoundException('入职单不存在');
+    // 数据行级权限：与 list() 同规则，用人经理仅本部门职位的入职单
+    const deptScope = user ? departmentScopeOf(user) : null;
+    if (deptScope) {
+      const owned = await this.prisma.job.findFirst({
+        where: { id: onboarding.application.job.id, departmentId: deptScope },
+        select: { id: true },
+      });
+      if (!owned) throw new ForbiddenException('仅可查看本部门的入职单（数据范围：本部门）');
+    }
     return {
       ...(await this.withDocUrls(this.maskContractSalary(onboarding, user))),
       progress: this.progressOf(onboarding.checklist),
@@ -277,7 +292,8 @@ export class OnboardingService {
       salaryBase: salary?.base ?? null,
       bonusMonths: salary?.bonusMonths ?? 0,
       probationMonths: 3,
-      signDate: new Date().toISOString().slice(0, 10),
+      // 部署环境（容器）默认 UTC，直接切 toISOString 在北京时间 00:00-08:00 会错算成前一天
+      signDate: new Date(Date.now() + CN_TZ_OFFSET_MS).toISOString().slice(0, 10),
     };
     const contract = await this.prisma.contract.create({
       data: {
@@ -328,8 +344,9 @@ export class OnboardingService {
     if (contract.signStatus !== 'SENT') throw new BadRequestException('仅已发送的合同可签署');
     const { evidenceNo, signedAt } = await this.esign.sign({ contractId });
 
-    await this.prisma.contract.update({
-      where: { id: contractId },
+    // 状态前置条件进写入条件：新员工连点两次「签署」，只有一次真正落库、触发后续留痕/勾选/IT Webhook
+    const result = await this.prisma.contract.updateMany({
+      where: { id: contractId, signStatus: 'SENT' },
       data: {
         signStatus: 'SIGNED',
         evidenceNo,
@@ -339,6 +356,7 @@ export class OnboardingService {
         } as unknown as Prisma.InputJsonValue,
       },
     });
+    if (result.count === 0) throw new ConflictException('该合同刚被签署过，请刷新查看');
     const applicationId = contract.onboarding.applicationId;
     await this.activityLog.record(user, ACTIVITY_ACTIONS.CONTRACT_SIGNED, 'Application', applicationId, {
       evidenceNo,

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, UploadedFile, UseInterceptors } fro
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
+import { fileTypeFilter, ONBOARDING_DOCUMENT_MIME_TYPES } from '../../common/upload';
 import { AddDocumentDto } from './dto/onboarding.dto';
 import { OnboardingService } from './onboarding.service';
 
@@ -28,7 +29,12 @@ export class OnboardingPortalController {
   }
 
   @Post(':token/documents/file')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: fileTypeFilter(ONBOARDING_DOCUMENT_MIME_TYPES),
+    }),
+  )
   @ApiOperation({ summary: '新员工拍照上传材料（图片留档；可附文字走 OCR，纯图片转人工核对）' })
   addDocumentFile(
     @Param('token') token: string,

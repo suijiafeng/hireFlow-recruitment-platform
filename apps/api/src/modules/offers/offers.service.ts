@@ -412,11 +412,12 @@ export class OffersService {
     ) {
       return offer;
     }
-    const updated = await this.prisma.offer.update({
-      where: { id: offer.id },
+    // 状态前置条件进写入条件：并发懒扫描（如两个 HR 前后脚打开列表页）只会有一个真正执行失效副作用
+    const result = await this.prisma.offer.updateMany({
+      where: { id: offer.id, approvalStatus: 'SENT', decision: null },
       data: { approvalStatus: 'EXPIRED' },
-      include: OFFER_INCLUDE,
     });
+    if (result.count === 0) return this.findOrThrow(offer.id);
     await this.activityLog.record(null, ACTIVITY_ACTIONS.OFFER_EXPIRED, 'Application', offer.applicationId, {
       candidate: offer.application.candidate.name,
       expiresAt: offer.expiresAt.toISOString(),
@@ -427,7 +428,7 @@ export class OffersService {
       `${offer.application.job.title} · 超过答复期未答复${offer.extendedOnce ? '（已用过续期）' : '，可续期一次'}`,
       '/offers',
     );
-    return updated;
+    return { ...offer, approvalStatus: 'EXPIRED' };
   }
 
   /** HC 满编自动暂停职位，并通知 HR 与用人经理 */
@@ -476,6 +477,11 @@ export class OffersService {
       },
     });
     if (!offer) throw new NotFoundException('Offer 不存在');
+    // 数据行级权限：与 list()/approve() 同规则，用人经理仅本部门职位的 Offer
+    const deptScope = departmentScopeOf(user);
+    if (deptScope && offer.application.job.departmentId !== deptScope) {
+      throw new ForbiddenException('仅可查看本部门职位的 Offer（数据范围：本部门）');
+    }
     const { candidate, job } = offer.application;
     const parsed = candidate.resumes[0]?.parsed as { summary?: string } | null;
     const { data, meta } = await this.ai.predictRetention({

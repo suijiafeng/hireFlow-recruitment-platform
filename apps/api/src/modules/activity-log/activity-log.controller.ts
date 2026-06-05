@@ -11,7 +11,8 @@ export class ActivityLogController {
   constructor(private readonly service: ActivityLogService) {}
 
   @Get()
-  @ApiOperation({ summary: '按实体查询操作时间轴' })
+  @RequirePermissions(PERMISSIONS.CONFIG_MANAGE)
+  @ApiOperation({ summary: '按实体查询操作时间轴（跨部门/跨实体，仅管理员；业务页面的时间轴走各自详情接口的行级范围）' })
   timeline(@Query('entityType') entityType: string, @Query('entityId') entityId: string) {
     return this.service.timeline(entityType, entityId);
   }

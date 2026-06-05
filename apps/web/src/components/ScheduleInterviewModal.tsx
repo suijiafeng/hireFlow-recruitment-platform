@@ -11,6 +11,10 @@ interface Props {
   onClose: () => void;
 }
 
+/** 有 evaluation:submit 权限的角色（见 packages/shared/src/permissions.ts 默认权限映射），
+ * 才会被列进「面试官」候选名单——排除 IT/新员工/候选人等不参与面评的账号 */
+const INTERVIEWER_ELIGIBLE_ROLES = new Set(['ADMIN', 'HR', 'HIRING_MANAGER', 'INTERVIEWER']);
+
 export function ScheduleInterviewModal({ applicationId, existingRounds = 0, onClose }: Props) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -82,7 +86,9 @@ export function ScheduleInterviewModal({ applicationId, existingRounds = 0, onCl
             mode="multiple"
             placeholder="选择面试官"
             loading={usersQuery.isLoading}
-            options={usersQuery.data?.map((u) => ({ value: u.id, label: u.name }))}
+            options={usersQuery.data
+              ?.filter((u) => u.roles.some((ur) => INTERVIEWER_ELIGIBLE_ROLES.has(ur.role.code)))
+              .map((u) => ({ value: u.id, label: u.name }))}
           />
         </Form.Item>
         <Form.Item name="meetingUrl" label="会议链接（可选，二期自动生成）">

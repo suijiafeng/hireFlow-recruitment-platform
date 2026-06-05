@@ -51,6 +51,9 @@ export const ACTIVITY_ACTIONS = {
   APPLICATION_STAGE_REVERTED: 'application.stage_reverted',
   ROLE_PERMISSIONS_UPDATED: 'role.permissions_updated',
   USER_ROLES_UPDATED: 'user.roles_updated',
+  DEPARTMENT_CREATED: 'department.created',
+  DEPARTMENT_UPDATED: 'department.updated',
+  DEPARTMENT_DELETED: 'department.deleted',
 } as const;
 
 /** 入职三方待办清单默认模板，owner: HR / IT / NEW_HIRE */

@@ -26,15 +26,19 @@ export function candidateActor(name: string): JwtUser {
   };
 }
 
-/** 从 from 起加 N 个工作日（跳过周六日；法定节假日后续接日历服务），截止到当天 23:59:59 */
+/** 中国时区偏移（+8h）：部署环境（容器默认 UTC）不保证配置 TZ，涉及"当天"的日期计算一律按此显式换算，不依赖服务器本地时区 */
+export const CN_TZ_OFFSET_MS = 8 * 3600 * 1000;
+
+/** 从 from 起加 N 个工作日（跳过周六日；法定节假日后续接日历服务），按北京时间计算，截止到当天 23:59:59 */
 export function addBusinessDays(from: Date, days: number): Date {
-  const d = new Date(from);
+  // 平移到「以 UTC 方法读写 = 读写北京时间」的等效时刻，日期算术跑完再平移回真实 UTC 时刻
+  const shifted = new Date(from.getTime() + CN_TZ_OFFSET_MS);
   let remaining = days;
   while (remaining > 0) {
-    d.setDate(d.getDate() + 1);
-    const dow = d.getDay();
+    shifted.setUTCDate(shifted.getUTCDate() + 1);
+    const dow = shifted.getUTCDay();
     if (dow !== 0 && dow !== 6) remaining -= 1;
   }
-  d.setHours(23, 59, 59, 999);
-  return d;
+  shifted.setUTCHours(23, 59, 59, 999);
+  return new Date(shifted.getTime() - CN_TZ_OFFSET_MS);
 }

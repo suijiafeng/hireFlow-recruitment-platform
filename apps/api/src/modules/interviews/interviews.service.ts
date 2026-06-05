@@ -8,7 +8,7 @@ import {
 import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
 import { departmentScopeOf, isAssignedScope } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
-import { candidateActor, newPortalToken } from '../../common/portal';
+import { candidateActor, CN_TZ_OFFSET_MS, newPortalToken } from '../../common/portal';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
@@ -38,6 +38,9 @@ export class InterviewsService {
       include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
     });
     if (!application) throw new NotFoundException('应聘记录不存在');
+    if (application.status !== 'ACTIVE') {
+      throw new BadRequestException('已淘汰/已入职的应聘记录不可再安排面试');
+    }
 
     const interview = await this.prisma.interview.create({
       data: {
@@ -90,6 +93,11 @@ export class InterviewsService {
       where: { id },
       data: { status: 'CANCELED' },
       include: INTERVIEW_INCLUDE,
+    });
+    // 释放候选人自助选定的面试官时段：否则该时段永久卡在「已占用」，面试官既约不出去也删不掉
+    await this.prisma.interviewerSlot.updateMany({
+      where: { bookedBy: id },
+      data: { bookedBy: null },
     });
     await this.activityLog.record(
       user,
@@ -179,9 +187,19 @@ export class InterviewsService {
   async submitEvaluation(interviewId: string, dto: SubmitEvaluationDto, user: JwtUser) {
     const interview = await this.prisma.interview.findUnique({
       where: { id: interviewId },
-      include: { application: { include: { candidate: { select: { name: true } } } } },
+      include: {
+        interviewers: true,
+        application: { include: { candidate: { select: { name: true } } } },
+      },
     });
     if (!interview) throw new NotFoundException('面试不存在');
+    if (interview.status === 'CANCELED') {
+      throw new BadRequestException('该面试已取消，不可提交评价');
+    }
+    // 「仅被指派」范围的面试官只能对自己参与的场次打分；HR/管理员/用人经理按其原有数据范围不受此限
+    if (isAssignedScope(user) && !interview.interviewers.some((i) => i.userId === user.sub)) {
+      throw new ForbiddenException('仅可对自己被指派的面试提交评价');
+    }
 
     const evaluation = await this.prisma.evaluation.upsert({
       where: { interviewId_interviewerId: { interviewId, interviewerId: user.sub } },
@@ -232,8 +250,7 @@ export class InterviewsService {
     if (!(start < end)) throw new BadRequestException('结束时间必须晚于开始时间');
     if (start < new Date()) throw new BadRequestException('不能添加过去的时段');
     // 门户展示仅取结束时间 HH:mm，跨天会渲染成「23:00 - 01:00」的伪时段：按 +8 时区禁止跨天
-    const CN_OFFSET = 8 * 3600 * 1000;
-    const dayOf = (d: Date) => Math.floor((d.getTime() + CN_OFFSET) / 86_400_000);
+    const dayOf = (d: Date) => Math.floor((d.getTime() + CN_TZ_OFFSET_MS) / 86_400_000);
     if (dayOf(start) !== dayOf(end)) {
       throw new BadRequestException('可约时段不能跨天，请拆分为多个时段');
     }
@@ -333,8 +350,10 @@ export class InterviewsService {
     if (!interview) throw new NotFoundException('链接无效或已失效，请联系 HR');
     if (interview.scheduledAt) throw new BadRequestException('该面试时间已确定');
 
+    // slotId 必须归属本场面试的被指派面试官之一，防止跨面试劫持他人空闲时段
+    const interviewerIds = interview.interviewers.map((i) => i.userId);
     const claimed = await this.prisma.interviewerSlot.updateMany({
-      where: { id: slotId, bookedBy: null },
+      where: { id: slotId, bookedBy: null, userId: { in: interviewerIds } },
       data: { bookedBy: interview.id },
     });
     if (claimed.count === 0) {

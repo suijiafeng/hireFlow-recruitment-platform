@@ -759,7 +759,13 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
             existingRounds={scheduleFor?.rounds}
             onClose={() => setScheduleFor(null)}
           />
-          <EvaluationModal interviewId={evaluateFor} onClose={() => setEvaluateFor(null)} />
+          <EvaluationModal
+            interviewId={evaluateFor}
+            dimensions={detail.applications
+              .find((a) => a.interviews.some((iv) => iv.id === evaluateFor))
+              ?.job.scorecardTemplate?.map((t) => t.dimension)}
+            onClose={() => setEvaluateFor(null)}
+          />
         </>
       )}
     </Drawer>

@@ -65,6 +65,7 @@ export class InterviewsController {
 @ApiTags('interviews')
 @ApiBearerAuth()
 @Controller('interviewer-slots')
+@RequirePermissions(PERMISSIONS.EVALUATION_SUBMIT)
 export class InterviewerSlotsController {
   constructor(private readonly interviewsService: InterviewsService) {}
 

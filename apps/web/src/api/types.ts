@@ -146,7 +146,7 @@ export interface Role {
 
 export interface DetailApplication {
   id: string;
-  job: { id: string; title: string };
+  job: { id: string; title: string; scorecardTemplate?: ScorecardDimension[] | null };
   stage: { id: string; name: string };
   status: ApplicationStatus;
   matchScore: number | null;
@@ -359,13 +359,13 @@ export interface HelpdeskAnswer {
 }
 
 export interface TodoSummary {
-  newResumes: number;
+  newResumes: number | null;
   myPendingEvaluations: number;
   pendingOffers: number | null;
   rejectedOffers: number | null;
   offersDue: number | null;
-  onboardingInProgress: number;
-  docsNeedReview: number;
+  onboardingInProgress: number | null;
+  docsNeedReview: number | null;
 }
 
 /** 面试官可约时段（自助选时） */

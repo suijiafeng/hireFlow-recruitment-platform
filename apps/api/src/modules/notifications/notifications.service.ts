@@ -25,18 +25,22 @@ export class NotificationsService {
     }
   }
 
-  /** 按角色推送（如：通知所有 HR） */
+  /** 按角色推送（如：通知所有 HR）。业务状态多在此调用前已落库，查询失败同样不阻断主流程 */
   async pushToRole(role: RoleCode, title: string, body?: string, link?: string) {
-    const users = await this.prisma.user.findMany({
-      where: { status: 'ACTIVE', roles: { some: { role: { code: role } } } },
-      select: { id: true },
-    });
-    await this.push(
-      users.map((u) => u.id),
-      title,
-      body,
-      link,
-    );
+    try {
+      const users = await this.prisma.user.findMany({
+        where: { status: 'ACTIVE', roles: { some: { role: { code: role } } } },
+        select: { id: true },
+      });
+      await this.push(
+        users.map((u) => u.id),
+        title,
+        body,
+        link,
+      );
+    } catch (error) {
+      this.logger.warn(`按角色推送失败（${role}）：${error instanceof Error ? error.message : error}`);
+    }
   }
 
   async list(userId: string, unreadOnly = false) {

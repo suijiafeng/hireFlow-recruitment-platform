@@ -131,26 +131,29 @@ export class CandidatesService {
     return candidate;
   }
 
+  /** 行级范围校验：范围外的候选人按不可见处理（403），后端兜底前端过滤 */
+  private async assertCandidateInScope(candidateId: string, user: JwtUser) {
+    const scopeWhere = this.candidateScopeWhere(user);
+    if (Object.keys(scopeWhere).length === 0) return;
+    const inScope = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, ...scopeWhere },
+      select: { id: true },
+    });
+    if (!inScope) {
+      throw new ForbiddenException('该候选人不在您的数据范围内（本部门/仅被指派）');
+    }
+  }
+
   /** 360° 候选人详情：结构化信息 + 应聘记录 + 时间轴 */
   async findOne(id: string, user: JwtUser) {
-    // 行级范围校验：范围外的候选人按不可见处理（403），后端兜底前端过滤
-    const scopeWhere = this.candidateScopeWhere(user);
-    if (Object.keys(scopeWhere).length > 0) {
-      const inScope = await this.prisma.candidate.findFirst({
-        where: { id, ...scopeWhere },
-        select: { id: true },
-      });
-      if (!inScope) {
-        throw new ForbiddenException('该候选人不在您的数据范围内（本部门/仅被指派）');
-      }
-    }
+    await this.assertCandidateInScope(id, user);
     const candidate = await this.prisma.candidate.findUnique({
       where: { id },
       include: {
         resumes: { orderBy: { createdAt: 'desc' } },
         applications: {
           include: {
-            job: { select: { id: true, title: true } },
+            job: { select: { id: true, title: true, scorecardTemplate: true } },
             stage: { select: { id: true, name: true } },
             interviews: {
               include: {
@@ -290,12 +293,13 @@ export class CandidatesService {
   }
 
   /** 简历原件预览链接（预签名，10 分钟有效） */
-  async resumeFileUrl(resumeId: string) {
+  async resumeFileUrl(resumeId: string, user: JwtUser) {
     const resume = await this.prisma.resume.findUnique({
       where: { id: resumeId },
-      select: { fileKey: true, fileName: true },
+      select: { fileKey: true, fileName: true, candidateId: true },
     });
     if (!resume) throw new NotFoundException('简历不存在');
+    await this.assertCandidateInScope(resume.candidateId, user);
     if (!resume.fileKey) throw new NotFoundException('该简历为文本导入，无原件文件');
     return { url: await this.storage.presignedGetUrl(resume.fileKey, resume.fileName ?? undefined) };
   }

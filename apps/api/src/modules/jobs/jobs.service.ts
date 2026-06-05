@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS, DEFAULT_PIPELINE_STAGES } from '@hireflow/shared';
 import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
@@ -17,6 +17,8 @@ const TALENT_POOL_SCAN_LIMIT = 20;
 
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
@@ -77,6 +79,12 @@ export class JobsService {
 
   /** 创建职位并生成默认 Pipeline 阶段（骨架期直接置为 OPEN，审批流三期接入） */
   async create(dto: CreateJobDto, user: JwtUser) {
+    const department = await this.prisma.department.findUnique({ where: { id: dto.departmentId } });
+    if (!department) throw new BadRequestException('所属部门不存在');
+    if (dto.hiringManagerId) {
+      const manager = await this.prisma.user.findUnique({ where: { id: dto.hiringManagerId } });
+      if (!manager) throw new BadRequestException('用人经理不存在');
+    }
     const job = await this.prisma.job.create({
       data: {
         title: dto.title,
@@ -99,7 +107,7 @@ export class JobsService {
     return job;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user?: JwtUser) {
     const job = await this.prisma.job.findUnique({
       where: { id },
       include: {
@@ -111,6 +119,7 @@ export class JobsService {
       },
     });
     if (!job) throw new NotFoundException('职位不存在');
+    this.assertJobInDeptScope(job, user);
     return job;
   }
 
@@ -133,8 +142,10 @@ export class JobsService {
     return job;
   }
 
-  async getStages(jobId: string) {
-    await this.ensureExists(jobId);
+  async getStages(jobId: string, user?: JwtUser) {
+    const job = await this.prisma.job.findUnique({ where: { id: jobId }, select: { departmentId: true } });
+    if (!job) throw new NotFoundException('职位不存在');
+    this.assertJobInDeptScope(job, user);
     return this.prisma.pipelineStage.findMany({
       where: { jobId },
       orderBy: { order: 'asc' },
@@ -213,7 +224,8 @@ export class JobsService {
       take: TALENT_POOL_SCAN_LIMIT,
     });
 
-    const scored = await Promise.all(
+    // allSettled：单个候选人打分失败（如 AI 服务瞬时抖动）不拖累其余已成功的结果
+    const settled = await Promise.allSettled(
       pool.map(async (candidate) => {
         const resume = candidate.resumes[0];
         const resumeText = resume?.rawText ?? (resume?.parsed ? JSON.stringify(resume.parsed) : '');
@@ -248,6 +260,11 @@ export class JobsService {
         };
       }),
     );
+    const scored = settled.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      this.logger.warn(`人才库唤醒打分失败（候选人 ${pool[i].id}）：${r.reason instanceof Error ? r.reason.message : r.reason}`);
+      return null;
+    });
     const recommendations = scored
       .filter((r): r is NonNullable<typeof r> => r !== null)
       .sort((a, b) => b.score - a.score)
@@ -274,5 +291,13 @@ export class JobsService {
   private async ensureExists(id: string) {
     const count = await this.prisma.job.count({ where: { id } });
     if (count === 0) throw new NotFoundException('职位不存在');
+  }
+
+  /** 部门数据范围校验（用人经理仅本部门职位；ALL scope / 无 user 直接放行） */
+  private assertJobInDeptScope(job: { departmentId: string }, user?: JwtUser) {
+    const deptScope = user ? departmentScopeOf(user) : null;
+    if (deptScope && job.departmentId !== deptScope) {
+      throw new ForbiddenException('仅可访问本部门职位（数据范围：本部门）');
+    }
   }
 }

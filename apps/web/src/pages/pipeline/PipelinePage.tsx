@@ -39,6 +39,7 @@ import { applicationsApi, boardApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { BatchResult, BoardCard, BoardData, CompareData } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
+import { QueryErrorResult } from '../../components/QueryErrorResult';
 import { useAuthStore } from '../../stores/auth';
 
 /** 乐观更新：在本地缓存里把卡片从旧列挪到新列尾部 */
@@ -357,6 +358,12 @@ export function PipelinePage() {
     }
   }, [jobId, jobsQuery.data, setSearchParams]);
 
+  // 切换职位即清空批量选择态：否则勾选的是 A 职位的候选人，操作却在 B 职位看板上下文触发
+  useEffect(() => {
+    setBatchMode(false);
+    setSelected(new Set());
+  }, [jobId]);
+
   const boardQuery = useQuery({
     queryKey: ['board', jobId],
     queryFn: () => boardApi.get(jobId),
@@ -619,6 +626,8 @@ export function PipelinePage() {
               <Empty description="暂无职位，请先创建职位" />
             )}
           </div>
+        ) : boardQuery.isError ? (
+          <QueryErrorResult error={boardQuery.error} />
         ) : (
           <DndContext
             sensors={sensors}

@@ -4,6 +4,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { fileTypeFilter, ONBOARDING_DOCUMENT_MIME_TYPES } from '../../common/upload';
 import { AddDocumentDto, ToggleChecklistDto } from './dto/onboarding.dto';
 import { OnboardingService } from './onboarding.service';
 
@@ -48,7 +49,12 @@ export class OnboardingController {
 
   @Post('onboardings/:id/documents/file')
   @RequirePermissions(PERMISSIONS.ONBOARDING_UPLOAD)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: fileTypeFilter(ONBOARDING_DOCUMENT_MIME_TYPES),
+    }),
+  )
   @ApiOperation({ summary: '提交入职材料（图片原件入对象存储；可附文字层走 OCR）' })
   addDocumentFile(
     @Param('id') id: string,

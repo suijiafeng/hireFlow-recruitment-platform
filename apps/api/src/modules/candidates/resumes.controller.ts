@@ -21,7 +21,7 @@ export class ResumesController {
   @Get(':id/file-url')
   @RequirePermissions(PERMISSIONS.CANDIDATE_READ)
   @ApiOperation({ summary: '简历原件预签名预览链接（10 分钟有效）' })
-  fileUrl(@Param('id') id: string) {
-    return this.candidatesService.resumeFileUrl(id);
+  fileUrl(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.candidatesService.resumeFileUrl(id, user);
   }
 }
