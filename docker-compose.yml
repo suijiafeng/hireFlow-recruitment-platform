@@ -19,12 +19,6 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:8-alpine
-    container_name: hireflow-redis
-    ports:
-      - '6379:6379'
-
   # 本地开发用对象存储（简历/合同/证件文件，二三期接入）。
   # MinIO 社区版镜像已停更，tag 钉死；生产环境请换云 OSS 或其他 S3 兼容服务。
   minio:

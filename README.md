@@ -262,17 +262,20 @@ docker exec <api-container-id> npm run db:seed
 ### 云平台一键部署
 
 #### Render.com（推荐）
-- **优点**：免费额度充足、自动 HTTPS、PostgreSQL 托管
+- **优点**：免费额度充足、自动 HTTPS
+- **数据库**：不由 Blueprint 托管，需自备 Postgres（自建或任意云厂商均可，见下方 `DATABASE_URL` 说明）
 - **步骤**：
   1. Fork 本仓库到你的 GitHub 账号
   2. 登录 [Render Dashboard](https://dashboard.render.com)
   3. 点击 **New** → **Blueprint** → 选择本仓库
-  4. Render 自动创建 3 个服务：API | Web | Managed Postgres
-  5. 配置环境变量（API_ORIGIN、S3 等）后自动部署
+  4. Render 自动创建 2 个服务：`hireflow-api` | `hireflow-web`
+  5. 在 `hireflow-api` 的 Environment 里手动填 `DATABASE_URL`（`sync: false`，控制台填、不进 git）
+  6. 配置其余环境变量（API_ORIGIN、S3 等）后自动部署
 
 - **运行时注意**：
   - 免费实例 15 分钟无流量会休眠，仅公网请求可唤醒
   - `API_ORIGIN` 填 API 服务的公网 URL（nginx 反代已做协议转换）
+  - 若数据库是自建/公网可访问的 Postgres，需要把 Render 的出口 IP 段加入其防火墙 / `pg_hba.conf` 白名单（`hireflow-api` 服务 → **Connect** → **Outbound** 面板可查具体 IP，或见 [Render 官方文档](https://render.com/docs/outbound-ip-addresses)）
   - 对象存储需单独配置 S3 兼容服务（如 Cloudflare R2）
 
 ### 环境变量配置
@@ -379,9 +382,7 @@ HireFlow 遵循以下核心设计理念，确保系统稳定、安全、可追�
 ### 后端优化
 - **数据库索引**：关键查询列已索引（candidates.created_at / department_id / status）
 - **N+1 查询防护**：Prisma `include` + 数据加载器模式
-- **缓存策略**：
-  - AI 结果按内容哈希缓存（同一份简历不重复调用 API）
-  - Redis 缓存权限矩阵、部门树（刷新时实时更新）
+- **缓存策略**：AI 结果按内容哈希缓存（`AiCache` 表，同一份简历不重复调用 API）
 - **并发控制**：乐观锁替代悲观锁，减少锁竞争
 
 ### 基础设施

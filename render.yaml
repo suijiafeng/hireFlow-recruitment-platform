@@ -1,14 +1,16 @@
 # HireFlow Render Blueprint
 # 部署：Render 控制台 -> New -> Blueprint -> 选择本仓库，会自动读取此文件建服务。
 #
-# 覆盖范围：Postgres + API + Web 静态反代三件套。
-# 不含 Redis（代码里未真正使用）与 MinIO（Render 无对象存储产品，
+# 覆盖范围：API + Web 静态反代两件套。数据库用外部 Postgres（自建或任意云厂商），
+# 不由本 Blueprint 托管——见下方 DATABASE_URL 说明。
+# 不含 MinIO（Render 无对象存储产品，
 # 需要文件上传功能的话请改用 Cloudflare R2 / AWS S3 等 S3 兼容服务，
 # 只需在 hireflow-api 的环境变量里填 S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET，
 # 代码零改动——见 apps/api/src/modules/storage）。
 #
 # 首次部署前手动在 Render 环境变量里补上（标了 sync: false 的项，控制台里填，不进 git）：
-#   hireflow-api:  ANTHROPIC_API_KEY（留空则自动降级 mock 引擎，全链路仍可用）
+#   hireflow-api:  DATABASE_URL（外部 Postgres 连接串，格式见下方注释）
+#                  ANTHROPIC_API_KEY（留空则自动降级 mock 引擎，全链路仍可用）
 #                  S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / S3_BUCKET（不填则文件上传功能不可用，其余功能不受影响）
 #
 # hireflow-web 反代 /api 到 hireflow-api 依赖 Render 同区域私有网络（同 region 的
@@ -16,20 +18,13 @@
 # 把 API_ORIGIN 改成 hireflow-api 的公网域名（如 hireflow-api.onrender.com，走 443/TLS，
 # 并把 nginx.conf.template 里的 proxy_pass 协议改成 https）。
 
-databases:
-  - name: hireflow-postgres
-    databaseName: arthr
-    user: arthr
-    plan: starter
-    region: singapore
-
 services:
   - type: web
     name: hireflow-api
     runtime: docker
     dockerfilePath: ./Dockerfile.api
     dockerContext: .
-    plan: starter
+    plan: free
     region: singapore
     healthCheckPath: /api/health
     envVars:
@@ -37,10 +32,14 @@ services:
         value: production
       - key: PORT
         value: 3000
+      # 外部 Postgres 连接串，控制台手动填，例如：
+      #   postgresql://user:password@host:5432/dbname?sslmode=require
+      # 自建库若未配置 SSL 证书，用 sslmode=disable；托管云数据库通常要求 sslmode=require。
+      # 需要保证 Postgres 的防火墙/pg_hba.conf 放行 Render 的出口 IP 段
+      # （控制台 hireflow-api 服务 -> Connect -> Outbound 面板可查，或见
+      # https://render.com/docs/outbound-ip-addresses）。
       - key: DATABASE_URL
-        fromDatabase:
-          name: hireflow-postgres
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
@@ -69,7 +68,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     region: singapore
     envVars:
       # 反代上游，两种填法（协议归一化见 deploy/00-api-upstream.envsh）：
