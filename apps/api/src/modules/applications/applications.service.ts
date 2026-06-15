@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
@@ -38,6 +39,8 @@ const CARD_SELECT = {
 
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
@@ -124,15 +127,40 @@ export class ApplicationsService {
         application.id,
         { candidate: candidate.name, job: job.title, stage: stage.name },
       );
-      return application;
+      return { ...application, revived: false };
     } catch (e: unknown) {
       // P2002 = 唯一约束冲突（candidateId + jobId）
       if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
-        // 重复投递不静默丢弃：在原应聘时间轴留痕
         const existing = await this.prisma.application.findUnique({
           where: { candidateId_jobId: { candidateId: dto.candidateId, jobId: dto.jobId } },
           select: { id: true, status: true },
         });
+        // 已淘汰/已撤回的人重新进入本职位流程：复活原记录，而不是硬撞唯一键报 409。
+        // 唯一键 (candidateId, jobId) 决定了「新建一条」永远不可能，所以复活是唯一可行语义；
+        // 顺带保住同一条时间轴（历史面评/打分/淘汰原因都还挂在这条记录上）。
+        if (existing && (existing.status === 'REJECTED' || existing.status === 'WITHDRAWN')) {
+          const revived = await this.prisma.application.update({
+            where: { id: existing.id },
+            data: {
+              status: 'ACTIVE',
+              stageId: stage.id,
+              position: await this.nextPosition(stage.id),
+              stageEnteredAt: new Date(),
+              rejectReason: null,
+              version: { increment: 1 },
+            },
+            select: CARD_SELECT,
+          });
+          await this.activityLog.record(
+            user,
+            ACTIVITY_ACTIONS.APPLICATION_REACTIVATED,
+            'Application',
+            existing.id,
+            { candidate: candidate.name, job: job.title, stage: stage.name, from: existing.status },
+          );
+          return { ...revived, revived: true };
+        }
+        // 仍在流程中/已入职：重复投递不静默丢弃，在原应聘时间轴留痕后拒绝
         if (existing) {
           await this.activityLog.record(user, ACTIVITY_ACTIONS.APPLICATION_REAPPLIED, 'Application', existing.id, {
             candidate: candidate.name,
@@ -140,13 +168,22 @@ export class ApplicationsService {
             existingStatus: existing.status,
           });
         }
-        throw new ConflictException('该候选人已应聘此职位（重复投递已记录到原应聘时间轴）');
+        throw new ConflictException(
+          existing?.status === 'HIRED'
+            ? '该候选人已通过此职位入职，无需重复加入'
+            : '该候选人已在此职位流程中（重复投递已记录到原应聘时间轴）',
+        );
       }
       throw e;
     }
   }
 
-  /** 看板数据：按阶段分组返回该职位全部流程中候选人 */
+  /**
+   * 看板数据：按阶段分组返回该职位在途 + 已入职的候选人。
+   * HIRED 必须一起返回——入职闭环会把卡片推进末列「已入职」并同时置为 HIRED，
+   * 只查 ACTIVE 会让卡片在到达终点的同一刻从看板上消失（末列结构性恒空）。
+   * 淘汰/撤回仍然不进看板：它们已经离开流程，在候选人详情的时间轴里查看。
+   */
   async board(jobId: string, user?: JwtUser) {
     // 数据行级权限：用人经理仅可打开本部门职位的看板
     if (user) {
@@ -166,7 +203,7 @@ export class ApplicationsService {
           orderBy: { order: 'asc' },
           include: {
             applications: {
-              where: { status: 'ACTIVE' },
+              where: { status: { in: ['ACTIVE', 'HIRED'] } },
               orderBy: { position: 'asc' },
               select: CARD_SELECT,
             },
@@ -175,8 +212,14 @@ export class ApplicationsService {
       },
     });
     if (!job) throw new NotFoundException('职位不存在');
+    // 已离场人数：看板上一张卡都没有时，用它区分「真的还没招过人」和「招过但都淘汰了」，
+    // 否则一个收了 11 份简历全部淘汰的职位会被空态文案说成「还没有候选人」
+    const closedCount = await this.prisma.application.count({
+      where: { jobId, status: { in: ['REJECTED', 'WITHDRAWN'] } },
+    });
     return {
       job: { id: job.id, title: job.title, status: job.status },
+      closedCount,
       columns: job.stages.map((stage) => ({
         stage: { id: stage.id, name: stage.name, order: stage.order },
         applications: stage.applications,
@@ -518,7 +561,16 @@ export class ApplicationsService {
     const target = await this.prisma.pipelineStage.findFirst({
       where: { jobId: application.jobId, name: stageName },
     });
-    if (!target || target.id === application.stageId) return;
+    if (!target) {
+      // 阶段名是自动化的唯一锚点，而阶段名可被 Pipeline Builder 改写；
+      // 匹配不上时业务主流程不该中断，但必须留下噪音，否则整条 Offer→入职 自动化会无声失效
+      this.logger.warn(
+        `自动流转跳过：职位 ${application.jobId} 没有名为「${stageName}」的阶段（应聘 ${applicationId}），` +
+          `该阶段可能已被重命名或删除，卡片位置需要人工确认`,
+      );
+      return;
+    }
+    if (target.id === application.stageId) return;
     // 自动化只向前推进：卡片已越过目标列时不回拖（如已在待入职时补发 Offer 事件）
     if (target.order < application.stage.order) return;
     await this.prisma.application.update({

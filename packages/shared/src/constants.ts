@@ -21,6 +21,7 @@ export const ACTIVITY_ACTIONS = {
   RESUME_PARSED: 'resume.parsed',
   APPLICATION_CREATED: 'application.created',
   APPLICATION_REAPPLIED: 'application.reapplied',
+  APPLICATION_REACTIVATED: 'application.reactivated',
   APPLICATION_SCORED: 'application.scored',
   APPLICATION_STAGE_CHANGED: 'application.stage_changed',
   INTERVIEW_SCHEDULED: 'interview.scheduled',
