@@ -315,6 +315,12 @@
   aspect-ratio: 5 / 1;
   min-height: 160px;
   max-height: 240px;
+  /* 有 aspect-ratio 的 grid 项，justify-self 的 normal 走 start 而不是 stretch，于是宽度被
+     min-height 反推成 160×5=800px。以前趋势图放在宽 Col 里（≥800）看不出来，大盘改两栏后
+     面板只剩约 500px 就溢出了。显式 stretch 让宽度回到轨道宽，aspect-ratio 只负责推高度。
+     min-width:0 同时解除 grid 项 min-content 的自动最小尺寸，轨道才能缩到 500 以下。 */
+  justify-self: stretch;
+  min-width: 0;
 }
 /* 窄容器：横轴只保留首末刻度（flex 两端对齐下位置仍然精确），避免 8 个日期挤爆 */
 @container (max-width: 520px) {

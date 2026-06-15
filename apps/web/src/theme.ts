@@ -2,11 +2,11 @@ import type { ThemeConfig } from 'antd';
 
 /**
  * 全站设计 token 唯一来源 —— 规范：「用规则换省心，用克制换舒服」
- * - 8px 网格：间距/尺寸只用 4/8/16/24/32，控件高 32/40/48
- * - 配色：1 主色 + 语义色（成功/警告/错误：700 深阶做文字过 WCAG AA，50 浅阶只做底色）
- *   + 中性 5 色（#fff / #f5f5f5 / #e0e0e0 / #333 / #1a1a1a），全实色无渐变
- * - 字号偶数阶梯（12/14/16/20/24/28），圆角只用 4/8
- * - 行高 ≈ 字号×1.5 且落 4px 网格：12→20 14→20 16→24 20→28 24→32 28→36
+ * - 8px 网格：间距只用 4/8/16/24/32；控件高 28/36/44（16px 正文的紧凑档）
+ * - 配色：1 主色 + 语义色（700 深阶做文字过 WCAG AA，50 浅阶只做底色）
+ *   + 中性色分 6 层（页底/面板/下沉/两级发丝线/控件描边），全实色无渐变
+ * - 字号阶梯以 16px 正文为基准，全偶数、下限 12（12/14/16/22/26/28），圆角只用 4/6/8
+ * - 阴影只留 2 档，卡片层级靠描边而非投影
  */
 export const BRAND = {
   primary: '#2563EB',
@@ -21,6 +21,17 @@ export const BRAND = {
   error50: '#FEF2F2',
 } as const;
 
+/** 中性面：微弱底色分层，白面板永远比周围亮 */
+export const SURFACE = {
+  page: '#f4f5f6', // 页面底
+  panel: '#ffffff', // 面板 / 卡片
+  sunken: '#fafafa', // 列内容区、输入框底
+  sider: '#17181a', // 侧边栏深底
+  line: '#e6e7e9', // 主分隔线
+  lineSoft: '#eeeff1', // 发丝分隔
+  lineStrong: '#d8dade', // 控件描边
+} as const;
+
 /** 中性文字色阶：单一墨色 #1a1a1a 按透明度分层（secondary 白底实测对比 5.7:1 过 AA） */
 export const INK = {
   primary: '#1a1a1a',
@@ -30,24 +41,21 @@ export const INK = {
   light: 'rgba(26, 26, 26, 0.12)',
 } as const;
 
-/** 文字字号阶梯（偶数）：14 辅助 / 16 正文 / 16 卡标题（靠字重区分）/ 20 大标题 / 24 数据大字 / 28 展示 */
-export const FONT = { meta: 14, body: 16, title: 16, heading: 20, num: 24, display: 28 } as const;
+/** 字号阶梯（16 为基准，全偶数、下限 12）：12 徽标 / 14 辅助与元信息 / 16 正文与卡标题 / 22 页标题 / 26 数据大字 / 28 展示 */
+export const FONT = { badge: 12, meta: 14, body: 16, title: 16, heading: 22, num: 26, display: 28 } as const;
 
-/** 边框：比背景深 1-2 度；default 走 #e0e0e0，浅分隔用 #f5f5f5 */
 export const LINE = {
-  default: '#e0e0e0',
-  light: '#f5f5f5',
-  heavy: '#e0e0e0',
+  default: SURFACE.line,
+  light: SURFACE.lineSoft,
+  heavy: SURFACE.lineStrong,
 } as const;
 
-/** 阴影：中性黑 alpha，克制层级，无彩色投影 */
+/** 阴影：只保留 2 档，卡片默认无投影 */
 export const SHADOW = {
-  sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-  md: '0 4px 8px -2px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
-  lg: '0 8px 16px -4px rgba(0, 0, 0, 0.08), 0 4px 8px -4px rgba(0, 0, 0, 0.05)',
-  xl: '0 16px 24px -4px rgba(0, 0, 0, 0.08), 0 8px 8px -6px rgba(0, 0, 0, 0.05)',
-  card: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-  cardHover: '0 8px 16px -4px rgba(0, 0, 0, 0.1), 0 4px 8px -4px rgba(0, 0, 0, 0.06)',
+  sm: '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+  md: '0 4px 12px -2px rgba(0, 0, 0, 0.06)',
+  card: 'none',
+  drag: '0 8px 20px rgba(26, 26, 26, 0.14)',
 } as const;
 
 export function buildTheme(disableMotion: boolean): ThemeConfig {
@@ -60,53 +68,55 @@ export function buildTheme(disableMotion: boolean): ThemeConfig {
       colorWarning: BRAND.warning,
       colorError: BRAND.error,
 
-      // 字号阶梯（level 1-3 禁用，页标题 level4=20、卡标题 level5=16）
+      // 字号阶梯（level 1-3 禁用，页标题 level4=22、卡标题 level5=16）
       fontSize: 16,
       fontSizeSM: 14,
-      fontSizeLG: 16,
+      fontSizeLG: 18,
       fontSizeHeading1: 28,
-      fontSizeHeading2: 24,
-      fontSizeHeading3: 20,
-      fontSizeHeading4: 20,
+      fontSizeHeading2: 26,
+      fontSizeHeading3: 22,
+      fontSizeHeading4: 22,
       fontSizeHeading5: 16,
 
-      // 行高：×1.5 落 4px 网格
-      lineHeight: 1.5, // 16 → 24
-      lineHeightSM: 1.4286, // 14 → 20
-      lineHeightLG: 1.5, // 16 → 24
-      lineHeightHeading1: 1.2858, // 28 → 36
-      lineHeightHeading2: 1.3334, // 24 → 32
-      lineHeightHeading3: 1.4, // 20 → 28
-      lineHeightHeading4: 1.4, // 20 → 28
-      lineHeightHeading5: 1.5, // 16 → 24
+      lineHeight: 1.5715,
+      lineHeightSM: 1.6667,
+      lineHeightLG: 1.5,
+      lineHeightHeading1: 1.3077,
+      lineHeightHeading2: 1.3334,
+      lineHeightHeading3: 1.4,
+      lineHeightHeading4: 1.4,
+      lineHeightHeading5: 1.5715,
 
-      // 圆角只用 4/8
-      borderRadius: 8,
+      // 圆角只用 4/6/8
+      borderRadius: 6,
       borderRadiusLG: 8,
       borderRadiusSM: 4,
       borderRadiusXS: 4,
 
-      // 背景（中性色表内）
-      colorBgLayout: '#f5f5f5',
-      colorBgContainer: '#ffffff',
-      colorBgElevated: '#ffffff',
+      colorBgLayout: SURFACE.page,
+      colorBgContainer: SURFACE.panel,
+      colorBgElevated: SURFACE.panel,
 
-      // 边框
       colorBorder: LINE.default,
       colorBorderSecondary: LINE.light,
 
-      // 文字色
       colorText: INK.primary,
       colorTextSecondary: INK.secondary,
       colorTextTertiary: INK.muted,
       colorTextQuaternary: INK.faint,
 
-      // 动效
+      boxShadow: SHADOW.sm,
+      boxShadowSecondary: SHADOW.md,
+
       motion: !disableMotion,
       motionDurationMid: '0.2s',
       motionEaseInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
 
-      // 间距阶梯 4/8/16/24/32
+      // 控件高：紧凑档 36，密集场景 28，表单/登录 44（16px 正文对应）
+      controlHeight: 36,
+      controlHeightSM: 28,
+      controlHeightLG: 44,
+
       marginXS: 4,
       marginSM: 8,
       margin: 16,
@@ -122,87 +132,98 @@ export function buildTheme(disableMotion: boolean): ThemeConfig {
       paddingXL: 32,
     },
     components: {
-      // 卡片：内边距统一 16（定稿），标题 16
       Card: {
         headerFontSize: 16,
         headerFontSizeSM: 16,
         bodyPadding: 16,
-        bodyPaddingSM: 16,
+        bodyPaddingSM: 12,
         headerPadding: 16,
-        headerPaddingSM: 16,
+        headerPaddingSM: 12,
         borderRadiusLG: 8,
       },
       Layout: {
-        headerBg: '#ffffff',
-        siderBg: '#1a1a1a',
-        bodyBg: '#f5f5f5',
+        headerBg: SURFACE.panel,
+        headerHeight: 56,
+        siderBg: SURFACE.sider,
+        bodyBg: SURFACE.page,
       },
-      // 侧边栏菜单：深底 #1a1a1a 上白字 alpha 分层，选中主色
+      // 侧边栏菜单：选中态不整块刷主色，改「主色低透明底 + 内嵌左侧色条」（见 app.css）
       Menu: {
         darkItemBg: 'transparent',
         darkSubMenuItemBg: 'rgba(255, 255, 255, 0.04)',
-        itemBorderRadius: 8,
-        darkItemSelectedBg: BRAND.primary,
-        darkItemColor: 'rgba(255, 255, 255, 0.75)',
+        itemBorderRadius: 6,
+        itemHeight: 38,
+        itemPaddingInline: 12,
+        darkItemSelectedBg: 'rgba(37, 99, 235, 0.16)',
+        darkItemColor: 'rgba(255, 255, 255, 0.72)',
+        darkItemHoverBg: 'rgba(255, 255, 255, 0.06)',
         darkItemHoverColor: '#ffffff',
         darkItemSelectedColor: '#ffffff',
-        darkGroupTitleColor: 'rgba(255, 255, 255, 0.45)',
+        darkGroupTitleColor: 'rgba(255, 255, 255, 0.3)',
         iconSize: 16,
-        itemHeight: 40,
-        itemPaddingInline: 16,
       },
       Table: {
         headerColor: INK.secondary,
-        headerBg: BRAND.primary50,
-        rowHoverBg: '#f5f5f5',
+        headerBg: SURFACE.sunken,
+        rowHoverBg: SURFACE.page,
+        cellPaddingBlock: 12,
         borderRadiusLG: 8,
       },
       Statistic: {
         titleFontSize: 14,
-        contentFontSize: 24,
+        contentFontSize: 26,
       },
       Button: {
-        borderRadius: 8,
-        controlHeight: 40,
-        controlHeightSM: 32,
-        controlHeightLG: 48,
+        borderRadius: 6,
+        controlHeight: 36,
+        controlHeightSM: 30,
+        controlHeightLG: 44,
         primaryShadow: 'none',
+        defaultShadow: 'none',
+        fontWeight: 500,
       },
       Input: {
-        borderRadius: 8,
-        controlHeight: 40,
-        controlHeightSM: 32,
-        controlHeightLG: 48,
+        borderRadius: 6,
+        controlHeight: 36,
+        controlHeightSM: 30,
+        controlHeightLG: 44,
         activeBorderColor: BRAND.primary,
         hoverBorderColor: BRAND.primary,
+        activeShadow: '0 0 0 3px rgba(37, 99, 235, 0.12)',
       },
       // 非警示 Tag 默认灰（装饰性颜色零容忍）
       Tag: {
         borderRadius: 4,
-        defaultBg: '#f5f5f5',
-        defaultColor: 'rgba(26, 26, 26, 0.65)',
+        defaultBg: SURFACE.page,
+        defaultColor: INK.secondary,
       },
       Modal: {
         borderRadiusLG: 8,
-        titleFontSize: 20,
+        titleFontSize: 18,
         headerBg: 'transparent',
       },
       Drawer: {
         borderRadiusLG: 8,
       },
       Dropdown: {
-        borderRadius: 8,
-        controlItemBgHover: '#f5f5f5',
+        borderRadius: 6,
+        controlItemBgHover: SURFACE.page,
       },
       Select: {
-        borderRadius: 8,
-        controlHeight: 40,
-        controlHeightSM: 32,
-        controlHeightLG: 48,
+        borderRadius: 6,
+        controlHeight: 36,
+        controlHeightSM: 30,
+        controlHeightLG: 44,
       },
       DatePicker: {
-        borderRadius: 8,
-        controlHeight: 40,
+        borderRadius: 6,
+        controlHeight: 36,
+      },
+      Breadcrumb: {
+        fontSize: 14,
+      },
+      Alert: {
+        borderRadiusLG: 6,
       },
     },
   };

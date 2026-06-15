@@ -80,18 +80,6 @@ a {
   background: transparent;
 }
 
-/* ---- 可点击卡片/磁贴的悬浮反馈 - 柔和抬升 ---- */
-.hover-lift {
-  transition:
-    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.25s ease;
-}
-.hover-lift:hover {
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-  transform: translateY(-2px);
-}
-
 /* ---- 选中文字颜色 ---- */
 ::selection {
   background: rgba(37, 99, 235, 0.15);
