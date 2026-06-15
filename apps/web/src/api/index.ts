@@ -2,6 +2,10 @@ import type { AuthUser } from '../stores/auth';
 import { http } from './client';
 import type {
   AnalyticsOverview,
+  ApplicationCreateResult,
+  CreateRoleInput,
+  InsightsRange,
+  InviteUserInput,
   NotificationItem,
   BatchResult,
   BoardCard,
@@ -70,7 +74,7 @@ export const jobsApi = {
   talentPoolScan: (jobId: string) =>
     http.post<TalentPoolScanResult>(`/jobs/${jobId}/talent-pool/scan`).then((r) => r.data),
   talentPoolActivate: (jobId: string, candidateId: string) =>
-    http.post<BoardCard>(`/jobs/${jobId}/talent-pool/activate`, { candidateId }).then((r) => r.data),
+    http.post<ApplicationCreateResult>(`/jobs/${jobId}/talent-pool/activate`, { candidateId }).then((r) => r.data),
 };
 
 export const boardApi = {
@@ -110,7 +114,7 @@ export const candidatesApi = {
 
 export const applicationsApi = {
   create: (data: { candidateId: string; jobId: string }) =>
-    http.post<BoardCard>('/applications', data).then((r) => r.data),
+    http.post<ApplicationCreateResult>('/applications', data).then((r) => r.data),
   score: (id: string) => http.post<BoardCard>(`/applications/${id}/score`).then((r) => r.data),
   compare: (ids: string[]) =>
     http.post<CompareData>('/applications/compare', { ids }).then((r) => r.data),
@@ -241,7 +245,9 @@ export const analyticsApi = {
   insight: (jobId: string) =>
     http.post<{ insight: string; aiMeta: { provider: string } }>(`/analytics/insight/${jobId}`).then((r) => r.data),
   trend: () => http.get<TrendData>('/analytics/trend').then((r) => r.data),
-  insights: () => http.get<InsightsData>('/analytics/insights').then((r) => r.data),
+  /** range/deptId 按「应聘创建时间」划同期群；五组指标共用同一口径，响应 scope 回显实际生效范围 */
+  insights: (params?: { range?: InsightsRange; deptId?: string }) =>
+    http.get<InsightsData>('/analytics/insights', { params }).then((r) => r.data),
 };
 
 export const interviewsApi = {
@@ -302,6 +308,9 @@ export const usersApi = {
     http.get<UserItem[]>('/users', { params: role ? { role } : undefined }).then((r) => r.data),
   updateRoles: (userId: string, roleCodes: string[]) =>
     http.patch<UserItem>(`/users/${userId}/roles`, { roleCodes }).then((r) => r.data),
+  /** 邀请内部成员；initialPassword 仅此一次返回，页面须提示管理员立即转交 */
+  invite: (data: InviteUserInput) =>
+    http.post<{ user: UserItem; initialPassword: string }>('/users', data).then((r) => r.data),
 };
 
 export const rbacApi = {
@@ -309,6 +318,7 @@ export const rbacApi = {
   permissions: () => http.get<PermissionDef[]>('/permissions').then((r) => r.data),
   updateRolePermissions: (roleId: string, codes: string[]) =>
     http.patch<Role>(`/roles/${roleId}/permissions`, { codes }).then((r) => r.data),
+  createRole: (data: CreateRoleInput) => http.post<Role>('/roles', data).then((r) => r.data),
 };
 
 export const auditApi = {

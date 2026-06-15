@@ -66,6 +66,8 @@ export interface CandidateApplicationBrief {
   job: { id: string; title: string };
   stage: { id: string; name: string };
   status: ApplicationStatus;
+  /** 候选人库列表用它显示匹配分；接口一直有返回，之前类型漏了 */
+  matchScore?: number | null;
 }
 
 export interface Candidate {
@@ -146,11 +148,14 @@ export interface Role {
 
 export interface DetailApplication {
   id: string;
+  /** 注意：详情接口的 job 只带 id/title/scorecardTemplate，不含 department */
   job: { id: string; title: string; scorecardTemplate?: ScorecardDimension[] | null };
   stage: { id: string; name: string };
   status: ApplicationStatus;
   matchScore: number | null;
   matchReport?: MatchReport | null;
+  /** 终态应聘的淘汰原因码；接口一直有返回，之前类型漏了 */
+  rejectReason?: string | null;
   interviews: Interview[];
 }
 
@@ -227,6 +232,14 @@ export interface BoardCard {
   stageEnteredAt: string;
   version: number;
   candidate: { id: string; name: string; tags: string[]; source: string | null };
+}
+
+/**
+ * 加入职位流程的结果：revived=true 表示复活了该候选人此前被淘汰/撤回的应聘记录
+ * （唯一键 candidateId+jobId 决定了不可能新建第二条），前端据此换一句提示。
+ */
+export interface ApplicationCreateResult extends BoardCard {
+  revived: boolean;
 }
 
 export interface OfferSalary {
@@ -434,7 +447,31 @@ export interface TrendData {
 }
 
 /** 数据洞察报表 */
+/** 洞察筛选：与后端 QueryInsightsDto 保持一致 */
+export type InsightsRange = '30d' | 'quarter' | 'year' | 'all';
+
+export interface CreateRoleInput {
+  code: string;
+  name: string;
+  dataScope?: 'ALL' | 'DEPARTMENT' | 'OWN' | 'ASSIGNED';
+  permissions?: string[];
+}
+
+export interface InviteUserInput {
+  email: string;
+  name: string;
+  departmentId?: string;
+  roleCodes: string[];
+}
+
 export interface InsightsData {
+  /** 后端回显的实际生效口径与样本量 */
+  scope: {
+    range: InsightsRange;
+    deptId: string | null;
+    since: string | null;
+    applications: number;
+  };
   tth: {
     medianDays: number | null;
     hiredCount: number;
@@ -498,5 +535,7 @@ export interface BatchResult {
 
 export interface BoardData {
   job: { id: string; title: string; status: JobStatus };
+  /** 已淘汰/撤回的应聘数（不进看板列，仅用于区分空态文案） */
+  closedCount: number;
   columns: BoardColumn[];
 }
