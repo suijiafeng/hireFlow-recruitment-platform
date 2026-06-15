@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PERMISSIONS } from '@hireflow/shared';
+import { ACTIVITY_ACTIONS, PERMISSIONS } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Prisma } from '../../generated/prisma/client';
+import type { QueryInsightsDto } from './dto/query-insights.dto';
 
 @Injectable()
 export class AnalyticsService {
@@ -92,9 +94,10 @@ export class AnalyticsService {
 
   /**
    * 招聘漏斗：
-   * 「到达某阶段的人数」按快照口径近似 = 停留在该阶段及其之后所有阶段的人数之和。
-   * 口径修正：中间列只计 ACTIVE（淘汰/撤回已离开漏斗）；
-   * 末列「已入职」以 status=HIRED 为准——手动拖进终列的卡不再虚报入职数。
+   * 「到达过某阶段」按 ActivityLog 回放真实历史，而不是拿当前停留人数做后缀和——
+   * 后者会把淘汰/撤回的人整个丢掉，导致每一级转化率恒等于 100%（全员淘汰的职位则一片空白），
+   * 漏斗最该回答的「卡在哪一环」反而看不出来。回放口径与阶段停留 P50/P90 一致（见 insights）。
+   * current 仍是快照：停留在该阶段的在途 + 末列已入职。
    */
   async funnel(jobId: string) {
     const job = await this.prisma.job.findUnique({
@@ -103,22 +106,42 @@ export class AnalyticsService {
     });
     if (!job) throw new NotFoundException('职位不存在');
 
-    const grouped = await this.prisma.application.groupBy({
-      by: ['stageId', 'status'],
+    const apps = await this.prisma.application.findMany({
       where: { jobId },
-      _count: { _all: true },
+      select: { id: true, stageId: true, status: true },
     });
-    const activeAt = new Map<string, number>();
-    let hiredTotal = 0;
-    for (const g of grouped) {
-      if (g.status === 'ACTIVE') activeAt.set(g.stageId, g._count._all);
-      if (g.status === 'HIRED') hiredTotal += g._count._all;
-    }
+    const stageIndexById = new Map(job.stages.map((s, i) => [s.id, i]));
+    const stageIndexByName = new Map(job.stages.map((s, i) => [s.name, i]));
     const lastIndex = job.stages.length - 1;
-    const counts = job.stages.map((s, i) =>
-      i === lastIndex ? hiredTotal : (activeAt.get(s.id) ?? 0),
+
+    // 当前停留：中间列只计 ACTIVE（淘汰/撤回已离开漏斗），末列以 status=HIRED 为准
+    const counts = job.stages.map(() => 0);
+    for (const a of apps) {
+      const i = stageIndexById.get(a.stageId);
+      if (i == null) continue;
+      if (a.status === 'ACTIVE' || (a.status === 'HIRED' && i === lastIndex)) counts[i] += 1;
+    }
+
+    // 到达过：每条应聘的最深足迹 = max(建档落首列 0, 当前所在列, 历史流转日志里所有 payload.to)
+    const events = await this.prisma.activityLog.findMany({
+      where: {
+        action: { in: [ACTIVITY_ACTIONS.APPLICATION_STAGE_CHANGED, ACTIVITY_ACTIONS.APPLICATION_STAGE_REVERTED] },
+        entityId: { in: apps.map((a) => a.id) },
+      },
+      select: { entityId: true, payload: true },
+    });
+    const deepest = new Map<string, number>();
+    for (const a of apps) deepest.set(a.id, stageIndexById.get(a.stageId) ?? 0);
+    for (const ev of events) {
+      if (!ev.entityId) continue;
+      const to = (ev.payload as { to?: string } | null)?.to;
+      const i = to ? stageIndexByName.get(to) : undefined;
+      if (i == null) continue; // 阶段被改名/删除后的历史日志：对不上就不计，不猜
+      deepest.set(ev.entityId, Math.max(deepest.get(ev.entityId) ?? 0, i));
+    }
+    const reached = job.stages.map(
+      (_, i) => [...deepest.values()].filter((d) => d >= i).length,
     );
-    const reached = counts.map((_, i) => counts.slice(i).reduce((a, b) => a + b, 0));
 
     return {
       job: { id: job.id, title: job.title },
@@ -127,7 +150,7 @@ export class AnalyticsService {
         name: stage.name,
         /** 当前停留人数 */
         current: counts[i],
-        /** 到达过该阶段的人数（快照近似） */
+        /** 历史上到达过该阶段（含之后阶段）的人数 */
         reached: reached[i],
         /** 相对上一阶段的转化率（0-1，首阶段为 null） */
         conversion: i === 0 || reached[i - 1] === 0 ? null : reached[i] / reached[i - 1],
@@ -186,9 +209,39 @@ export class AnalyticsService {
    * 数据洞察（全部基于 Application 状态机事件计算）：
    * TTH 中位数 / 渠道效能 / Offer 接受率 / 面试官效能 / 毁约率 / 阶段停留 P50-P90（ActivityLog 回放）。
    * 当前数据量级直接内存聚合；上量后迁移为物化视图或定时汇总表。
+   *
+   * 筛选口径：按「应聘创建时间」划同期群（cohort），而不是按事件发生时间。
+   * 理由是 TTH、阶段停留这类指标本身横跨多个周期——若按事件时间切，
+   * 同一个候选人的入口和出口会落进不同区间，各图之间不再可比。
+   * 同期群口径下所有指标回答的是同一个问题：「这批进入流程的人表现如何」。
+   *
+   * 五组指标（TTH / 渠道 / Offer / 面试官 / 阶段停留）共用下面这一个 scope，
+   * 不允许只过滤其中一部分——那会让四张图的分母互相对不上。
    */
-  async insights() {
+  async insights(query: QueryInsightsDto = {}) {
     const DAY = 86_400_000;
+    const { range = 'all', deptId } = query;
+
+    const rangeStart = (() => {
+      const now = new Date();
+      if (range === '30d') return new Date(now.getTime() - 30 * 86_400_000);
+      if (range === 'quarter') return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+      if (range === 'year') return new Date(now.getFullYear(), 0, 1);
+      return null;
+    })();
+
+    const appWhere: Prisma.ApplicationWhereInput = {
+      ...(rangeStart ? { createdAt: { gte: rangeStart } } : {}),
+      ...(deptId ? { job: { departmentId: deptId } } : {}),
+    };
+
+    /** 同期群内的应聘；stageStay 需要按 id 反查留痕，顺带复用它的 createdAt */
+    const scopedApps = await this.prisma.application.findMany({
+      where: appWhere,
+      select: { id: true, createdAt: true },
+    });
+    const scopedIds = scopedApps.map((a) => a.id);
+
     const median = (nums: number[]) => {
       if (nums.length === 0) return null;
       const s = [...nums].sort((a, b) => a - b);
@@ -204,7 +257,7 @@ export class AnalyticsService {
 
     // ---- TTH：Application 创建 → 入职闭环（onboarding.completed 留痕时间，兜底 updatedAt） ----
     const hired = await this.prisma.application.findMany({
-      where: { status: 'HIRED' },
+      where: { ...appWhere, status: 'HIRED' },
       select: { id: true, createdAt: true, updatedAt: true, job: { select: { title: true } } },
     });
     const completions = await this.prisma.activityLog.findMany({
@@ -222,6 +275,7 @@ export class AnalyticsService {
 
     // ---- 渠道效能：投递 / 进面 / Offer / 接受 / 入职（首次有效渠道 = candidate.source） ----
     const apps = await this.prisma.application.findMany({
+      where: appWhere,
       select: {
         status: true,
         candidate: { select: { source: true } },
@@ -246,7 +300,7 @@ export class AnalyticsService {
 
     // ---- Offer 接受率（分母 = 已发出；撤回场景暂无独立状态，后续议价流程补充口径） ----
     const sentOffers = await this.prisma.offer.findMany({
-      where: { sentAt: { not: null } },
+      where: { sentAt: { not: null }, application: appWhere },
       select: { decision: true, application: { select: { status: true } } },
     });
     const acceptedCount = sentOffers.filter((o) => o.decision === 'ACCEPTED').length;
@@ -257,7 +311,7 @@ export class AnalyticsService {
 
     // ---- 面试官效能：面评及时率（24h SLA）+ 结论通过率与全局均值偏离 ----
     const evals = await this.prisma.evaluation.findMany({
-      where: { submittedAt: { not: null } },
+      where: { submittedAt: { not: null }, interview: { application: appWhere } },
       select: {
         conclusion: true,
         submittedAt: true,
@@ -289,15 +343,14 @@ export class AnalyticsService {
 
     // ---- 阶段停留 P50/P90：ActivityLog 回放（进入时间 → 离开时间），精确口径而非快照 ----
     const stageEvents = await this.prisma.activityLog.findMany({
-      where: { action: { in: ['application.stage_changed', 'application.stage_reverted'] } },
+      where: {
+        action: { in: ['application.stage_changed', 'application.stage_reverted'] },
+        entityId: { in: scopedIds },
+      },
       orderBy: { createdAt: 'asc' },
       select: { entityId: true, createdAt: true, payload: true },
     });
-    const appCreated = new Map(
-      (
-        await this.prisma.application.findMany({ select: { id: true, createdAt: true } })
-      ).map((a) => [a.id, a.createdAt]),
-    );
+    const appCreated = new Map(scopedApps.map((a) => [a.id, a.createdAt]));
     const byApp = new Map<string, Array<{ at: Date; from: string; to: string }>>();
     for (const ev of stageEvents) {
       const p = ev.payload as { from?: string; to?: string } | null;
@@ -320,6 +373,13 @@ export class AnalyticsService {
     }
 
     return {
+      /** 回显实际生效的口径与样本量：前端可据此提示「本区间样本过少」而不是干画一张空图 */
+      scope: {
+        range,
+        deptId: deptId ?? null,
+        since: rangeStart?.toISOString() ?? null,
+        applications: scopedApps.length,
+      },
       tth: {
         medianDays: round1(median(tthAll)),
         hiredCount: hired.length,
