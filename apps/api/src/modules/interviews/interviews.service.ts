@@ -115,8 +115,21 @@ export class InterviewsService {
     return updated;
   }
 
+  /**
+   * 惰性收口：已过约定时间且未取消的面试自动置为 COMPLETED。
+   * 与 offers.expireIfDue 同一套路——没有定时任务，就在读路径上把到期状态补齐；
+   * 否则 Interview 永远停在 SCHEDULED，面试管理页的「待我面评」筛选与提交入口全部够不着。
+   */
+  private async completeDueInterviews() {
+    await this.prisma.interview.updateMany({
+      where: { status: 'SCHEDULED', scheduledAt: { lte: new Date() } },
+      data: { status: 'COMPLETED' },
+    });
+  }
+
   /** 按应聘记录查询；不传 applicationId 时返回近期面试总览（面试管理页用） */
   async list(applicationId?: string, user?: JwtUser) {
+    await this.completeDueInterviews();
     // 数据行级权限：面试官仅被指派的面试；用人经理仅本部门
     const scopeWhere: Prisma.InterviewWhereInput = {};
     if (user && isAssignedScope(user)) {
@@ -219,6 +232,15 @@ export class InterviewsService {
       },
       include: { interviewer: { select: { id: true, name: true } } },
     });
+
+    // 有人交了面评，这场面试就是真的发生过了——未排期（scheduledAt 为空）的场次靠时间扫不到，
+    // 在这里收口，同时让同场其他面试官仍能看到提交入口。
+    if (interview.status === 'SCHEDULED') {
+      await this.prisma.interview.updateMany({
+        where: { id: interviewId, status: 'SCHEDULED' },
+        data: { status: 'COMPLETED' },
+      });
+    }
 
     await this.activityLog.record(
       user,
