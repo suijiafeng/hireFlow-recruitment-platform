@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserRolesDto } from './dto/update-user-roles.dto';
 import { UsersService } from './users.service';
 
@@ -19,6 +20,17 @@ export class UsersController {
   @ApiQuery({ name: 'role', required: false })
   list(@Query('role') role?: string) {
     return this.usersService.list(role);
+  }
+
+  @Post()
+  @RequirePermissions(PERMISSIONS.USER_MANAGE)
+  @ApiOperation({
+    summary: '邀请内部成员',
+    description:
+      '邮箱唯一、至少一个角色、不可分配门户角色。未接邮件通道，响应中的 initialPassword 仅此一次返回，请转交本人后尽快改密；该密码不写入审计留痕。',
+  })
+  invite(@Body() dto: InviteUserDto, @CurrentUser() user: JwtUser) {
+    return this.usersService.invite(dto, user);
   }
 
   @Patch(':id/roles')

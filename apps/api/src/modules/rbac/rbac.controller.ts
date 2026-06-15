@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { RbacService } from './rbac.service';
 
@@ -29,6 +30,16 @@ export class RbacController {
   @ApiOperation({ summary: '全部权限点' })
   permissions() {
     return this.prisma.permission.findMany({ orderBy: [{ group: 'asc' }, { code: 'asc' }] });
+  }
+
+  @Post('roles')
+  @RequirePermissions(PERMISSIONS.CONFIG_MANAGE)
+  @ApiOperation({
+    summary: '新建自定义角色',
+    description: 'ADMIN 与门户角色码为系统保留，不可新建；dataScope 缺省 ASSIGNED（最小权限）。',
+  })
+  createRole(@Body() dto: CreateRoleDto, @CurrentUser() user: JwtUser) {
+    return this.rbacService.createRole(dto, user);
   }
 
   @Patch('roles/:id/permissions')

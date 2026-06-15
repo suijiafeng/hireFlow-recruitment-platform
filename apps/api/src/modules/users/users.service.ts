@@ -1,8 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { hashSync } from 'bcryptjs';
 import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { InviteUserDto } from './dto/invite-user.dto';
 
 const USER_SELECT = {
   id: true,
@@ -28,6 +31,76 @@ export class UsersService {
       select: USER_SELECT,
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  /**
+   * 邀请内部成员。
+   *
+   * 业务约束：
+   * - 邮箱即登录账号，必须全局唯一；
+   * - 至少一个角色——没有角色的账号能登录却什么都看不到，是个死账号；
+   * - 门户角色（CANDIDATE / NEW_HIRE）属于免登录 H5 身份，不可分配给内部成员；
+   * - 部门可选，但给了就必须存在。
+   *
+   * 本项目未接邮件通道，因此生成初始密码并「仅此一次」随响应返回，由管理员转交。
+   * 注意：初始密码不写入 ActivityLog——审计留痕是长期保存且可被更多人查看的，
+   * 把凭据落进去等于永久泄露。留痕只记谁邀请了谁、给了什么角色。
+   */
+  async invite(dto: InviteUserDto, actor: JwtUser) {
+    const email = dto.email.trim().toLowerCase();
+    const exists = await this.prisma.user.findUnique({ where: { email } });
+    if (exists) throw new BadRequestException(`邮箱「${email}」已被占用（${exists.name}）`);
+
+    const unique = [...new Set(dto.roleCodes)];
+    const portal: string[] = [RoleCode.CANDIDATE, RoleCode.NEW_HIRE];
+    const portalPicked = unique.filter((c) => portal.includes(c));
+    if (portalPicked.length) {
+      throw new BadRequestException(`「${portalPicked.join('、')}」是候选人/新员工门户角色，不能分配给内部成员`);
+    }
+    const roles = await this.prisma.role.findMany({ where: { code: { in: unique } } });
+    if (roles.length !== unique.length) {
+      const known = new Set(roles.map((r) => r.code));
+      throw new BadRequestException(`未知角色码：${unique.filter((c) => !known.has(c)).join('、')}`);
+    }
+
+    if (dto.departmentId) {
+      const dept = await this.prisma.department.findUnique({ where: { id: dto.departmentId } });
+      if (!dept) throw new BadRequestException('所选部门不存在');
+    }
+
+    // 12 位随机初始密码：去掉易混淆字符，方便口头/IM 转交
+    const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#%';
+    const initialPassword = Array.from(
+      randomBytes(12),
+      (b) => ALPHABET[b % ALPHABET.length],
+    ).join('');
+
+    const userId = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          name: dto.name.trim(),
+          passwordHash: hashSync(initialPassword, 10),
+          departmentId: dto.departmentId ?? null,
+        },
+      });
+      await tx.userRole.createMany({
+        data: roles.map((r) => ({ userId: user.id, roleId: r.id })),
+      });
+      await this.activityLog.record(
+        actor,
+        ACTIVITY_ACTIONS.USER_INVITED,
+        'User',
+        user.id,
+        // 不含密码：审计留痕长期保存，凭据不进日志
+        { email, userName: user.name, roles: [...unique].sort(), departmentId: dto.departmentId ?? null },
+        tx,
+      );
+      return user.id;
+    });
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT });
+    return { user, initialPassword };
   }
 
   /**
