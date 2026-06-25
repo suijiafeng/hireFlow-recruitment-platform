@@ -162,12 +162,23 @@ export function buildTheme(disableMotion: boolean): ThemeConfig {
         darkGroupTitleColor: 'rgba(255, 255, 255, 0.3)',
         iconSize: 16,
       },
+      /**
+       * 对齐原来手写的 .hf-table：表头 40px / 行高 48px / 表头 12px 大写字距、
+       * 行分隔用发丝线而表头下沿用主线。数值不要随手改——10 张表全靠这一处统一。
+       */
       Table: {
-        headerColor: INK.secondary,
+        headerColor: INK.muted,
         headerBg: SURFACE.sunken,
-        rowHoverBg: SURFACE.page,
-        cellPaddingBlock: 12,
-        borderRadiusLG: 8,
+        headerSplitColor: 'transparent', // 原设计表头列之间没有竖线
+        rowHoverBg: '#fafbfc',
+        rowSelectedBg: BRAND.primary50,
+        rowSelectedHoverBg: BRAND.primary50,
+        borderColor: SURFACE.lineSoft, // 行分隔：发丝线
+        headerBorderRadius: 0, // 圆角交给外层容器，表头自己不要切角
+        cellPaddingBlock: 0, // 行高由 .hf-atable 的 height 控制，避免 padding 叠加
+        cellPaddingInline: 12,
+        cellFontSize: 16,
+        footerBg: SURFACE.panel,
       },
       Statistic: {
         titleFontSize: 14,

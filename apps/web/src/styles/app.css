@@ -4182,3 +4182,180 @@
 
 /* HR 核对中的勾选框：琥珀描边而非实心 */
 .hf-check--review { background: #fffbeb; border-color: #fde68a; }
+
+/* ============================================================
+   antd Table 皮肤：让 <Table> 长成原来手写 .hf-table 的样子
+   ------------------------------------------------------------
+   为什么不直接用 antd 默认样式：站内大盘、看板、抽屉仍是手写的 hf-* 体系，
+   表格一旦用 antd 默认观感（表头更矮、有竖分隔线、行高更小、圆角/描边不同）
+   就会和其余部分割裂。这里把差异集中收在一处，10 张表共用。
+
+   尺寸来自原 .hf-table：容器 1px #e6e7e9 + 8px 圆角、表头 40px、行 48px、
+   左右留白 16px。颜色与字重走 theme.ts 的 Table token，这里只补 token 表达不了的。
+   ============================================================ */
+.hf-atable {
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+  border: 1px solid #e6e7e9;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* 高度随内容，不抢占剩余空间（设置页的角色表用） */
+.hf-atable--fit { flex: 0 0 auto; }
+
+/* 高度要一路传到 .ant-table-content 才能让表体内部滚动，中间任何一层是 block 都会断链。
+   注意 antd v6 的 Spin 包装层类名是 .ant-spin（v5 的 .ant-spin-nested-loading 已不存在）。 */
+.hf-atable .ant-table-wrapper,
+.hf-atable .ant-spin,
+.hf-atable .ant-spin-container,
+.hf-atable .ant-table { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.hf-atable .ant-table-container { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* 外框由 .hf-atable 提供，antd 自己那圈描边和圆角要摘掉，否则双线 */
+.hf-atable .ant-table { background: transparent; border-radius: 0; }
+.hf-atable .ant-table-container,
+.hf-atable .ant-table-content { border-inline-start: none !important; border-top: none !important; }
+
+/* 表头：40px、12px 大写字距，下沿用主分隔线（比行分隔线深一档） */
+.hf-atable .ant-table-thead > tr > th {
+  height: 40px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e6e7e9 !important;
+  white-space: nowrap;
+}
+/* antd 默认给表头加了一根竖向分隔伪元素，原设计没有 */
+.hf-atable .ant-table-thead > tr > th::before { display: none !important; }
+
+/* 行：48px 固定高，分隔用发丝线 */
+.hf-atable .ant-table-tbody > tr > td { height: 48px; }
+.hf-atable .ant-table-tbody > tr:last-child > td { border-bottom: none; }
+.hf-atable .ant-table-row { cursor: pointer; transition: background 0.12s ease; }
+/* 行不可点的表（纯展示）显式关掉手型 */
+.hf-atable--static .ant-table-row { cursor: default; }
+
+/* 首末列贴合容器 16px 留白，与原 .hf-tr 的 padding: 0 16px 一致 */
+.hf-atable .ant-table-thead > tr > th:first-child,
+.hf-atable .ant-table-tbody > tr > td:first-child { padding-inline-start: 16px; }
+.hf-atable .ant-table-thead > tr > th:last-child,
+.hf-atable .ant-table-tbody > tr > td:last-child { padding-inline-end: 16px; }
+
+/* 行状态：沿用原来的类名，通过 rowClassName 挂上来 */
+.hf-atable .ant-table-row.hf-row--on > td { background: #eff6ff; }
+.hf-atable .ant-table-row.hf-row--on > td:first-child { box-shadow: inset 2px 0 0 #2563eb; }
+.hf-atable .ant-table-row.hf-row--muted > td { background: #fafafa; }
+.hf-atable .ant-table-row.hf-row--todo > td { background: #fffdf7; }
+.hf-atable .ant-table-row.hf-row--focus > td { background: #fbfcff; }
+
+/* 固定列：antd 用 sticky 定位，背景必须实色否则会透出下层内容 */
+.hf-atable .ant-table-cell-fix-right,
+.hf-atable .ant-table-cell-fix-left { background: #fff; }
+.hf-atable .ant-table-thead > tr > th.ant-table-cell-fix-right,
+.hf-atable .ant-table-thead > tr > th.ant-table-cell-fix-left { background: #fafafa; }
+/* 行悬浮/选中时固定列要跟着变色，否则钉住的那格突兀地保持白底 */
+.hf-atable .ant-table-row:hover > td.ant-table-cell-fix-right,
+.hf-atable .ant-table-row:hover > td.ant-table-cell-fix-left { background: #fafbfc; }
+.hf-atable .ant-table-row.hf-row--on > td.ant-table-cell-fix-right { background: #eff6ff; }
+.hf-atable .ant-table-row.hf-row--muted > td.ant-table-cell-fix-right { background: #fafafa; }
+.hf-atable .ant-table-row.hf-row--todo > td.ant-table-cell-fix-right { background: #fffdf7; }
+.hf-atable .ant-table-row.hf-row--focus > td.ant-table-cell-fix-right { background: #fbfcff; }
+/* 固定列与滚动内容的分界阴影，只在真的发生横向滚动时出现（antd 自动加类） */
+.hf-atable .ant-table-cell-fix-right-first::after,
+.hf-atable .ant-table-cell-fix-right::after { box-shadow: inset -10px 0 8px -8px rgba(26, 26, 26, 0.09); }
+
+/* 横向滚动条：细、低对比，不抢视线 */
+.hf-atable .ant-table-body::-webkit-scrollbar,
+.hf-atable .ant-table-content::-webkit-scrollbar { height: 8px; width: 8px; }
+.hf-atable .ant-table-body::-webkit-scrollbar-thumb,
+.hf-atable .ant-table-content::-webkit-scrollbar-thumb {
+  background: rgba(26, 26, 26, 0.16);
+  border-radius: 4px;
+}
+.hf-atable .ant-table-body::-webkit-scrollbar-track,
+.hf-atable .ant-table-content::-webkit-scrollbar-track { background: transparent; }
+
+/* 空态：antd 默认占位很高，压到与行高协调 */
+.hf-atable .ant-table-placeholder > td { height: auto; padding: 40px 16px; }
+.hf-atable .ant-table-placeholder:hover > td { background: #fff; }
+
+/* ============ 分组表：每组一张独立 Table ============
+   各组是各自独立的横向滚动容器，所以每组都带自己的表头（只在首组放表头的话，
+   某一组横向滚动后列就和顶部表头错位了）。外层容器负责纵向滚动与统一描边。 */
+.hf-agroup-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e6e7e9;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.hf-agroup-item { flex: 0 0 auto; }
+/* 组内的表去掉自己的外框，边界交给组标题的上分隔线来表达 */
+.hf-agroup-list .hf-atable {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+/* 组标题：与原 .hf-group-head 一致，组之间用一条线断开 */
+.hf-agroup-item + .hf-agroup-item .hf-group-head { border-top: 1px solid #eeeff1; }
+/* 分组表的底部汇总条钉在列表末尾 */
+.hf-agroup-list > .hf-panel-foot { position: sticky; bottom: 0; background: #fff; }
+
+/* 表体滚动交给 antd 自己（传了 scroll.y 它就拆成 header/body 两张表，body 自带滚动容器）。
+   这里只把 antd 算出来的固定 max-height 换成 flex 撑满——否则高度得在 JSX 里硬写像素，
+   窗口尺寸或上方筛选栏一变就不对。 */
+.hf-atable .ant-table-body {
+  flex: 1;
+  min-height: 0;
+  max-height: none !important;
+  /* antd 传了 scroll.y 就写死 overflow-y: scroll，滚动条槽会常驻占位；
+     内容不足一屏时白占一条，还会让表头和表体差出一个滚动条宽度。改为按需出现。 */
+  overflow-y: auto !important;
+}
+.hf-atable .ant-table-header {
+  flex: 0 0 auto;
+  /* 与上面配套：不再为常驻滚动条预留位置，表头列和表体列才对得齐 */
+  margin-inline-end: 0 !important;
+  overflow: hidden !important;
+}
+
+/* 单元格内是 flex 排布时（色点+文字+Tag），子项必须能收缩，否则长文本会顶出格子 */
+.hf-atable .ant-table-tbody > tr > td > .u-flex-gap-6,
+.hf-atable .ant-table-tbody > tr > td > .u-flex-gap-8,
+.hf-atable .ant-table-tbody > tr > td > .u-flex-gap-10,
+.hf-atable .ant-table-tbody > tr > td > .u-flex-gap-12 {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  /* 行高固定 48px，任何子项换行都会顶破单元格（部门名、轮次、Tag 都可能被折行） */
+  white-space: nowrap;
+}
+/* 只有带 hf-ellipsis 的那个子项负责被压缩，其余（部门名、Tag、计数）保持原尺寸 */
+.hf-atable .ant-table-tbody > tr > td .hf-ellipsis { min-width: 0; flex: 0 1 auto; }
+.hf-atable .ant-table-tbody > tr > td > [class*='u-flex-gap'] > :not(.hf-ellipsis) { flex: 0 0 auto; }
+
+/* antd 自带分页器：贴合原来的 .hf-panel-foot（48px 高、16px 留白、顶部发丝线、
+   左侧总数右侧翻页）。antd 默认是右对齐并且带外边距，这里改成两端对齐、无外边距。 */
+.hf-atable .ant-pagination.ant-table-pagination {
+  flex: 0 0 auto;
+  margin: 0;
+  min-height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #eeeff1;
+  font-size: 14px;
+}
+/* 总数文案推到最左，与原来「第 1–20 条 / 共 126 条」的位置一致 */
+.hf-atable .ant-pagination .ant-pagination-total-text {
+  margin-inline-end: auto;
+  color: rgba(26, 26, 26, 0.45);
+}
