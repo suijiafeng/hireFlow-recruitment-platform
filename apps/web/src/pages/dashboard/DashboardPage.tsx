@@ -1,11 +1,6 @@
-import {
-  CarryOutOutlined,
-  FunnelPlotOutlined,
-  LineChartOutlined,
-  RobotOutlined,
-} from '@ant-design/icons';
+import { ReloadOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { App, Button, Card, Col, Row, Select, Spin, Tooltip, Typography } from 'antd';
+import { App, Button, Card, Select, Spin, Tooltip, Typography } from 'antd';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -15,122 +10,117 @@ import { extractErrorMessage } from '../../api/client';
 import type { FunnelStage } from '../../api/types';
 import { ChartTip, SERIES, TrendChart } from '../../components/charts';
 import { EmptyBlock } from '../../components/ui';
-import { useAuthStore } from '../../stores/auth';
+import { downloadCsv } from '../../utils/csv';
+import { pickDefaultJobId } from '../../utils/jobs';
 
 const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
-/* 漏斗条：单色系列（长度编码人数，位置编码阶段次序）；每条自带 hover 提示 */
-function FunnelBar({ stage, max }: { stage: FunnelStage; max: number }) {
+/** 有序阶梯：阶段越靠后颜色越深（位置编码次序，深浅编码进度） */
+const FUNNEL_SHADES = ['#93C5FD', '#7DB1FB', '#60A5FA', '#3B82F6', '#2563EB', '#1E40AF'];
+
+/**
+ * 漏斗阶段行：条长 = 累计到达，条内深色段 = 当前停留；
+ * 阶段之间插一行流失说明（人数 + 流失率），瓶颈在哪一段可直接读出。
+ */
+function FunnelStageRow({
+  stage,
+  prev,
+  max,
+  shade,
+}: {
+  stage: FunnelStage;
+  prev: FunnelStage | null;
+  max: number;
+  shade: string;
+}) {
   const widthPct = max > 0 ? (stage.reached / max) * 100 : 0;
+  const stayPct = stage.reached > 0 ? Math.round((stage.current / stage.reached) * 100) : 0;
   const conversionText = stage.conversion != null ? `${Math.round(stage.conversion * 100)}%` : '—';
+  const lowConversion = stage.conversion != null && stage.conversion < 0.55;
+  const drop = prev ? prev.reached - stage.reached : 0;
+  const dropRate = prev && prev.reached > 0 ? Math.round((drop / prev.reached) * 100) : 0;
+
   return (
-    <Tooltip
-      trigger={['hover', 'focus']}
-      title={
-        <ChartTip
-          title={stage.name}
-          rows={[
-            { value: stage.reached, label: '累计到达' },
-            { value: stage.current, label: '当前停留' },
-            ...(stage.conversion != null ? [{ value: conversionText, label: '相对上一阶段转化' }] : []),
-          ]}
-        />
-      }
-    >
-      <div className="funnel-row" tabIndex={0}>
-        <span className="funnel-label">{stage.name}</span>
-        <div className="funnel-track">
-          <div
-            className="funnel-bar"
-            style={cssVars({ '--w': `${widthPct}%`, '--minw': stage.reached > 0 ? '6px' : '0' })}
+    <div className="funnel-stage">
+      <Tooltip
+        trigger={['hover', 'focus']}
+        title={
+          <ChartTip
+            title={stage.name}
+            rows={[
+              { value: stage.reached, label: '累计到达' },
+              { value: stage.current, label: '当前停留' },
+              ...(stage.conversion != null ? [{ value: conversionText, label: '相对上一阶段转化' }] : []),
+            ]}
           />
-          <span className="funnel-value">{stage.reached}</span>
+        }
+      >
+        <div className="funnel-row" tabIndex={0}>
+          <span className="funnel-label">{stage.name}</span>
+          <div className="funnel-track">
+            <div className="funnel-bar" style={cssVars({ '--w': `${widthPct}%`, '--c': shade })}>
+              <span className="funnel-bar-stay" style={cssVars({ '--sw': `${stayPct}%` })} />
+            </div>
+          </div>
+          <span className="funnel-num">{stage.reached}</span>
+          <span className="funnel-num funnel-num--soft">{stage.current}</span>
+          <span className={lowConversion ? 'funnel-rate funnel-rate--low' : 'funnel-rate'}>{conversionText}</span>
         </div>
-        <span className="funnel-rate">{conversionText}</span>
-      </div>
-    </Tooltip>
+      </Tooltip>
+      {drop > 0 && (
+        <div className="funnel-drop">
+          <span className="funnel-drop-tick" />
+          <span>流失 {drop} 人</span>
+          <span className={dropRate >= 45 ? 'funnel-drop-rate funnel-drop-rate--high' : 'funnel-drop-rate'}>
+            -{dropRate}%
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
 const TODO_META = [
-  { key: 'newResumes' as const, label: '待处理新简历', link: '/pipeline', hint: '停留在首个阶段的候选人' },
-  { key: 'myPendingEvaluations' as const, label: '我的待提交面评', link: '/interviews', hint: '面试已过时未提交' },
-  { key: 'pendingOffers' as const, label: '待审批 Offer', link: '/offers', hint: '需要用人经理审批' },
-  { key: 'rejectedOffers' as const, label: '被驳回待重提', link: '/offers', hint: 'Offer 方案需修改后重新提交' },
-  { key: 'offersDue' as const, label: 'Offer 到期待处理', link: '/offers', hint: '24h 内到期或已失效可续期' },
-  { key: 'onboardingInProgress' as const, label: '进行中入职单', link: '/onboarding', hint: '三方清单未完成' },
-  { key: 'docsNeedReview' as const, label: '材料待人工核对', link: '/onboarding', hint: '仅图片未识别字段（低置信度）' },
+  { key: 'newResumes' as const, label: '待处理新简历', link: '/pipeline' },
+  { key: 'myPendingEvaluations' as const, label: '我的待提交面评', link: '/interviews' },
+  { key: 'pendingOffers' as const, label: '待审批 Offer', link: '/offers' },
+  { key: 'rejectedOffers' as const, label: '被驳回待重提', link: '/offers' },
+  { key: 'offersDue' as const, label: 'Offer 到期待处理', link: '/offers' },
+  { key: 'onboardingInProgress' as const, label: '进行中入职单', link: '/onboarding' },
+  { key: 'docsNeedReview' as const, label: '材料待人工核对', link: '/onboarding' },
 ];
 
-/** 待办事项聚合 To-Do Center */
-function TodoCenter() {
+/** 待办：单行清单（数字在前、标签在后），替代原来占两行的 7 张磁贴 */
+function TodoStrip() {
   const navigate = useNavigate();
   const todosQuery = useQuery({ queryKey: ['todos'], queryFn: analyticsApi.todos });
   const data = todosQuery.data;
   const visible = TODO_META.filter((meta) => data?.[meta.key] !== null);
+  if (visible.length === 0 && !todosQuery.isLoading) return null;
   return (
-    <Card className="todo-center-card" size="small">
-      <div className="section-header">
-        <div className="section-title">
-          <CarryOutOutlined className="section-icon" />
-          <span>待办中心</span>
-        </div>
+    <div className="todo-strip">
+      <span className="todo-strip-title">待办</span>
+      <div className="todo-strip-items">
+        {visible.map((meta) => {
+          const count = data?.[meta.key] ?? 0;
+          return (
+            <div className="todo-strip-item" key={meta.key} onClick={() => navigate(meta.link)}>
+              <span className={count > 0 ? 'todo-strip-count todo-strip-count--hot' : 'todo-strip-count'}>
+                {todosQuery.isLoading ? '…' : count}
+              </span>
+              <span className="todo-strip-label">{meta.label}</span>
+            </div>
+          );
+        })}
       </div>
-      {visible.length === 0 && !todosQuery.isLoading ? (
-        <EmptyBlock minHeight={120} description="暂无待办事项" />
-      ) : (
-        <Row gutter={[12, 12]}>
-          {visible.map((meta) => {
-            const count = data?.[meta.key] ?? 0;
-            return (
-              <Col xs={12} lg={8} xl={6} key={meta.key}>
-                <div
-                  className={count > 0 ? 'todo-tile todo-tile--hot hover-lift' : 'todo-tile hover-lift'}
-                  onClick={() => navigate(meta.link)}
-                >
-                  <div className="todo-tile-head">
-                    <span>{meta.label}</span>
-                    <span className="todo-tile-count">{todosQuery.isLoading ? '…' : count}</span>
-                  </div>
-                  <div className="todo-tile-hint">{meta.hint}</div>
-                </div>
-              </Col>
-            );
-          })}
-        </Row>
-      )}
-    </Card>
-  );
-}
-
-/** 近 8 周投递/入职趋势（双系列折线，列命中区 Tooltip） */
-function TrendCard() {
-  const trendQuery = useQuery({ queryKey: ['trend'], queryFn: analyticsApi.trend });
-  const points = trendQuery.data?.points ?? [];
-  return (
-    <Card className="trend-card u-mt-16" size="small" loading={trendQuery.isLoading}>
-      <div className="section-header">
-        <div className="section-title">
-          <LineChartOutlined className="section-icon" />
-          <span>近 8 周投递与入职趋势</span>
-        </div>
-      </div>
-      <TrendChart
-        data={points.map((p) => ({ x: p.week, values: { applied: p.applied, hired: p.hired } }))}
-        series={[
-          { key: 'applied', label: '新增投递', color: SERIES.blue },
-          { key: 'hired', label: '入职闭环', color: SERIES.aqua },
-        ]}
-      />
-    </Card>
+    </div>
   );
 }
 
 export function DashboardPage() {
   const { message } = App.useApp();
-  const user = useAuthStore((s) => s.user);
   const [jobId, setJobId] = useState<string>();
-  const [insight, setInsight] = useState<{ text: string; provider: string } | null>(null);
+  const [insight, setInsight] = useState<{ text: string; provider: string; at: string } | null>(null);
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'options'],
@@ -138,132 +128,209 @@ export function DashboardPage() {
   });
 
   useEffect(() => {
-    if (!jobId && jobsQuery.data?.items.length) {
-      setJobId(jobsQuery.data.items[0].id);
-    }
+    if (jobId) return;
+    const preferred = pickDefaultJobId(jobsQuery.data?.items);
+    if (preferred) setJobId(preferred);
   }, [jobId, jobsQuery.data]);
+
+  // 全局口径的 KPI 取这里；漏斗与「本职位在流程」才是选中职位的口径（同一个 queryKey，与洞察页共享缓存）
+  const overviewQuery = useQuery({ queryKey: ['analytics-overview'], queryFn: analyticsApi.overview });
 
   const funnelQuery = useQuery({
     queryKey: ['funnel', jobId],
     queryFn: () => analyticsApi.funnel(jobId!),
     enabled: Boolean(jobId),
   });
+  const trendQuery = useQuery({ queryKey: ['trend'], queryFn: analyticsApi.trend });
+  const todosQuery = useQuery({ queryKey: ['todos'], queryFn: analyticsApi.todos });
 
   const insightMutation = useMutation({
     mutationFn: () => analyticsApi.insight(jobId!),
-    onSuccess: (data) => setInsight({ text: data.insight, provider: data.aiMeta.provider }),
+    onSuccess: (data) => setInsight({ text: data.insight, provider: data.aiMeta.provider, at: dayjs().format('HH:mm') }),
     onError: (error) => message.error(extractErrorMessage(error, '诊断失败')),
   });
 
-  const maxReached = Math.max(...(funnelQuery.data?.stages.map((s) => s.reached) ?? [0]), 1);
+  const stages = funnelQuery.data?.stages ?? [];
+  const maxReached = Math.max(...stages.map((s) => s.reached), 1);
+  const points = trendQuery.data?.points ?? [];
 
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return '早上好';
-    if (hour < 18) return '下午好';
-    return '晚上好';
+  /**
+   * KPI 条：前两项曾经都是错的口径——
+   * 「在招职位」拿的是职位列表 total（含 DRAFT/PAUSED/CLOSED），改用 overview.openJobs；
+   * 「在流程候选人」求和的是选中职位的漏斗，是单职位口径，标签补上「本职位」讲清楚范围。
+   */
+  const kpis = [
+    { label: '在招职位', value: overviewQuery.data?.openJobs ?? 0, unit: '个' },
+    { label: '本职位在流程', value: stages.reduce((sum, s) => sum + s.current, 0), unit: '人' },
+    { label: '本周新增投递', value: points[points.length - 1]?.applied ?? 0, unit: '份' },
+    { label: '本月入职', value: points.slice(-4).reduce((sum, p) => sum + p.hired, 0), unit: '人' },
+    { label: '待处理待办', value: todosQuery.data?.newResumes ?? 0, unit: '项' },
+  ];
+
+  const jobOptions = jobsQuery.data?.items.map((j) => ({
+    value: j.id,
+    label: `${j.title}（${j.department.name}）`,
+  }));
+
+  /**
+   * 导出大盘报表：KPI + 选中职位的漏斗 + 近 8 周趋势。
+   * 漏斗是「按职位」的，所以文件名与口径行都要带上职位名——
+   * 否则几份导出摞在一起就分不清哪份是哪个职位的了。
+   */
+  const exportReport = () => {
+    const funnel = funnelQuery.data;
+    if (!funnel) return;
+    const jobLabel = funnel.job.title;
+    const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}%`);
+    const rows: Array<Array<unknown>> = [
+      ['口径', '职位', jobLabel, ''],
+      ['口径', '导出时间', dayjs().format('YYYY-MM-DD HH:mm'), ''],
+      ...kpis.map((k) => ['KPI', k.label, k.value, k.unit]),
+      ...stages.map((s) => [
+        '招聘漏斗',
+        s.name,
+        `累计到达 ${s.reached}`,
+        `当前停留 ${s.current} · 转化 ${pct(s.conversion)}`,
+      ]),
+      ...points.map((p) => ['投递趋势', p.week, `新增投递 ${p.applied}`, `入职闭环 ${p.hired}`]),
+    ];
+    downloadCsv(`数据大盘_${jobLabel}_${dayjs().format('YYYYMMDD')}`, ['分区', '项目', '值', '明细'], rows);
+    message.success(`已导出「${jobLabel}」的大盘报表`);
   };
 
   return (
     <div className="dashboard-page">
-      {/* 欢迎头部 */}
-      <div className="dashboard-welcome">
-        <div className="welcome-content">
-          <h1 className="welcome-title">
-            {greeting()}，{user?.name || '用户'} 👋
-          </h1>
-          <p className="welcome-subtitle">
-            今天是 {dayjs().format('YYYY年MM月DD日 dddd')}，祝你招聘顺利
-          </p>
+      {/* 控制栏取代蓝色欢迎横幅：职位上下文 + 时间范围 + 导出 */}
+      <div className="dashboard-bar">
+        <div className="dashboard-bar-left">
+          <Select
+            className="w-260"
+            placeholder="选择职位"
+            loading={jobsQuery.isLoading}
+            value={jobId}
+            onChange={(v) => {
+              setJobId(v);
+              setInsight(null);
+            }}
+            options={jobOptions}
+          />
+          <span className="dashboard-updated">数据截至 {dayjs().format('MM-DD HH:mm')} · 每 10 分钟刷新</span>
         </div>
-        <div className="welcome-decoration">
-          <div className="welcome-glow welcome-glow--1"></div>
-          <div className="welcome-glow welcome-glow--2"></div>
-        </div>
+        <span className="u-flex-gap-8">
+          <Button icon={<ReloadOutlined />} onClick={() => void funnelQuery.refetch()} loading={funnelQuery.isFetching}>
+            刷新
+          </Button>
+          <Button type="primary" disabled={!funnelQuery.data} onClick={exportReport}>
+            导出报表
+          </Button>
+        </span>
       </div>
 
-      {/* 待办中心 */}
-      <TodoCenter />
-
-      {/* 趋势图 */}
-      <TrendCard />
-
-      <Row gutter={[16, 16]} className="u-mt-16">
-        <Col xs={24} xl={14}>
-          <Card className="funnel-card" classNames={{ body: 'card-body-chart' }}>
-            <div className="section-header">
-              <div className="section-title">
-                <FunnelPlotOutlined className="section-icon" />
-                <span>招聘漏斗</span>
+      <div className="dashboard-body">
+        {/* KPI 条：一行 5 项，等分描边分隔，不做 5 张卡片 */}
+        <div className="kpi-strip">
+          {kpis.map((k) => (
+            <div className="kpi-cell" key={k.label}>
+              <div className="kpi-label">{k.label}</div>
+              <div className="kpi-value">
+                <span className="kpi-num">{k.value}</span>
+                <span className="kpi-unit">{k.unit}</span>
               </div>
-              <Select
-                className="w-240"
-                placeholder="选择职位"
-                loading={jobsQuery.isLoading}
-                value={jobId}
-                onChange={(v) => {
-                  setJobId(v);
-                  setInsight(null);
-                }}
-                options={jobsQuery.data?.items.map((j) => ({
-                  value: j.id,
-                  label: `${j.title}（${j.department.name}）`,
-                }))}
-              />
             </div>
-            {funnelQuery.isLoading ? (
-              <div className="loading-center">
-                <Spin />
-              </div>
-            ) : funnelQuery.data ? (
-              <>
-                {funnelQuery.data.stages.map((stage) => (
-                  <FunnelBar key={stage.id} stage={stage} max={maxReached} />
-                ))}
-                <Typography.Paragraph type="secondary" className="chart-note">
-                  条长 = 累计到达人数（快照口径）· 右列 = 相对上一阶段转化率 · 悬停查看明细
-                </Typography.Paragraph>
-              </>
-            ) : (
-              <EmptyBlock minHeight={220} description="暂无职位数据，创建职位后这里将展示招聘漏斗" />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} xl={10}>
-          <Card className="ai-insight-card" classNames={{ body: 'card-body-chart' }}>
-            <div className="section-header">
-              <div className="section-title">
-                <RobotOutlined className="section-icon" />
-                <span>AI 招聘健康度诊断</span>
-              </div>
-              <Button
-                size="small"
-                type="primary"
-                icon={<RobotOutlined />}
-                loading={insightMutation.isPending}
-                disabled={!jobId}
-                onClick={() => insightMutation.mutate()}
-              >
-                生成诊断
-              </Button>
+          ))}
+        </div>
+
+        <TodoStrip />
+
+        <div className="dashboard-cols">
+          <Card className="panel panel--funnel" variant="borderless">
+            <div className="panel-head">
+              <span className="panel-title">招聘漏斗</span>
+              <span className="panel-note">条长 = 累计到达 · 深色段 = 当前停留</span>
             </div>
-            {insight ? (
-              <div className="ai-insight-content">
-                <div className="ai-insight-text">{insight.text}</div>
-                <Typography.Text type="secondary" className="u-meta ai-insight-meta">
-                  来源：{insight.provider}
-                  {insight.provider === 'mock' && '（规则引擎，配置 ANTHROPIC_API_KEY 启用大模型诊断）'}
-                </Typography.Text>
-              </div>
-            ) : (
-              <EmptyBlock
-                minHeight={220}
-                description="选择职位后点击「生成诊断」，AI 将基于漏斗数据输出瓶颈分析与建议"
-              />
-            )}
+            <div className="panel-body">
+              {funnelQuery.isLoading ? (
+                <div className="loading-center">
+                  <Spin />
+                </div>
+              ) : stages.length > 0 ? (
+                <>
+                  <div className="funnel-colhead">
+                    <span className="funnel-colhead-plot">到达 / 停留</span>
+                    <span>到达</span>
+                    <span>停留</span>
+                    <span>转化</span>
+                  </div>
+                  {stages.map((stage, i) => (
+                    <FunnelStageRow
+                      key={stage.id}
+                      stage={stage}
+                      prev={i > 0 ? stages[i - 1] : null}
+                      max={maxReached}
+                      shade={FUNNEL_SHADES[Math.min(i, FUNNEL_SHADES.length - 1)]}
+                    />
+                  ))}
+                </>
+              ) : (
+                <EmptyBlock minHeight={220} description="暂无职位数据，创建职位后这里将展示招聘漏斗" />
+              )}
+            </div>
           </Card>
-        </Col>
-      </Row>
+
+          <div className="dashboard-side">
+            <Card className="panel panel--trend" variant="borderless" loading={trendQuery.isLoading}>
+              <div className="panel-head">
+                <span className="panel-title">投递与入职趋势</span>
+              </div>
+              <div className="panel-body panel-body--chart">
+                <TrendChart
+                  data={points.map((p) => ({ x: p.week, values: { applied: p.applied, hired: p.hired } }))}
+                  series={[
+                    { key: 'applied', label: '新增投递', color: SERIES.blue },
+                    { key: 'hired', label: '入职闭环', color: SERIES.aqua },
+                  ]}
+                />
+              </div>
+            </Card>
+
+            <Card className="panel panel--ai" variant="borderless">
+              <div className="panel-head">
+                <span className="panel-title">
+                  <RobotOutlined className="panel-title-icon" />
+                  AI 健康度诊断
+                </span>
+                <span className="panel-head-right">
+                  {insight && (
+                    <span className="panel-note">
+                      {insight.provider === 'mock' ? '规则引擎' : insight.provider} · {insight.at}
+                    </span>
+                  )}
+                  <Button
+                    size="small"
+                    loading={insightMutation.isPending}
+                    disabled={!jobId}
+                    onClick={() => insightMutation.mutate()}
+                  >
+                    {insight ? '重新生成' : '生成诊断'}
+                  </Button>
+                </span>
+              </div>
+              <div className="panel-body">
+                {insight ? (
+                  <>
+                    <div className="ai-insight-text">{insight.text}</div>
+                    <Typography.Text type="secondary" className="ai-insight-meta">
+                      AI 仅给出依据与建议，决定权在用人经理。
+                    </Typography.Text>
+                  </>
+                ) : (
+                  <EmptyBlock minHeight={140} description="选择职位后点击「生成诊断」，AI 将基于漏斗数据输出瓶颈与建议" />
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
