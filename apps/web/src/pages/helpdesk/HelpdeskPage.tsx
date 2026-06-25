@@ -1,6 +1,5 @@
 import {
   BookOutlined,
-  CommentOutlined,
   CopyOutlined,
   FileTextOutlined,
   QuestionCircleOutlined,
@@ -9,7 +8,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { App, Button, Card, Col, Input, Popconfirm, Row, Space, Spin, Tag, Tooltip, Typography } from 'antd';
+import { App, Button, Input, Popconfirm, Spin } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { helpdeskApi } from '../../api';
@@ -19,13 +18,12 @@ import { EmptyBlock } from '../../components/ui';
 interface ChatMessage {
   role: 'user' | 'bot';
   text: string;
-  /** ISO 时间戳（悬停消息行显示 HH:mm） */
   at: string;
   sources?: Array<{ id: string; title: string }>;
   provider?: string;
 }
 
-/** 快捷问题与种子知识库文档一一对应（网络/五险一金/休假/报销/试用期/考勤） */
+/** 快捷问题与种子知识库文档一一对应 */
 const QUICK_QUESTIONS = [
   'WiFi 密码是什么？',
   '公积金比例是多少？',
@@ -35,7 +33,6 @@ const QUICK_QUESTIONS = [
   '加班怎么调休？',
 ];
 
-/** 会话持久化：刷新/切页不丢（v1 为存储结构版本号） */
 const STORAGE_KEY = 'arthr:helpdesk-chat:v1';
 const MAX_MESSAGES = 200;
 
@@ -48,48 +45,39 @@ function loadMessages(): ChatMessage[] {
   }
 }
 
+/** 一条消息：气泡 + 出处降为一行文本（不再用彩色 Tag） */
 function ChatRow({ msg, onCopy }: { msg: ChatMessage; onCopy: (text: string) => void }) {
   const isUser = msg.role === 'user';
-  const showFooter = (msg.sources?.length ?? 0) > 0 || msg.provider === 'mock';
   return (
-    <div className={isUser ? 'chat-row chat-row--user' : 'chat-row'}>
-      <span className={isUser ? 'chat-avatar chat-avatar--user' : 'chat-avatar chat-avatar--bot'}>
-        {isUser ? <UserOutlined /> : <RobotOutlined />}
-      </span>
-      <div className="chat-bubble">
-        {msg.text}
+    <div className={isUser ? 'hf-chat-row hf-chat-row--user' : 'hf-chat-row'}>
+      {!isUser && (
+        <span className="hf-chat-avatar hf-chat-avatar--bot">
+          <RobotOutlined />
+        </span>
+      )}
+      <div className="hf-chat-col">
+        <div className={isUser ? 'hf-bubble hf-bubble--user' : 'hf-bubble'}>{msg.text}</div>
         {!isUser && (
-          <Tooltip title="复制回答">
-            <Button
-              className="chat-copy"
-              type="text"
-              size="small"
-              icon={<CopyOutlined />}
-              onClick={() => onCopy(msg.text)}
-            />
-          </Tooltip>
-        )}
-        {showFooter && (
-          <div className="chat-src">
+          <div className="hf-chat-meta">
             {(msg.sources?.length ?? 0) > 0 && (
               <>
-                <span className="u-meta u-muted">出处：</span>
-                {msg.sources!.map((s) => (
-                  <Tag key={s.id} className="tag-meta u-mr-0">
-                    {s.title}
-                  </Tag>
-                ))}
+                <FileTextOutlined />
+                <span>出处：{msg.sources!.map((s) => s.title).join(' · ')}</span>
+                <span>·</span>
               </>
             )}
-            {msg.provider === 'mock' && (
-              <Tooltip title="当前由规则引擎按关键词检索作答；配置 ANTHROPIC_API_KEY 后由大模型综合回答">
-                <span className="chat-provider">规则引擎</span>
-              </Tooltip>
-            )}
+            <span className="hf-td--num">{dayjs(msg.at).format('HH:mm')}</span>
+            <span className="hf-link" onClick={() => onCopy(msg.text)} title='复制回答'>
+              <CopyOutlined  /> 
+            </span>
           </div>
         )}
       </div>
-      <span className="chat-time">{dayjs(msg.at).format('HH:mm')}</span>
+      {isUser && (
+        <span className="hf-chat-avatar hf-chat-avatar--user">
+          <UserOutlined />
+        </span>
+      )}
     </div>
   );
 }
@@ -98,18 +86,15 @@ export function HelpdeskPage() {
   const { message } = App.useApp();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
-  /** 最近一次失败的问题：在消息流里给内联重试入口 */
   const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  /** 中文输入法组词中回车不应发送 */
   const composingRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   }, [messages]);
 
-  const scrollToBottom = () =>
-    setTimeout(() => listRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }), 50);
+  const scrollToBottom = () => setTimeout(() => listRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }), 50);
 
   const askMutation = useMutation({
     mutationFn: helpdeskApi.ask,
@@ -150,7 +135,6 @@ export function HelpdeskPage() {
     scrollToBottom();
   };
 
-  /** 重试：用户消息已在流中，只重发请求 */
   const retry = () => {
     if (!failedQuestion || askMutation.isPending) return;
     askMutation.mutate(failedQuestion);
@@ -171,85 +155,84 @@ export function HelpdeskPage() {
     }
   };
 
-  return (
-    <div className="helpdesk-page">
-      {/* 页面头部 */}
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-header-title">入职问答</h1>
-          <p className="page-header-subtitle">AI 入职助手，基于公司制度文档回答新员工问题</p>
-        </div>
-      </div>
+  const lastProvider = [...messages].reverse().find((m) => m.role === 'bot')?.provider;
 
-      <Row gutter={16}>
-        <Col xs={24} lg={16} xl={17}>
-          <Card className="chat-card" classNames={{ body: 'chat-card-body' }}>
-            <div className="section-header">
-              <div className="section-title">
-                <CommentOutlined className="section-icon" />
-                <span>入职问答助手</span>
-              </div>
-              {messages.length > 0 && (
-                <Popconfirm title="清空当前对话记录？" okText="清空" onConfirm={clearChat}>
-                  <Button type="link" size="small" className="u-p0">
-                    清空对话
-                  </Button>
-                </Popconfirm>
-              )}
-            </div>
-            {messages.length === 0 ? (
-              <div className="chat-welcome">
-                <span className="chat-welcome-icon">
-                  <RobotOutlined />
+  return (
+    <div className="hf-page">
+      <div className="hf-body">
+        <div className="hf-cols">
+          {/* 对话区：铺满，不套 Card */}
+          <div className="hf-panel hf-panel--grow">
+            <div className="hf-panel-head">
+              <span className="hf-panel-title">
+                <RobotOutlined /> 入职问答助手
+              </span>
+              <span className="u-flex-gap-12">
+                <span className="hf-faint">
+                  {lastProvider === 'mock' ? '规则引擎' : (lastProvider ?? '规则引擎')} · 仅依据制度文档作答
                 </span>
-                <div className="chat-welcome-title">有入职问题，直接问我</div>
-                <p className="chat-welcome-desc">
+                {messages.length > 0 && (
+                  <Popconfirm title="清空当前对话记录？" okText="清空" onConfirm={clearChat}>
+                    <span className="hf-link">清空对话</span>
+                  </Popconfirm>
+                )}
+              </span>
+            </div>
+
+            {messages.length === 0 ? (
+              <div className="hf-panel-body hf-chat-welcome">
+                <div className="hf-state-icon">
+                  <RobotOutlined />
+                </div>
+                <div className="hf-state-title">有入职问题，直接问我</div>
+                <p className="hf-state-desc">
                   回答基于公司制度文档并附出处，覆盖 WiFi、五险一金、休假、报销、考勤、试用期等主题。
                 </p>
-                <div className="chat-welcome-qs">
+                <div className="hf-chip-row">
                   {QUICK_QUESTIONS.map((q) => (
-                    <Button key={q} shape="round" onClick={() => ask(q)}>
+                    <span key={q} className="hf-chip" onClick={() => ask(q)}>
                       {q}
-                    </Button>
+                    </span>
                   ))}
                 </div>
               </div>
             ) : (
-              <div ref={listRef} className="chat-list">
+              <div ref={listRef} className="hf-panel-body hf-chat-list">
                 {messages.map((m, i) => (
                   <ChatRow key={`${m.at}-${i}`} msg={m} onCopy={copyAnswer} />
                 ))}
                 {askMutation.isPending && (
-                  <div className="chat-row">
-                    <span className="chat-avatar chat-avatar--bot">
+                  <div className="hf-chat-row">
+                    <span className="hf-chat-avatar hf-chat-avatar--bot">
                       <RobotOutlined />
                     </span>
-                    <div className="chat-bubble chat-bubble--typing">
-                      <Spin size="small" />
-                      正在检索制度文档…
+                    <div className="hf-bubble hf-bubble--typing">
+                      <Spin size="small" /> 正在检索制度文档…
                     </div>
                   </div>
                 )}
                 {failedQuestion && !askMutation.isPending && (
-                  <div className="chat-row">
-                    <span className="chat-avatar chat-avatar--bot">
+                  <div className="hf-chat-row">
+                    <span className="hf-chat-avatar hf-chat-avatar--bot">
                       <RobotOutlined />
                     </span>
-                    <div className="chat-bubble chat-bubble--error">
+                    <div className="hf-bubble hf-bubble--error">
                       这条没有回答成功，可能是网络或服务波动。
-                      <Button type="link" size="small" onClick={retry}>
+                      <span className="hf-link u-ml-8" onClick={retry}>
                         重试
-                      </Button>
+                      </span>
                     </div>
                   </div>
                 )}
               </div>
             )}
-            <div className="chat-composer">
+
+            {/* 输入区：整块一个描边框，发送按钮在右下 */}
+            <div className="hf-composer">
               <Input.TextArea
                 value={input}
                 variant="borderless"
-                autoSize={{ minRows: 3, maxRows: 8 }}
+                autoSize={{ minRows: 2, maxRows: 8 }}
                 onChange={(e) => setInput(e.target.value)}
                 onCompositionStart={() => {
                   composingRef.current = true;
@@ -264,10 +247,8 @@ export function HelpdeskPage() {
                 }}
                 placeholder="输入问题，如：试用期多久可以转正？"
               />
-              <div className="chat-composer-foot">
-                <span className="chat-input-hint">
-                  Enter 发送，Shift + Enter 换行 · 回答仅供参考，重要事项请与 HR 确认
-                </span>
+              <div className="hf-composer-foot">
+                <span className="hf-faint">Enter 发送，Shift + Enter 换行 · 回答仅供参考，重要事项请与 HR 确认</span>
                 <Button
                   type="primary"
                   icon={<SendOutlined />}
@@ -279,64 +260,55 @@ export function HelpdeskPage() {
                 </Button>
               </div>
             </div>
-          </Card>
-        </Col>
-        <Col xs={24} lg={8} xl={7} className="helpdesk-sidebar">
-          <Card className="faq-card u-mb-16" size="small">
-            <div className="section-header">
-              <div className="section-title">
-                <QuestionCircleOutlined className="section-icon" />
-                <span>常见问题</span>
+          </div>
+
+          {/* 右栏：常见问题（chip）+ 知识库范围 */}
+          <div className="hf-rail hf-rail--narrow">
+            <div className="hf-panel hf-panel--fit">
+              <div className="hf-panel-head">
+                <span className="hf-panel-title">
+                  <QuestionCircleOutlined /> 常见问题
+                </span>
               </div>
-            </div>
-            {QUICK_QUESTIONS.map((q) => (
-              <div key={q} className="faq-item" onClick={() => ask(q)}>
-                <QuestionCircleOutlined />
-                <span>{q}</span>
-              </div>
-            ))}
-          </Card>
-          <Card className="docs-card" size="small">
-            <div className="section-header">
-              <div className="section-title">
-                <BookOutlined className="section-icon" />
-                <span>知识库范围</span>
-              </div>
-            </div>
-            {docsQuery.isLoading ? (
-              <div className="loading-center">
-                <Spin size="small" />
-              </div>
-            ) : !docsQuery.data?.length ? (
-              <EmptyBlock minHeight={120} description="暂无知识库文档，由 HR 在后台维护" />
-            ) : (
-              <div className="docs-scroll">
-                {docsQuery.data.map((doc) => (
-                  <div key={doc.id} className="doc-item">
-                    <Space size={6}>
-                      <FileTextOutlined className="u-muted" />
-                      <Typography.Text>{doc.title}</Typography.Text>
-                    </Space>
-                    <div>
-                      {doc.tags.map((t) => (
-                        <Tag key={t} className="tag-meta u-mt-4">
-                          {t}
-                        </Tag>
-                      ))}
-                    </div>
-                  </div>
+              <div className="hf-chip-row hf-chip-row--pad">
+                {QUICK_QUESTIONS.map((q) => (
+                  <span key={q} className="hf-chip" onClick={() => ask(q)}>
+                    {q}
+                  </span>
                 ))}
               </div>
-            )}
-            <Typography.Text type="secondary" className="u-meta">
-              机器人仅依据以上文档作答，答案附出处
-            </Typography.Text>
-            <div className="helpdesk-escalation">
-              没找到答案或拿不准？联系 HR：hr@arthr.local（工作日 10:00 - 18:00）
             </div>
-          </Card>
-        </Col>
-      </Row>
+
+            <div className="hf-panel hf-panel--grow">
+              <div className="hf-panel-head">
+                <span className="hf-panel-title">
+                  <BookOutlined /> 知识库范围
+                </span>
+                <span className="hf-faint">{docsQuery.data?.length ?? 0} 篇 · HR 维护</span>
+              </div>
+              <div className="hf-panel-body">
+                {docsQuery.isLoading ? (
+                  <Spin size="small" />
+                ) : !docsQuery.data?.length ? (
+                  <EmptyBlock minHeight={120} description="暂无知识库文档，由 HR 在后台维护" />
+                ) : (
+                  docsQuery.data.map((doc) => (
+                    <div key={doc.id} className="hf-doc-row">
+                      <span className="hf-secondary hf-doc-title">{doc.title}</span>
+                      <span className="hf-faint hf-td--right">{doc.tags.join(' · ')}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="hf-panel-foot hf-panel-foot--tight hf-notice--flat">
+                <span className="hf-faint">
+                  没找到答案？联系 HR：<span className="hf-link">hr@arthr.local</span>（工作日 10:00–18:00）
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

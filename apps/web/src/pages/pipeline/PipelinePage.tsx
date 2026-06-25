@@ -11,7 +11,15 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckSquareOutlined } from '@ant-design/icons';
+import {
+  AppstoreOutlined,
+  CheckSquareOutlined,
+  ClockCircleOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  RobotOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { PERMISSIONS, REJECT_REASONS, STAGE_STAY_SLA } from '@hireflow/shared';
 import {
   Alert,
@@ -20,7 +28,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Empty,
   Form,
   Input,
   Modal,
@@ -33,14 +40,17 @@ import {
 } from 'antd';
 import type { AxiosError } from 'axios';
 import dayjs from 'dayjs';
+import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { applicationsApi, boardApi, jobsApi } from '../../api';
+import { applicationsApi, boardApi, candidatesApi, jobsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { BatchResult, BoardCard, BoardData, CompareData } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
-import { QueryErrorResult } from '../../components/QueryErrorResult';
 import { useAuthStore } from '../../stores/auth';
+import { pickDefaultJobId } from '../../utils/jobs';
+
+const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
 /** 乐观更新：在本地缓存里把卡片从旧列挪到新列尾部 */
 function moveCardInBoard(board: BoardData, applicationId: string, stageId: string): BoardData {
@@ -62,22 +72,26 @@ function moveCardInBoard(board: BoardData, applicationId: string, stageId: strin
 function scoreBand(score: number): string {
   if (score >= 85) return 'kanban-score-dot kanban-score-dot--high';
   if (score >= 70) return 'kanban-score-dot kanban-score-dot--mid';
-  return 'kanban-score-dot';
+  return 'kanban-score-dot kanban-score-dot--low';
 }
 
-/** 阶段停留时长：仅超 SLA 才提示——超 3 天标黄、超 7 天标红 */
-function StayTag({ card }: { card: BoardCard }) {
-  const days = dayjs().diff(dayjs(card.stageEnteredAt), 'day');
-  if (days <= STAGE_STAY_SLA.warnDays) return null;
-  return (
-    <Tag color={days > STAGE_STAY_SLA.dangerDays ? 'error' : 'warning'} className="tag-meta u-mr-0">
-      停留 {days} 天
-    </Tag>
-  );
-}
+const stayDays = (card: BoardCard) => dayjs().diff(dayjs(card.stageEnteredAt), 'day');
+const isOverdue = (card: BoardCard) => stayDays(card) > STAGE_STAY_SLA.warnDays;
 
-/** 卡片纯视图：列表与 DragOverlay 复用同一渲染，保证拖拽跟手且不被列容器裁剪 */
+/**
+ * 卡片纯视图：列表与 DragOverlay 复用同一渲染。
+ * 信息密度：第一行「姓名 + 匹配分」，第二行「来源 · 日期 · 技能」点分单行，
+ * 第三行只在超 SLA 时出现——正常卡片就是两行，一屏能多看一倍。
+ */
 function CardView({ card, overlay = false }: { card: BoardCard; overlay?: boolean }) {
+  const days = stayDays(card);
+  const meta = [
+    card.candidate.source ?? '未知来源',
+    dayjs(card.createdAt).format('MM-DD'),
+    card.candidate.tags.slice(0, 3).join(' · '),
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <Card
       size="small"
@@ -85,26 +99,25 @@ function CardView({ card, overlay = false }: { card: BoardCard; overlay?: boolea
       classNames={{ body: 'kanban-card-body' }}
     >
       <div className="u-flex-between">
-        <Typography.Text strong>{card.candidate.name}</Typography.Text>
-        <Space size={6}>
-          {card.matchScore != null && (
-            <Tooltip title={`AI 匹配分 ${card.matchScore}（≥85 优，≥70 良）`}>
-              <span className="kanban-score">
-                <span className={scoreBand(card.matchScore)} />
-                {card.matchScore}
-              </span>
-            </Tooltip>
-          )}
-          <StayTag card={card} />
-        </Space>
+        <span className="kanban-card-name">{card.candidate.name}</span>
+        {card.matchScore != null && (
+          <Tooltip title={`AI 匹配分 ${card.matchScore}（≥85 优，≥70 良）`}>
+            <span className="kanban-score">
+              <span className={scoreBand(card.matchScore)} />
+              {card.matchScore}
+            </span>
+          </Tooltip>
+        )}
       </div>
-      {card.candidate.tags.length > 0 && (
-        <div className="kanban-skills">{card.candidate.tags.slice(0, 3).join(' · ')}</div>
+      <div className="kanban-card-meta">{meta}</div>
+      {/* 看板只会出现 ACTIVE 与 HIRED 两种卡；终态卡片不参与流转，也不再算停留时长 */}
+      {card.status !== 'ACTIVE' && <div className="kanban-card-meta">已入职 · 流程已完成</div>}
+      {card.status === 'ACTIVE' && days > STAGE_STAY_SLA.warnDays && (
+        <div className={days > STAGE_STAY_SLA.dangerDays ? 'kanban-stay kanban-stay--danger' : 'kanban-stay'}>
+          <ClockCircleOutlined />
+          停留 {days} 天
+        </div>
       )}
-      <div className="kanban-card-foot">
-        <span>{card.candidate.source ?? '未知来源'}</span>
-        <span>{dayjs(card.createdAt).format('MM-DD')}</span>
-      </div>
     </Card>
   );
 }
@@ -118,13 +131,10 @@ function DraggableCard({
   disabled: boolean;
   onOpen: (candidateId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id, disabled });
-  // 拖拽由 DragOverlay 渲染跟手浮层；原卡片仅降透明度占位（修复裁剪/异常位移）
-  const cls = [
-    'drag-source',
-    disabled ? 'drag-source--readonly' : '',
-    isDragging ? 'drag-source--dragging' : '',
-  ]
+  // 已入职是终态：卡片留在末列可见，但后端拒绝再流转（moveStage 只放行 ACTIVE），所以这里也不给拖
+  const locked = disabled || card.status !== 'ACTIVE';
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id, disabled: locked });
+  const cls = ['drag-source', locked ? 'drag-source--readonly' : '', isDragging ? 'drag-source--dragging' : '']
     .filter(Boolean)
     .join(' ');
   return (
@@ -133,7 +143,6 @@ function DraggableCard({
       {...attributes}
       {...listeners}
       onClick={() => {
-        // PointerSensor 有 4px 启动阈值，纯点击不会触发拖拽
         if (!isDragging) onOpen(card.candidate.id);
       }}
       className={cls}
@@ -143,7 +152,6 @@ function DraggableCard({
   );
 }
 
-/** 批量模式下的可选卡片：点击/复选框切换选中，选中态描边高亮 */
 function SelectableCard({
   card,
   checked,
@@ -168,6 +176,7 @@ function SelectableCard({
 function BoardColumnView({
   stage,
   cards,
+  maxCount,
   dragDisabled,
   onOpen,
   batchMode,
@@ -177,6 +186,7 @@ function BoardColumnView({
 }: {
   stage: { id: string; name: string };
   cards: BoardCard[];
+  maxCount: number;
   dragDisabled: boolean;
   onOpen: (candidateId: string) => void;
   batchMode: boolean;
@@ -185,35 +195,45 @@ function BoardColumnView({
   onToggleColumn: (ids: string[], select: boolean) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id, disabled: batchMode });
+  // 批量操作只对在途卡片有意义：已入职是终态，后端的批量移动/淘汰都会拒绝它
+  const actionable = cards.filter((c) => c.status === 'ACTIVE');
   const selectedInColumn = cards.filter((c) => selected.has(c.id)).length;
+  const overdue = cards.filter((c) => c.status === 'ACTIVE' && isOverdue(c)).length;
+  const pct = maxCount > 0 ? Math.round((cards.length / maxCount) * 100) : 0;
   return (
     <div ref={setNodeRef} className={isOver ? 'kanban-col kanban-col--over' : 'kanban-col'}>
       <div className="kanban-col-head">
-        {batchMode && cards.length > 0 && (
-          <Checkbox
-            checked={selectedInColumn === cards.length}
-            indeterminate={selectedInColumn > 0 && selectedInColumn < cards.length}
-            onChange={(e) =>
-              onToggleColumn(
-                cards.map((c) => c.id),
-                e.target.checked,
-              )
-            }
-          />
-        )}
-        <span className="kanban-col-title">
-          {stage.name} <Badge count={cards.length} className="kanban-badge" />
-        </span>
+        <div className="kanban-col-headrow">
+          {batchMode && actionable.length > 0 && (
+            <Checkbox
+              checked={selectedInColumn === actionable.length}
+              indeterminate={selectedInColumn > 0 && selectedInColumn < actionable.length}
+              onChange={(e) =>
+                onToggleColumn(
+                  actionable.map((c) => c.id),
+                  e.target.checked,
+                )
+              }
+            />
+          )}
+          <span className="kanban-col-title">{stage.name}</span>
+          <Badge count={cards.length} className="kanban-badge" showZero />
+          {overdue > 0 && <span className="kanban-col-alert">{overdue} 超时</span>}
+        </div>
+        {/* 阶段人数占比条：一眼看出流程堆在哪一段 */}
+        <div className="kanban-col-bar">
+          <i style={cssVars({ '--w': `${pct}%` })} />
+        </div>
       </div>
       <div className="kanban-col-scroll">
         {cards.map((card) =>
-          batchMode ? (
+          batchMode && card.status === 'ACTIVE' ? (
             <SelectableCard key={card.id} card={card} checked={selected.has(card.id)} onToggle={onToggle} />
           ) : (
-            <DraggableCard key={card.id} card={card} disabled={dragDisabled} onOpen={onOpen} />
+            <DraggableCard key={card.id} card={card} disabled={dragDisabled || batchMode} onOpen={onOpen} />
           ),
         )}
-        {cards.length === 0 && <div className="kanban-col-empty">暂无卡片</div>}
+        {cards.length === 0 && <div className="kanban-col-empty">拖拽候选人到此阶段</div>}
       </div>
     </div>
   );
@@ -260,7 +280,13 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
                 >
                   <p className="compare-line">
                     匹配分：
-                    {c.matchScore != null ? <Tag color={c.matchScore >= 85 ? 'success' : c.matchScore >= 70 ? 'processing' : 'default'}>{c.matchScore}</Tag> : '未评分'}
+                    {c.matchScore != null ? (
+                      <Tag color={c.matchScore >= 85 ? 'success' : c.matchScore >= 70 ? 'processing' : 'default'}>
+                        {c.matchScore}
+                      </Tag>
+                    ) : (
+                      '未评分'
+                    )}
                   </p>
                   <div className="u-mb-4">
                     {c.tags.slice(0, 4).map((t) => (
@@ -353,9 +379,9 @@ export function PipelinePage() {
   });
 
   useEffect(() => {
-    if (!jobId && jobsQuery.data?.items.length) {
-      setSearchParams({ jobId: jobsQuery.data.items[0].id }, { replace: true });
-    }
+    if (jobId) return;
+    const preferred = pickDefaultJobId(jobsQuery.data?.items);
+    if (preferred) setSearchParams({ jobId: preferred }, { replace: true });
   }, [jobId, jobsQuery.data, setSearchParams]);
 
   // 切换职位即清空批量选择态：否则勾选的是 A 职位的候选人，操作却在 B 职位看板上下文触发
@@ -371,12 +397,7 @@ export function PipelinePage() {
   });
 
   const moveMutation = useMutation({
-    mutationFn: (vars: {
-      applicationId: string;
-      stageId: string;
-      reason?: string;
-      expectedVersion?: number;
-    }) =>
+    mutationFn: (vars: { applicationId: string; stageId: string; reason?: string; expectedVersion?: number }) =>
       boardApi.moveCard(vars.applicationId, {
         stageId: vars.stageId,
         reason: vars.reason,
@@ -451,8 +472,7 @@ export function PipelinePage() {
   };
 
   const batchRejectMutation = useMutation({
-    mutationFn: (values: { reason: string; note?: string }) =>
-      boardApi.batchReject({ ids: [...selected], ...values }),
+    mutationFn: (values: { reason: string; note?: string }) => boardApi.batchReject({ ids: [...selected], ...values }),
     onSuccess: (result) => {
       setBatchRejectOpen(false);
       batchRejectForm.resetFields();
@@ -470,6 +490,50 @@ export function PipelinePage() {
       reportBatch(result, '移动');
     },
     onError: (error) => message.error(extractErrorMessage(error, '批量移动失败')),
+  });
+
+  /**
+   * 添加候选人：把库里已有的候选人加进当前职位流程。
+   * 后端 applications.create 会自动落到该职位的首个阶段并留痕，前端不用自己指定 stageId。
+   * 已在本职位流程中的人要从候选列表里滤掉——重复投递后端会 409，让用户点了才报错是不礼貌的。
+   */
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm] = Form.useForm<{ candidateId: string }>();
+  const [addKeyword, setAddKeyword] = useState('');
+
+  const addCandidatesQuery = useQuery({
+    queryKey: ['candidates', 'pipeline-add', addKeyword],
+    queryFn: () => candidatesApi.list({ page: 1, pageSize: 50, keyword: addKeyword || undefined }),
+    enabled: addOpen,
+  });
+
+  const inFlowIds = new Set(
+    boardQuery.data?.columns.flatMap((c) => c.applications.map((a) => a.candidate.id)) ?? [],
+  );
+  const addOptions = (addCandidatesQuery.data?.items ?? [])
+    .filter((c) => !inFlowIds.has(c.id))
+    .map((c) => ({
+      value: c.id,
+      label: `${c.name}${c.source ? ` · ${c.source}` : ''}${c.tags.length ? ` · ${c.tags.slice(0, 3).join('/')}` : ''}`,
+    }));
+
+  const addMutation = useMutation({
+    mutationFn: (values: { candidateId: string }) =>
+      applicationsApi.create({ candidateId: values.candidateId, jobId }),
+    onSuccess: (data) => {
+      // 该候选人此前在本职位被淘汰/撤回时，后端复活的是原记录（唯一键不允许再建一条），说清楚免得以为是新人
+      message.success(
+        data.revived
+          ? '该候选人此前在本职位已淘汰，已复活原应聘记录并回到首个阶段'
+          : '已加入本职位流程，卡片落在首个阶段',
+      );
+      setAddOpen(false);
+      addForm.resetFields();
+      setAddKeyword('');
+      void queryClient.invalidateQueries({ queryKey: ['board', jobId] });
+      void queryClient.invalidateQueries({ queryKey: ['candidates'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '加入失败')),
   });
 
   const [compareData, setCompareData] = useState<CompareData | null>(null);
@@ -503,8 +567,7 @@ export function PipelinePage() {
     }
   };
 
-  const findCard = (id: string) =>
-    boardQuery.data?.columns.flatMap((c) => c.applications).find((a) => a.id === id);
+  const findCard = (id: string) => boardQuery.data?.columns.flatMap((c) => c.applications).find((a) => a.id === id);
 
   const onDragStart = (event: DragStartEvent) => {
     setActiveCard(findCard(String(event.active.id)) ?? null);
@@ -538,96 +601,180 @@ export function PipelinePage() {
     moveMutation.mutate({ applicationId, stageId: targetStageId, expectedVersion: card.version });
   };
 
+  // 控制栏概览：总在流程人数 / 本周新增 / 超 SLA 停留
+  const allCards = boardQuery.data?.columns.flatMap((c) => c.applications) ?? [];
+  const weekAgo = dayjs().subtract(7, 'day');
+  const summary = {
+    total: allCards.length,
+    fresh: allCards.filter((c) => dayjs(c.createdAt).isAfter(weekAgo)).length,
+    overdue: allCards.filter(isOverdue).length,
+  };
+  const maxCount = Math.max(...(boardQuery.data?.columns.map((c) => c.applications.length) ?? [0]), 1);
+
+  const jobOptions = jobsQuery.data?.items.map((j) => ({
+    value: j.id,
+    label: `${j.title}（${j.department.name}）`,
+  }));
+
   return (
     <div className="pipeline-page">
-      {/* 页面头部 */}
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-header-title">招聘看板</h1>
-          <p className="page-header-subtitle">拖拽卡片管理候选人流程，支持批量操作与AI对比</p>
+      {/* 控制栏：职位上下文 + 流程概览 + 操作，一条解决（页标题已在面包屑，不再重复） */}
+      {batchMode ? (
+        <div className="pipeline-bar pipeline-bar--batch">
+          <Space size={14} align="center">
+            <Space size={8}>
+              <span className="batch-count">{selected.size}</span>
+              <b>已选 {selected.size} 人</b>
+            </Space>
+            <span className="batch-hint">点卡片或列头复选框继续选择</span>
+          </Space>
+          <Space size={8}>
+            <Button size="small" type="primary" disabled={selected.size === 0} onClick={() => setBatchMoveOpen(true)}>
+              批量移动
+            </Button>
+            <Button
+              size="small"
+              icon={<RobotOutlined />}
+              disabled={selected.size < 2 || selected.size > 4}
+              loading={compareMutation.isPending}
+              onClick={() => compareMutation.mutate()}
+            >
+              AI 对比
+            </Button>
+            <Button size="small" disabled={selected.size !== 1} onClick={() => void sendPrescreen()}>
+              预筛链接
+            </Button>
+            <Button size="small" danger disabled={selected.size === 0} onClick={() => setBatchRejectOpen(true)}>
+              批量淘汰
+            </Button>
+            <Button size="small" type="text" onClick={exitBatch}>
+              退出
+            </Button>
+          </Space>
         </div>
-        <div className="page-header-actions">
-          <Space size={12}>
+      ) : (
+        <div className="pipeline-bar">
+          <div className="pipeline-bar-left">
             <Select
+              variant="outlined"
               className="w-260"
               placeholder="选择职位"
               loading={jobsQuery.isLoading}
               value={jobId || undefined}
               onChange={(value) => setSearchParams({ jobId: value })}
-              options={jobsQuery.data?.items.map((j) => ({
-                value: j.id,
-                label: `${j.title}（${j.department.name}）`,
-              }))}
+              options={jobOptions}
             />
-            {!canMove && <Typography.Text type="secondary" className="pipeline-readonly-tip">仅查看</Typography.Text>}
-            {canMove &&
-              (batchMode ? (
-                <Button onClick={exitBatch}>退出批量</Button>
-              ) : (
-                <Button icon={<CheckSquareOutlined />} onClick={() => setBatchMode(true)}>
-                  批量操作
-                </Button>
-              ))}
-          </Space>
-        </div>
-      </div>
-
-      {/* 看板区域 */}
-      <Card className="kanban-board-card">
-        {batchMode && (
-          <Alert
-            type="info"
-            showIcon
-            className="batch-alert"
-            message={
-              <Space wrap>
+            {boardQuery.data && (
+              <div className="pipeline-bar-summary">
                 <span>
-                  已选 <b>{selected.size}</b> 人（点卡片或列头复选框选择）
+                  在流程 <b>{summary.total}</b> 人
                 </span>
-                <Button
-                  size="small"
-                  danger
-                  disabled={selected.size === 0}
-                  onClick={() => setBatchRejectOpen(true)}
-                >
-                  批量淘汰
-                </Button>
-                <Button
-                  size="small"
-                  type="primary"
-                  disabled={selected.size === 0}
-                  onClick={() => setBatchMoveOpen(true)}
-                >
-                  批量移动
-                </Button>
-                <Button
-                  size="small"
-                  disabled={selected.size < 2 || selected.size > 4}
-                  loading={compareMutation.isPending}
-                  onClick={() => compareMutation.mutate()}
-                >
-                  AI 对比（2-4 人）
-                </Button>
-                <Button size="small" disabled={selected.size !== 1} onClick={() => void sendPrescreen()}>
-                  预筛链接
-                </Button>
-                <Button size="small" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
-                  清空选择
-                </Button>
-              </Space>
-            }
-          />
-        )}
-        {!jobId || boardQuery.isLoading ? (
-          <div className="loading-center loading-center--lg">
-            {jobsQuery.isLoading || boardQuery.isLoading ? (
-              <Spin />
-            ) : (
-              <Empty description="暂无职位，请先创建职位" />
+                <span className="sep" />
+                <span>
+                  本周新增 <b>{summary.fresh}</b>
+                </span>
+                {summary.overdue > 0 && (
+                  <>
+                    <span className="sep" />
+                    <span className="warn">
+                      <ClockCircleOutlined />
+                      超时停留 <b>{summary.overdue}</b>
+                    </span>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        ) : boardQuery.isError ? (
-          <QueryErrorResult error={boardQuery.error} />
+          <Space size={8}>
+            {!canMove && <span className="pipeline-readonly-tip">仅查看</span>}
+            {canMove && (
+              <Button icon={<CheckSquareOutlined />} onClick={() => setBatchMode(true)}>
+                批量操作
+              </Button>
+            )}
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              disabled={!jobId || !hasPermission(PERMISSIONS.APPLICATION_CREATE)}
+              onClick={() => setAddOpen(true)}
+            >
+              添加候选人
+            </Button>
+          </Space>
+        </div>
+      )}
+
+      {/* 看板区域：无外层卡片壳，白面板 + 发丝分栏，列宽自适应铺满 */}
+      <Card className="kanban-board-card" variant="borderless">
+        {/* 分支顺序：错误 → 无职位 → 数据未到 → 数据为空 → 看板。
+            「数据未到」必须单独一档：query 处于 pending/paused（加载中、离线暂停、重试退避）
+            时 data 也是 undefined，若并进空状态就会对用户断言「这个职位还没有候选人」——
+            实际上一条都没读到，这是在报假数据。 */}
+        {boardQuery.isError ? (
+          <div className="state-block">
+            <div className="state-icon state-icon--warn">
+              <WarningOutlined />
+            </div>
+            <div>
+              <div className="state-title">看板数据加载失败</div>
+              <div className="state-desc">
+                {extractErrorMessage(boardQuery.error, '服务暂时无响应')}。已保留上一次的本地缓存，重试不会丢失未提交的操作。
+              </div>
+            </div>
+            <div className="state-actions">
+              <Button
+                type="primary"
+                icon={<ReloadOutlined />}
+                loading={boardQuery.isFetching}
+                onClick={() => void boardQuery.refetch()}
+              >
+                重试
+              </Button>
+            </div>
+            <div className="state-trace">请求时间 {dayjs().format('HH:mm:ss')}</div>
+          </div>
+        ) : !jobId ? (
+          jobsQuery.isLoading ? (
+            <div className="state-block">
+              <Spin />
+            </div>
+          ) : (
+            <div className="state-block">
+              <div className="state-icon">
+                <AppstoreOutlined />
+              </div>
+              <div>
+                <div className="state-title">还没有可用的职位</div>
+                <div className="state-desc">先在「职位管理」创建职位并配置流程阶段，看板才有可流转的候选人。</div>
+              </div>
+              <div className="state-actions">
+                <Button type="primary" href="/jobs">
+                  创建职位
+                </Button>
+              </div>
+            </div>
+          )
+        ) : !boardQuery.data ? (
+          <div className="state-block">
+            <Spin />
+          </div>
+        ) : boardQuery.data.columns.every((c) => c.applications.length === 0) ? (
+          <div className="state-block">
+            <div className="state-icon">
+              <AppstoreOutlined />
+            </div>
+            <div>
+              {/* 招过但全被淘汰 ≠ 从没招过人：前者说「还没有候选人」会让人以为数据丢了 */}
+              <div className="state-title">
+                {boardQuery.data.closedCount > 0 ? '这个职位当前没有在途候选人' : '这个职位还没有候选人'}
+              </div>
+              <div className="state-desc">
+                {boardQuery.data.closedCount > 0
+                  ? `历史上有 ${boardQuery.data.closedCount} 位候选人已淘汰或撤回（不进看板，可在候选人详情的时间轴里查看）。继续导入简历或从人才库唤醒。`
+                  : '导入简历或从人才库唤醒历史候选人，卡片会自动进入首个阶段。'}
+              </div>
+            </div>
+          </div>
         ) : (
           <DndContext
             sensors={sensors}
@@ -637,11 +784,12 @@ export function PipelinePage() {
             onDragCancel={() => setActiveCard(null)}
           >
             <div className="kanban-board">
-              {boardQuery.data?.columns.map((column) => (
+              {boardQuery.data.columns.map((column) => (
                 <BoardColumnView
                   key={column.stage.id}
                   stage={column.stage}
                   cards={column.applications}
+                  maxCount={maxCount}
                   dragDisabled={!canMove || batchMode}
                   onOpen={setDetailId}
                   batchMode={batchMode}
@@ -726,7 +874,11 @@ export function PipelinePage() {
           description="每人独立留痕；原因码将用于漏斗分析与人才库回流。感谢信通道接入后将按防呆规则延迟 3 天发送。"
         />
         <Form form={batchRejectForm} layout="vertical" onFinish={(v) => batchRejectMutation.mutate(v)}>
-          <Form.Item name="reason" label="淘汰原因码（应用于全部所选）" rules={[{ required: true, message: '请选择原因码' }]}>
+          <Form.Item
+            name="reason"
+            label="淘汰原因码（应用于全部所选）"
+            rules={[{ required: true, message: '请选择原因码' }]}
+          >
             <Select placeholder="选择原因" options={REJECT_REASONS.map((r) => ({ value: r, label: r }))} />
           </Form.Item>
           <Form.Item name="note" label="补充说明（可选）">
@@ -752,20 +904,64 @@ export function PipelinePage() {
               options={boardQuery.data?.columns.map((c) => ({ value: c.stage.id, label: c.stage.name }))}
             />
           </Form.Item>
-          <Form.Item
-            name="reason"
-            label="回退原因（所选中含需回退的卡片时必填，未填的回退卡会失败并列入报告）"
-          >
+          <Form.Item name="reason" label="回退原因（所选中含需回退的卡片时必填，未填的回退卡会失败并列入报告）">
             <Input.TextArea rows={2} maxLength={200} placeholder="如：批量回退重新安排一面" />
           </Form.Item>
         </Form>
       </Modal>
 
-      <CompareModal
-        data={compareData}
-        loading={compareMutation.isPending}
-        onClose={() => setCompareData(null)}
-      />
+      {/* 添加候选人：从候选人库挑一个加进本职位流程 */}
+      <Modal
+        className="hf-modal"
+        title={
+          <>
+            添加候选人
+            <div className="hf-modal-sub">{jobOptions?.find((j) => j.value === jobId)?.label ?? '当前职位'}</div>
+          </>
+        }
+        open={addOpen}
+        onCancel={() => {
+          setAddOpen(false);
+          addForm.resetFields();
+          setAddKeyword('');
+        }}
+        onOk={() => addForm.submit()}
+        okText="加入流程"
+        confirmLoading={addMutation.isPending}
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <>
+            <span className="hf-modal-hint">
+              已在本职位流程中（含已入职）的候选人不会出现；此前被淘汰的会复活原记录
+            </span>
+            <CancelBtn />
+            <OkBtn />
+          </>
+        )}
+        destroyOnHidden
+      >
+        <Form form={addForm} layout="vertical" onFinish={(v) => addMutation.mutate(v)}>
+          <Form.Item
+            name="candidateId"
+            label="选择候选人"
+            extra="加入后自动落到该职位的首个阶段并留痕；库里没有的人请先到「候选人」页录入"
+            rules={[{ required: true, message: '请选择候选人' }]}
+          >
+            <Select
+              showSearch
+              filterOption={false}
+              placeholder="输入姓名 / 邮箱 / 技能搜索"
+              loading={addCandidatesQuery.isFetching}
+              onSearch={setAddKeyword}
+              options={addOptions}
+              notFoundContent={
+                addCandidatesQuery.isFetching ? <Spin size="small" /> : <span className="hf-faint">没有可加入的候选人</span>
+              }
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <CompareModal data={compareData} loading={compareMutation.isPending} onClose={() => setCompareData(null)} />
 
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
     </div>

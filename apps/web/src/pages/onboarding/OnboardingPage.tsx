@@ -1,84 +1,29 @@
-import { FileProtectOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
+import { FileProtectOutlined, IdcardOutlined, LinkOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  CONTRACT_SIGN_STATUS_LABEL,
-  DOCUMENT_TYPE_META,
-  ONBOARDING_STATUS_LABEL,
-  PERMISSIONS,
-  type ContractSignStatus,
-  type OnboardingStatus,
-} from '@hireflow/shared';
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Descriptions,
-  Drawer,
-  Empty,
-  Form,
-  Input,
-  Modal,
-  Progress,
-  Select,
-  Space,
-  Steps,
-  Table,
-  Tag,
-  Typography,
-  Upload,
-} from 'antd';
+import { CONTRACT_SIGN_STATUS_LABEL, DOCUMENT_TYPE_META, PERMISSIONS, type ContractSignStatus } from '@hireflow/shared';
+import { App, Button, Form, Input, Modal, Select, Spin, Steps, Typography, Upload } from 'antd';
 import dayjs from 'dayjs';
-import { useState } from 'react';
+import type { CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { onboardingApi } from '../../api';
-import { BRAND } from '../../theme';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { ChecklistItem, Onboarding } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
+
+const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
 const OWNER_LABEL: Record<ChecklistItem['owner'], string> = {
   HR: 'HR 待办',
   IT: 'IT / 行政待办',
   NEW_HIRE: '新员工待办',
 };
+const SIGN_STEP: Record<string, number> = { DRAFT: 1, SENT: 2, SIGNED: 3, ARCHIVED: 4 };
 
-const SIGN_STEP: Record<string, number> = { DRAFT: 1, SENT: 2, SIGNED: 3, ARCHIVED: 3 };
+type Filter = 'active' | 'done' | 'review';
 
-function ChecklistGroup({
-  onboarding,
-  owner,
-  canToggle,
-  onToggle,
-}: {
-  onboarding: Onboarding;
-  owner: ChecklistItem['owner'];
-  canToggle: boolean;
-  onToggle: (key: string, done: boolean) => void;
-}) {
-  const items = onboarding.checklist.filter((i) => i.owner === owner);
-  return (
-    <Card size="small" title={OWNER_LABEL[owner]} className="u-mb-16">
-      <Space orientation="vertical" size={6} className="u-w-full">
-        {items.map((item) => (
-          <div key={item.key} className="check-row">
-            <Checkbox checked={item.done} disabled={!canToggle} onChange={(e) => onToggle(item.key, e.target.checked)}>
-              <span className={item.done ? 'check-done' : undefined}>
-                {item.label}
-              </span>
-            </Checkbox>
-            {item.doneAt && (
-              <span className="u-meta u-faint">{dayjs(item.doneAt).format('MM-DD HH:mm')}</span>
-            )}
-          </div>
-        ))}
-      </Space>
-    </Card>
-  );
-}
-
-function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
+/** 右栏：选中入职单的三方清单 + 材料 + 合同。取代原来 720px 抽屉 */
+function DetailRail({ id }: { id: string | null }) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -88,34 +33,10 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
   const [docForm] = Form.useForm();
 
   const canManage = hasPermission(PERMISSIONS.ONBOARDING_MANAGE);
-  /** 与服务端一致的勾选范围：MANAGE 全量；IT 勾 IT 项；新员工勾自己项 */
   const canToggleOwner = (owner: ChecklistItem['owner']) =>
     canManage ||
     (owner === 'IT' && roles.includes('IT_SUPPORT')) ||
     (owner === 'NEW_HIRE' && roles.includes('NEW_HIRE'));
-
-  /** 生成/复制新员工免登录资料填报链接（H5） */
-  const copyPortalLink = async (onboardingId: string) => {
-    try {
-      const { token } = await onboardingApi.portalLink(onboardingId);
-      const url = `${window.location.origin}/portal/onboarding/${token}`;
-      try {
-        await navigator.clipboard.writeText(url);
-        message.success('新员工链接已复制，请通过邮件/IM 发送');
-      } catch {
-        modal.info({
-          title: '新员工资料填报链接',
-          content: (
-            <Typography.Text copyable className="u-break-all">
-              {url}
-            </Typography.Text>
-          ),
-        });
-      }
-    } catch (error) {
-      message.error(extractErrorMessage(error, '获取链接失败'));
-    }
-  };
 
   const detailQuery = useQuery({
     queryKey: ['onboarding', id],
@@ -138,6 +59,28 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
       .catch((error) => message.error(extractErrorMessage(error, '操作失败')));
   };
 
+  const copyPortalLink = async (onboardingId: string) => {
+    try {
+      const { token } = await onboardingApi.portalLink(onboardingId);
+      const url = `${window.location.origin}/portal/onboarding/${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        message.success('新员工链接已复制，请通过邮件/IM 发送');
+      } catch {
+        modal.info({
+          title: '新员工资料填报链接',
+          content: (
+            <Typography.Text copyable className="u-break-all">
+              {url}
+            </Typography.Text>
+          ),
+        });
+      }
+    } catch (error) {
+      message.error(extractErrorMessage(error, '获取链接失败'));
+    }
+  };
+
   const addDocMutation = useMutation({
     mutationFn: (values: { type: string; rawText?: string }) =>
       docFile
@@ -157,358 +100,415 @@ function OnboardingDetail({ id, onClose }: { id: string | null; onClose: () => v
     onError: (error) => message.error(extractErrorMessage(error, '入档失败')),
   });
 
+  if (!id)
+    return (
+      <div className="hf-panel hf-panel--grow">
+        <div className="hf-panel-body u-flex-center">
+          <span className="hf-muted">从左侧选择一张入职单，这里显示三方清单与合同</span>
+        </div>
+      </div>
+    );
+
   const detail = detailQuery.data;
-  const contract = detail?.contract ?? null;
+  if (detailQuery.isLoading || !detail)
+    return (
+      <div className="hf-panel hf-panel--grow">
+        <div className="hf-panel-body u-flex-center">
+          <Spin />
+        </div>
+      </div>
+    );
+
+  const contract = detail.contract ?? null;
+  const needReview = detail.documents?.filter((d) => d.needsReview).length ?? 0;
 
   return (
-    <Drawer
-      title={
-        detail ? (
-          <Space>
-            {detail.application.candidate.name} · 入职流程
-            <Tag color={detail.status === 'COMPLETED' ? 'success' : 'processing'}>
-              {ONBOARDING_STATUS_LABEL[detail.status as OnboardingStatus] ?? detail.status}
-            </Tag>
-          </Space>
-        ) : (
-          '入职详情'
-        )
-      }
-      size={720}
-      open={Boolean(id)}
-      onClose={onClose}
-      destroyOnHidden
-    >
-      {!detail ? null : (
-        <>
-          {detail.status === 'COMPLETED' && (
-            <Alert
-              type="success"
-              showIcon
-              title="入职闭环完成"
-              description="清单全部完成且合同已签署，候选人已标记为已入职（HIRED）。"
-              className="u-mb-16"
-            />
-          )}
-          {canManage && (
+    <div className="hf-panel hf-panel--grow">
+      <div className="hf-panel-head">
+        <div>
+          <span className="hf-panel-title">{detail.application.candidate.name} · 入职流程</span>
+          <div className="hf-panel-sub">
+            {detail.application.job.title} · {detail.application.job.department.name} ·{' '}
+            {detail.status === 'COMPLETED' ? '已完成' : '进行中'}
+          </div>
+        </div>
+        {hasPermission(PERMISSIONS.ONBOARDING_UPLOAD) && (
+          <Button size="small" icon={<PlusOutlined />} onClick={() => setDocOpen(true)}>
+            提交材料
+          </Button>
+        )}
+      </div>
+
+      <div className="hf-panel-body">
+        {needReview > 0 && (
+          <div className="hf-notice hf-notice--warn u-mb-16">
+            <WarningOutlined />
+            <span className="u-flex-1">{needReview} 项材料仅有图片、未识别出字段，需人工核对</span>
+          </div>
+        )}
+        {canManage && (
+          <Button size="small" icon={<LinkOutlined />} className="u-mb-16" onClick={() => void copyPortalLink(detail.id)}>
+            复制新员工资料填报链接
+          </Button>
+        )}
+
+        {/* 三方清单：按责任方分组，勾选框 + 完成时间，不再每组套一张 Card */}
+        {(['HR', 'IT', 'NEW_HIRE'] as const).map((owner) => {
+          const items = detail.checklist.filter((i) => i.owner === owner);
+          if (items.length === 0) return null;
+          const done = items.filter((i) => i.done).length;
+          const editable = canToggleOwner(owner);
+          return (
+            <div key={owner} className="u-mb-16">
+              <div className="u-flex-between u-mb-4">
+                <span className="hf-caption">{OWNER_LABEL[owner]}</span>
+                <span className="hf-faint hf-td--num">
+                  {done} / {items.length}
+                </span>
+              </div>
+              {items.map((item) => (
+                <div
+                  key={item.key}
+                  className={editable ? 'hf-check-row' : 'hf-check-row hf-check-row--static'}
+                  onClick={() => {
+                    if (editable)
+                      run(() => onboardingApi.toggle(detail.id, item.key, !item.done), item.done ? '已取消勾选' : '已完成');
+                  }}
+                >
+                  <span className={item.done ? 'hf-check hf-check--on' : 'hf-check'}>{item.done ? '✓' : ''}</span>
+                  <span className={item.done ? 'hf-check-label hf-check-label--done' : 'hf-check-label'}>
+                    {item.label}
+                  </span>
+                  {item.doneAt && <span className="hf-check-at">{dayjs(item.doneAt).format('MM-DD HH:mm')}</span>}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+
+        {/* 材料：字段以「标签 值」两列平铺，不再每份材料一张 Card */}
+        {(detail.documents?.length ?? 0) > 0 && (
+          <div className="u-mb-16">
+            <div className="hf-caption u-mb-8">入职材料 {detail.documents!.length}</div>
+            {detail.documents!.map((doc) => (
+              <div key={doc.type} className="u-mb-8">
+                <div className="u-flex-between">
+                  <span className="hf-secondary hf-strong">{doc.label}</span>
+                  <span className="u-flex-gap-8">
+                    {doc.needsReview && <span className="hf-tag hf-tag--warn">待人工核对</span>}
+                    {doc.fileUrl && (
+                      <span className="hf-link" onClick={() => window.open(doc.fileUrl!, '_blank')}>
+                        原件
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {Object.keys(doc.fields).length > 0 ? (
+                  Object.entries(doc.fields).map(([k, v]) => (
+                    <div key={k} className="hf-check-row hf-check-row--static">
+                      <span className="hf-muted hf-field-key">{k}</span>
+                      <span className="hf-secondary u-flex-1">{v}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="hf-faint">仅上传图片、未识别字段：请打开原件人工核对后手动勾选待办</div>
+                )}
+                <div className="hf-faint u-mt-4">
+                  {doc.ocrProvider} · {dayjs(doc.addedAt).format('MM-DD HH:mm')}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 合同：横向步骤 + 关键信息两列，取代 Descriptions + Card */}
+        <div className="hf-caption u-mb-8">
+          <FileProtectOutlined /> 劳动合同 · 电子签
+        </div>
+        <Steps
+          size="small"
+          className="u-mb-16"
+          current={contract ? SIGN_STEP[contract.signStatus] - 1 : 0}
+          items={[{ title: '生成合同' }, { title: '发送签署' }, { title: '完成签署' }, { title: '存证归档' }]}
+        />
+        {!contract ? (
+          canManage ? (
             <Button
-              size="small"
-              icon={<LinkOutlined />}
-              className="u-mb-16"
-              onClick={() => void copyPortalLink(detail.id)}
+              type="primary"
+              block
+              onClick={() => run(() => onboardingApi.createContract(detail.id), '合同已生成（模板变量自动填充）')}
             >
-              复制新员工资料填报链接（免登录 H5）
+              生成劳动合同
             </Button>
-          )}
-          <Descriptions size="small" column={2} className="u-mb-16">
-            <Descriptions.Item label="职位">
-              {detail.application.job.title}（{detail.application.job.department.name}）
-            </Descriptions.Item>
-            <Descriptions.Item label="进度">
-              <Progress
-                percent={Math.round((detail.progress.done / detail.progress.total) * 100)}
-                size="small"
-                className="w-140"
-              />
-            </Descriptions.Item>
-            <Descriptions.Item label="邮箱">{detail.application.candidate.email ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="电话">{detail.application.candidate.phone ?? '-'}</Descriptions.Item>
-          </Descriptions>
-
-          <Typography.Title level={5} className="u-mt-0">
-            三方待办清单
-          </Typography.Title>
-          {(['HR', 'IT', 'NEW_HIRE'] as const).map((owner) => (
-            <ChecklistGroup
-              key={owner}
-              onboarding={detail}
-              owner={owner}
-              canToggle={canToggleOwner(owner)}
-              onToggle={(key, done) =>
-                run(() => onboardingApi.toggle(detail.id, key, done), done ? '已完成' : '已取消勾选')
-              }
-            />
-          ))}
-
-          <Typography.Title level={5}>
-            入职材料{' '}
-            {hasPermission(PERMISSIONS.ONBOARDING_UPLOAD) && (
-              <Button size="small" icon={<PlusOutlined />} onClick={() => setDocOpen(true)}>
-                提交材料
+          ) : (
+            <span className="hf-muted">等待 HR 生成合同</span>
+          )
+        ) : (
+          <>
+            <div className="hf-check-row hf-check-row--static">
+              <span className="hf-muted hf-field-key">模板</span>
+              <span className="hf-secondary u-flex-1">{contract.templateName}</span>
+            </div>
+            <div className="hf-check-row hf-check-row--static">
+              <span className="hf-muted hf-field-key">状态</span>
+              <span className="u-flex-1">
+                <span
+                  className={
+                    contract.signStatus === 'SIGNED' || contract.signStatus === 'ARCHIVED'
+                      ? 'hf-state--ok'
+                      : 'hf-secondary'
+                  }
+                >
+                  {CONTRACT_SIGN_STATUS_LABEL[contract.signStatus as ContractSignStatus]}
+                </span>
+              </span>
+            </div>
+            {contract.evidenceNo && (
+              <div className="hf-check-row hf-check-row--static">
+                <span className="hf-muted hf-field-key">存证号</span>
+                <Typography.Text copyable className="hf-secondary hf-td--num u-flex-1">
+                  {contract.evidenceNo}
+                </Typography.Text>
+              </div>
+            )}
+            {contract.signStatus === 'DRAFT' && canManage && (
+              <Button
+                type="primary"
+                block
+                className="u-mt-8"
+                onClick={() => run(() => onboardingApi.sendContract(contract.id), '已发送至电子签服务商')}
+              >
+                发送签署
               </Button>
             )}
-          </Typography.Title>
-          {!detail.documents?.length ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无材料（提交后 OCR 自动抽取字段）" />
-          ) : (
-            detail.documents.map((doc) => (
-              <Card
-                size="small"
-                key={doc.type}
-                className="u-mb-8"
-                title={
-                  <Space size={8}>
-                    {doc.label}
-                    {doc.needsReview && <Tag color="warning">待人工核对</Tag>}
-                  </Space>
-                }
-                extra={
-                  doc.fileUrl ? (
-                    <Button size="small" type="link" onClick={() => window.open(doc.fileUrl!, '_blank')}>
-                      查看原件
-                    </Button>
-                  ) : null
-                }
+            {contract.signStatus === 'SENT' && canManage && (
+              <Button
+                type="primary"
+                block
+                className="u-mt-8"
+                onClick={() => run(() => onboardingApi.signContract(contract.id), '签署完成：已存证、通知 IT 开账号')}
               >
-                {Object.keys(doc.fields).length > 0 ? (
-                  <Descriptions size="small" column={2}>
-                    {Object.entries(doc.fields).map(([k, v]) => (
-                      <Descriptions.Item key={k} label={k}>
-                        {v}
-                      </Descriptions.Item>
-                    ))}
-                  </Descriptions>
-                ) : (
-                  <Typography.Text type="warning" className="u-meta">
-                    仅上传了图片、未识别出字段：请打开原件人工核对，确认无误后手动勾选对应待办
-                  </Typography.Text>
-                )}
-                <div className="doc-meta">
-                  识别引擎：{doc.ocrProvider} · {dayjs(doc.addedAt).format('YYYY-MM-DD HH:mm')}
-                  {doc.fileName ? ` · ${doc.fileName}` : ''}
-                </div>
-              </Card>
-            ))
-          )}
-
-          <Typography.Title level={5}>
-            <FileProtectOutlined /> 劳动合同（电子签）
-          </Typography.Title>
-          <Card size="small">
-            <Steps
-              size="small"
-              current={contract ? SIGN_STEP[contract.signStatus] : 0}
-              items={[{ title: '生成合同' }, { title: '发送签署' }, { title: '完成签署' }, { title: '存证归档' }]}
-              className="u-mb-16"
-            />
-            {!contract ? (
-              canManage ? (
-                <Button type="primary" onClick={() => run(() => onboardingApi.createContract(detail.id), '合同已生成（模板变量自动填充）')}>
-                  生成劳动合同
-                </Button>
-              ) : (
-                <Typography.Text type="secondary">等待 HR 生成合同</Typography.Text>
-              )
-            ) : (
-              <>
-                <Descriptions size="small" column={2} className="u-mb-16">
-                  <Descriptions.Item label="模板">{contract.templateName}</Descriptions.Item>
-                  <Descriptions.Item label="状态">
-                    <Tag color={contract.signStatus === 'SIGNED' ? 'success' : 'processing'}>
-                      {CONTRACT_SIGN_STATUS_LABEL[contract.signStatus as ContractSignStatus] ?? contract.signStatus}
-                    </Tag>
-                  </Descriptions.Item>
-                  {Boolean(contract.variables?.candidateName) && (
-                    <Descriptions.Item label="签署人">{String(contract.variables?.candidateName)}</Descriptions.Item>
-                  )}
-                  {contract.evidenceNo && (
-                    <Descriptions.Item label="存证号">
-                      <Typography.Text code copyable className="u-meta">
-                        {contract.evidenceNo}
-                      </Typography.Text>
-                    </Descriptions.Item>
-                  )}
-                </Descriptions>
-                <Space>
-                  {contract.signStatus === 'DRAFT' && canManage && (
-                    <Button type="primary" onClick={() => run(() => onboardingApi.sendContract(contract.id), '已发送至电子签服务商（新员工可在 H5 链接中签署）')}>
-                      发送签署
-                    </Button>
-                  )}
-                  {contract.signStatus === 'SENT' && canManage && (
-                    <Button
-                      type="primary"
-                      onClick={() =>
-                        run(() => onboardingApi.signContract(contract.id), '签署完成：已存证、通知 IT 开账号')
-                      }
-                    >
-                      完成签署（代签/模拟回调）
-                    </Button>
-                  )}
-                  {contract.signStatus === 'SIGNED' && (
-                    <Typography.Text type="secondary" className="u-meta">
-                      签署完成后已自动 Webhook 通知 IT 配置设备与账号（见候选人时间轴）
-                    </Typography.Text>
-                  )}
-                </Space>
-              </>
+                完成签署（代签 / 模拟回调）
+              </Button>
             )}
-          </Card>
+          </>
+        )}
+      </div>
 
-          <Modal
-            title="提交入职材料"
-            open={docOpen}
-            onCancel={() => {
-              setDocOpen(false);
-              setDocFile(null);
-            }}
-            onOk={() => docForm.submit()}
-            confirmLoading={addDocMutation.isPending}
-            destroyOnHidden
+      <Modal
+        className="hf-modal"
+        title="提交入职材料"
+        open={docOpen}
+        onCancel={() => {
+          setDocOpen(false);
+          setDocFile(null);
+        }}
+        onOk={() => docForm.submit()}
+        confirmLoading={addDocMutation.isPending}
+        destroyOnHidden
+      >
+        <Form form={docForm} layout="vertical" onFinish={(values) => addDocMutation.mutate(values)}>
+          <Form.Item name="type" label="材料类型" rules={[{ required: true, message: '请选择类型' }]}>
+            <Select
+              placeholder="选择材料类型"
+              options={Object.entries(DOCUMENT_TYPE_META).map(([value, meta]) => ({ value, label: meta.label }))}
+            />
+          </Form.Item>
+          <Form.Item label="证件照片（可选）" extra="原件入对象存储留档；纯图片将标记「待人工核对」">
+            <Upload
+              accept="image/*,.pdf"
+              maxCount={1}
+              beforeUpload={(file) => {
+                setDocFile(file as unknown as File);
+                return false;
+              }}
+              onRemove={() => setDocFile(null)}
+            >
+              <Button>选择图片 / PDF（≤10MB）</Button>
+            </Upload>
+          </Form.Item>
+          <Form.Item
+            name="rawText"
+            label="材料文字内容"
+            rules={docFile ? [{ min: 6, message: '材料内容过短' }] : [{ required: true, min: 6, message: '请输入材料文本' }]}
+            extra="粘贴证件文字，OCR 自动抽取字段并勾选待办；只传图片可留空"
           >
-            <Form form={docForm} layout="vertical" onFinish={(values) => addDocMutation.mutate(values)}>
-              <Form.Item name="type" label="材料类型" rules={[{ required: true, message: '请选择类型' }]}>
-                <Select
-                  placeholder="选择材料类型"
-                  options={Object.entries(DOCUMENT_TYPE_META).map(([value, meta]) => ({
-                    value,
-                    label: meta.label,
-                  }))}
-                />
-              </Form.Item>
-              <Form.Item label="证件照片（可选）" extra="原件入对象存储留档；接入云 OCR 前图片不识图，纯图片将标记「待人工核对」">
-                <Upload
-                  accept="image/*,.pdf"
-                  maxCount={1}
-                  beforeUpload={(file) => {
-                    setDocFile(file as unknown as File);
-                    return false;
-                  }}
-                  onRemove={() => setDocFile(null)}
-                >
-                  <Button icon={<UploadOutlined />}>选择图片/PDF（≤10MB）</Button>
-                </Upload>
-              </Form.Item>
-              <Form.Item
-                name="rawText"
-                label="材料文字内容"
-                rules={docFile ? [{ min: 6, message: '材料内容过短' }] : [{ required: true, min: 6, message: '请输入材料文本' }]}
-                extra="粘贴证件上的文字，OCR 引擎自动抽取关键字段并勾选待办；只传图片可留空"
-              >
-                <Input.TextArea rows={4} placeholder="如：姓名：杨帆 公民身份号码 110105199305124533 住址：…" />
-              </Form.Item>
-            </Form>
-          </Modal>
-        </>
-      )}
-    </Drawer>
+            <Input.TextArea rows={4} placeholder="如：姓名：杨帆 公民身份号码 110105199305124533 住址：…" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
   );
 }
 
 export function OnboardingPage() {
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('active');
   const listQuery = useQuery({ queryKey: ['onboardings'], queryFn: onboardingApi.list, retry: false });
+
+  const all = listQuery.data ?? [];
+  /** 默认选中第一张进行中的单，主从布局不会出现空右栏 */
+  useEffect(() => {
+    if (!selected && all.length) setSelected(all.find((o) => o.status !== 'COMPLETED')?.id ?? all[0].id);
+  }, [all, selected]);
+
+  const reviewCount = (o: Onboarding) => o.documents?.filter((d) => d.needsReview).length ?? 0;
+  const visible = all.filter((o) => {
+    if (filter === 'done') return o.status === 'COMPLETED';
+    if (filter === 'review') return reviewCount(o) > 0;
+    return o.status !== 'COMPLETED';
+  });
+
+  const doneCount = all.filter((o) => o.status === 'COMPLETED').length;
+  const kpis = [
+    { label: '进行中', value: all.length - doneCount, unit: '张' },
+    { label: '本月已入职', value: doneCount, unit: '人' },
+    {
+      label: '合同待签署',
+      value: all.filter(
+        (o) => o.contract && o.contract.signStatus !== 'SIGNED' && o.contract.signStatus !== 'ARCHIVED',
+      ).length,
+      unit: '份',
+    },
+    { label: '材料待核对', value: all.reduce((s, o) => s + reviewCount(o), 0), unit: '项' },
+    {
+      label: '清单平均完成',
+      value: all.length
+        ? `${Math.round((all.reduce((s, o) => s + o.progress.done / o.progress.total, 0) / all.length) * 100)}%`
+        : '—',
+      unit: '',
+    },
+  ];
 
   if (listQuery.isError) {
     return (
-      <div className="onboarding-page">
-        <div className="page-header">
-          <div className="page-header-left">
-            <h1 className="page-header-title">入职管理</h1>
-          </div>
-        </div>
-        <Card className="list-main-card">
+      <div className="hf-page">
+        <div className="hf-body">
           <QueryErrorResult error={listQuery.error} />
-        </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="onboarding-page">
-      {/* 页面头部 */}
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-header-title">入职管理</h1>
-          <p className="page-header-subtitle">三方待办清单、材料收集 OCR、电子签合同，完成后自动标记已入职</p>
+    <div className="hf-page">
+      <div className="hf-bar">
+        <div className="hf-bar-left">
+          <div className="hf-seg">
+            <span className={filter === 'active' ? 'hf-seg--on' : undefined} onClick={() => setFilter('active')}>
+              进行中
+            </span>
+            <span className={filter === 'done' ? 'hf-seg--on' : undefined} onClick={() => setFilter('done')}>
+              已完成
+            </span>
+            <span className={filter === 'review' ? 'hf-seg--on' : undefined} onClick={() => setFilter('review')}>
+              待核对材料
+            </span>
+          </div>
+          <span className="hf-muted">清单全部完成且合同已签署后，候选人自动标记为已入职</span>
         </div>
       </div>
 
-      {/* 入职列表 */}
-      <Card className="list-main-card">
-        <Table<Onboarding>
-          rowKey="id"
-          scroll={{ x: 1100 }}
-          loading={listQuery.isLoading}
-          dataSource={listQuery.data}
-          pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 张入职单` }}
-          columns={[
-            {
-              title: '候选人',
-              width: 140,
-              render: (_, r) => (
-                <div className="onboarding-candidate-cell">
-                  <Button type="link" size="small" className="candidate-name-link" onClick={() => setDetailId(r.id)}>
-                    {r.application.candidate.name}
-                  </Button>
-                </div>
-              ),
-            },
-            {
-              title: '职位',
-              render: (_, r) => (
-                <div className="onboarding-job-cell">
-                  <div className="job-title-text">{r.application.job.title}</div>
-                  <div className="job-dept-text">{r.application.job.department.name}</div>
-                </div>
-              ),
-            },
-            {
-              title: '清单进度',
-              width: 220,
-              render: (_, r) => (
-                <div className="progress-cell">
-                  <Progress
-                    percent={Math.round((r.progress.done / r.progress.total) * 100)}
-                    size="small"
-                    strokeColor={BRAND.primary}
-                  />
-                  <span className="progress-text">{r.progress.done}/{r.progress.total}</span>
-                </div>
-              ),
-            },
-            {
-              title: '合同',
-              width: 110,
-              render: (_, r) =>
-                r.contract ? (
-                  <Tag className="contract-tag" color={r.contract.signStatus === 'SIGNED' ? 'success' : 'processing'}>
-                    {CONTRACT_SIGN_STATUS_LABEL[r.contract.signStatus as ContractSignStatus]}
-                  </Tag>
-                ) : (
-                  <span className="u-meta">未生成</span>
-                ),
-            },
-            {
-              title: '状态',
-              dataIndex: 'status',
-              width: 110,
-              render: (v: string) => (
-                <Tag className="onboarding-status-tag" color={v === 'COMPLETED' ? 'success' : 'processing'}>
-                  {ONBOARDING_STATUS_LABEL[v as OnboardingStatus] ?? v}
-                </Tag>
-              ),
-            },
-            {
-              title: '创建时间',
-              dataIndex: 'createdAt',
-              width: 140,
-              render: (v: string) => <span className="u-meta">{dayjs(v).format('MM-DD HH:mm')}</span>,
-            },
-            {
-              title: '操作',
-              width: 100,
-              fixed: 'right',
-              render: (_, r) => (
-                <Button type="link" size="small" onClick={() => setDetailId(r.id)}>
-                  详情
-                </Button>
-              ),
-            },
-          ]}
-        />
-      </Card>
-      <OnboardingDetail id={detailId} onClose={() => setDetailId(null)} />
+      <div className="hf-body">
+        <div className="hf-kpis">
+          {kpis.map((k) => (
+            <div className="hf-kpi" key={k.label}>
+              <div className="hf-kpi-label">{k.label}</div>
+              <div className="hf-kpi-val">
+                <span className="hf-kpi-num">{k.value}</span>
+                <span className="hf-kpi-unit">{k.unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hf-cols">
+          {listQuery.isLoading ? (
+            <div className="hf-state-block">
+              <Spin />
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="hf-state-block">
+              <div className="hf-state-icon">
+                <IdcardOutlined />
+              </div>
+              <div>
+                <div className="hf-state-title">没有符合条件的入职单</div>
+                <div className="hf-state-desc">候选人接受 Offer 后会自动生成入职单，并在这里跟踪三方清单与合同。</div>
+              </div>
+            </div>
+          ) : (
+            <div className="hf-table">
+              <div className="hf-thead">
+                <span className="hf-td w-160">候选人</span>
+                <span className="hf-td--grow">职位</span>
+                <span className="hf-td w-180">清单进度</span>
+                <span className="hf-td w-100">合同</span>
+                <span className="hf-td w-110">状态</span>
+                <span className="hf-td hf-td--right w-96">创建</span>
+              </div>
+              <div className="hf-tbody">
+                {visible.map((o) => {
+                  const pct = Math.round((o.progress.done / o.progress.total) * 100);
+                  const complete = o.status === 'COMPLETED';
+                  const signed = o.contract?.signStatus === 'SIGNED' || o.contract?.signStatus === 'ARCHIVED';
+                  return (
+                    <div
+                      key={o.id}
+                      className={o.id === selected ? 'hf-tr hf-tr--on' : 'hf-tr'}
+                      onClick={() => setSelected(o.id)}
+                    >
+                      <span className="hf-td w-160 u-flex-gap-8">
+                        <span className="hf-avatar">{o.application.candidate.name.charAt(0)}</span>
+                        <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>
+                        {reviewCount(o) > 0 && <span className="hf-dot hf-dot--alert" title="有材料待人工核对" />}
+                      </span>
+                      <span className="hf-td--grow u-flex-gap-10">
+                        <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
+                        <span className="hf-faint">{o.application.job.department.name}</span>
+                      </span>
+                      <span className="hf-td w-180 hf-progress">
+                        <span className="hf-bar-track">
+                          <span
+                            className="hf-bar-fill"
+                            style={cssVars({ '--w': `${Math.max(pct, 2)}%`, '--c': complete ? '#059669' : '#2563EB' })}
+                          />
+                        </span>
+                        <span className="hf-progress-num">
+                          {o.progress.done} / {o.progress.total}
+                        </span>
+                      </span>
+                      <span className="hf-td w-100">
+                        <span className={signed ? 'hf-state--ok' : o.contract ? 'hf-secondary' : 'hf-faint'}>
+                          {o.contract ? CONTRACT_SIGN_STATUS_LABEL[o.contract.signStatus as ContractSignStatus] : '未生成'}
+                        </span>
+                      </span>
+                      <span className={`hf-td w-110 hf-state ${complete ? 'hf-state--ok' : ''}`}>
+                        <span className={complete ? 'hf-dot hf-dot--ok' : 'hf-dot hf-dot--on'} />
+                        {complete ? '已完成' : '进行中'}
+                      </span>
+                      <span className="hf-td hf-td--right w-96 hf-muted hf-td--num">
+                        {dayjs(o.createdAt).format('MM-DD')}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hf-panel-foot hf-panel-foot--tight">
+                <span>全部 {all.length} 张入职单</span>
+                <span className="hf-faint">
+                  <span className="hf-dot hf-dot--alert u-mr-4" />
+                  姓名后的琥珀点 = 有材料待人工核对
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="hf-rail">
+            <DetailRail id={selected} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
