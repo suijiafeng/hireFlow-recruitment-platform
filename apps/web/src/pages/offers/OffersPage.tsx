@@ -1,50 +1,36 @@
-import { FieldTimeOutlined, InfoCircleOutlined, RobotOutlined } from '@ant-design/icons';
+import { FieldTimeOutlined, InfoCircleOutlined, AuditOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   OFFER_APPROVAL_STATUS_LABEL,
   OFFER_DECISION_LABEL,
-  OFFER_DECLINE_REASONS,
   PERMISSIONS,
   type OfferApprovalStatus,
   type OfferDecision,
 } from '@hireflow/shared';
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Popconfirm,
-  Popover,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { App, Popconfirm, Popover, Spin, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { offersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
 import type { Offer, RetentionHint } from '../../api/types';
+import { DeclineEntryModal } from './DeclineEntryModal';
+import { RejectApprovalModal } from './RejectApprovalModal';
+import { ResubmitModal } from './ResubmitModal';
 import { useAuthStore } from '../../stores/auth';
 
-const STATUS_COLOR: Record<string, string> = {
-  DRAFT: 'default',
-  PENDING: 'warning',
-  APPROVED: 'success',
-  REJECTED: 'error',
-  SENT: 'processing',
-  EXPIRED: 'error',
-};
+/** 分组顺序 = 流程顺序，待办排最上 */
+const GROUPS: Array<{ key: string; label: string; dot: string; tone: string }> = [
+  { key: 'PENDING', label: '待审批', dot: 'hf-dot hf-dot--on', tone: '' },
+  { key: 'REJECTED', label: '已驳回 · 待修改重提', dot: 'hf-dot hf-dot--err', tone: 'hf-state--err' },
+  { key: 'APPROVED', label: '已批准 · 待发送', dot: 'hf-dot hf-dot--on', tone: '' },
+  { key: 'SENT', label: '已发送 · 待答复', dot: 'hf-dot hf-dot--alert', tone: 'hf-state--warn' },
+  { key: 'EXPIRED', label: '超期未答复', dot: 'hf-dot hf-dot--err', tone: 'hf-state--err' },
+  { key: 'ACCEPTED', label: '已接受', dot: 'hf-dot hf-dot--ok', tone: 'hf-state--ok' },
+  { key: 'DECLINED', label: '已拒绝', dot: 'hf-dot hf-dot--off', tone: 'hf-state--off' },
+];
 
-/** AI 留存预测气泡（辅助参考） */
+/** AI 留存预测（辅助参考） */
 function RetentionPopover({ offerId }: { offerId: string }) {
   const [hint, setHint] = useState<RetentionHint | null>(null);
   const retentionMutation = useMutation({
@@ -62,195 +48,26 @@ function RetentionPopover({ offerId }: { offerId: string }) {
         retentionMutation.isPending ? (
           <Spin size="small" />
         ) : hint ? (
-          <div className="retention-pop">
-            <Typography.Text strong className="u-num-20">
-              {Math.round(hint.probability * 100)}%
-            </Typography.Text>
-            <Typography.Text type="secondary" className="u-ml-8 u-meta">
-              预计通过试用期并留存
-            </Typography.Text>
-            <ul className="retention-list">
+          <div className="w-260">
+            <span className="hf-kpi-num">{Math.round(hint.probability * 100)}%</span>
+            <span className="hf-muted u-ml-8">预计通过试用期并留存</span>
+            <ul className="plain-ol u-mt-8">
               {hint.factors.map((f, i) => (
-                <li key={i}>{f}</li>
+                <li key={i} className="hf-secondary">
+                  {f}
+                </li>
               ))}
             </ul>
           </div>
         ) : (
-          <Typography.Text type="secondary" className="u-meta">
-            点击生成
-          </Typography.Text>
+          <span className="hf-muted">点击生成</span>
         )
       }
     >
-      <Button size="small" type="link" icon={<RobotOutlined />} className="u-p0">
+      <span className="hf-link" onClick={(e) => e.stopPropagation()}>
         AI 参考
-      </Button>
+      </span>
     </Popover>
-  );
-}
-
-/** 审批驳回：意见必填，随 Offer 退回 HR */
-function RejectApprovalModal({
-  offer,
-  onClose,
-  onDone,
-}: {
-  offer: Offer | null;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { message } = App.useApp();
-  const [form] = Form.useForm<{ note: string }>();
-  const mutation = useMutation({
-    mutationFn: (values: { note: string }) => offersApi.reject(offer!.id, values.note),
-    onSuccess: () => {
-      message.success('已驳回，意见已退回 HR 修改重提');
-      onClose();
-      onDone();
-    },
-    onError: (error) => message.error(extractErrorMessage(error, '操作失败')),
-  });
-  return (
-    <Modal
-      title={offer ? `驳回 Offer：${offer.application.candidate.name}` : '驳回 Offer'}
-      open={Boolean(offer)}
-      onCancel={onClose}
-      onOk={() => form.submit()}
-      okText="确认驳回"
-      okButtonProps={{ danger: true }}
-      confirmLoading={mutation.isPending}
-      destroyOnHidden
-    >
-      <Form form={form} layout="vertical" onFinish={(v) => mutation.mutate(v)}>
-        <Form.Item
-          name="note"
-          label="审批意见（必填，供 HR 修改重提）"
-          rules={[{ required: true, message: '驳回必须填写意见' }]}
-        >
-          <Input.TextArea rows={3} placeholder="如：薪资超出该职级带宽，请调整后重提" maxLength={500} />
-        </Form.Item>
-      </Form>
-    </Modal>
-  );
-}
-
-/** 驳回后修改重提：调整薪资包重新进入审批 */
-function ResubmitModal({
-  offer,
-  onClose,
-  onDone,
-}: {
-  offer: Offer | null;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { message } = App.useApp();
-  const [form] = Form.useForm<{ salaryBase: number; bonusMonths?: number; grade?: string; note?: string }>();
-  const mutation = useMutation({
-    mutationFn: (values: { salaryBase: number; bonusMonths?: number; grade?: string; note?: string }) =>
-      offersApi.resubmit(offer!.id, values),
-    onSuccess: () => {
-      message.success('已重新提交审批');
-      onClose();
-      onDone();
-    },
-    onError: (error) => message.error(extractErrorMessage(error, '操作失败')),
-  });
-  return (
-    <Modal
-      title={offer ? `修改重提：${offer.application.candidate.name}` : '修改重提'}
-      open={Boolean(offer)}
-      onCancel={onClose}
-      onOk={() => form.submit()}
-      okText="重新提交审批"
-      confirmLoading={mutation.isPending}
-      destroyOnHidden
-    >
-      {offer?.approvalNote && (
-        <Alert
-          type="warning"
-          showIcon
-          title="审批驳回意见"
-          description={offer.approvalNote}
-          className="u-mb-16"
-        />
-      )}
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={{
-          salaryBase: offer?.salary?.base,
-          bonusMonths: offer?.salary?.bonusMonths ?? 0,
-          grade: offer?.grade ?? undefined,
-          note: offer?.salary?.note ?? undefined,
-        }}
-        onFinish={(v) => mutation.mutate(v)}
-      >
-        <Space className="u-flex-row" align="start">
-          <Form.Item
-            name="salaryBase"
-            label="月薪（base，元）"
-            rules={[{ required: true, message: '请输入月薪' }]}
-          >
-            <InputNumber min={1000} max={1_000_000} step={1000} className="w-160" />
-          </Form.Item>
-          <Form.Item name="bonusMonths" label="年终奖月数">
-            <InputNumber min={0} max={12} className="w-120" />
-          </Form.Item>
-          <Form.Item name="grade" label="职级">
-            <Input placeholder="P6" maxLength={20} className="w-100" />
-          </Form.Item>
-        </Space>
-        <Form.Item name="note" label="备注（审批人可见）">
-          <Input.TextArea rows={2} maxLength={500} placeholder="如：已按带宽上限调整" />
-        </Form.Item>
-      </Form>
-    </Modal>
-  );
-}
-
-/** HR 代录候选人拒绝：原因码必选 */
-function DeclineEntryModal({
-  offer,
-  onClose,
-  onDone,
-}: {
-  offer: Offer | null;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { message } = App.useApp();
-  const [form] = Form.useForm<{ reason: string }>();
-  const mutation = useMutation({
-    mutationFn: (values: { reason: string }) => offersApi.respond(offer!.id, 'DECLINED', values.reason),
-    onSuccess: () => {
-      message.success('已录入：拒绝');
-      onClose();
-      onDone();
-    },
-    onError: (error) => message.error(extractErrorMessage(error, '操作失败')),
-  });
-  return (
-    <Modal
-      title={offer ? `录入拒绝：${offer.application.candidate.name}` : '录入拒绝'}
-      open={Boolean(offer)}
-      onCancel={onClose}
-      onOk={() => form.submit()}
-      okText="确认录入"
-      okButtonProps={{ danger: true }}
-      confirmLoading={mutation.isPending}
-      destroyOnHidden
-    >
-      <Form form={form} layout="vertical" onFinish={(v) => mutation.mutate(v)}>
-        <Form.Item
-          name="reason"
-          label="拒绝原因码（必选，用于渠道与薪酬竞争力分析）"
-          rules={[{ required: true, message: '请选择原因码' }]}
-        >
-          <Select placeholder="选择原因" options={OFFER_DECLINE_REASONS.map((r) => ({ value: r, label: r }))} />
-        </Form.Item>
-      </Form>
-    </Modal>
   );
 }
 
@@ -261,6 +78,7 @@ export function OffersPage() {
   const [rejectTarget, setRejectTarget] = useState<Offer | null>(null);
   const [resubmitTarget, setResubmitTarget] = useState<Offer | null>(null);
   const [declineTarget, setDeclineTarget] = useState<Offer | null>(null);
+  const [filter, setFilter] = useState<'all' | 'approve' | 'reply'>('all');
 
   const offersQuery = useQuery({ queryKey: ['offers'], queryFn: offersApi.list, retry: false });
 
@@ -279,7 +97,6 @@ export function OffersPage() {
       .catch((error) => message.error(extractErrorMessage(error, '操作失败')));
   };
 
-  /** 获取门户令牌并复制候选人链接（剪贴板不可用时弹窗展示） */
   const copyPortalLink = async (offer: Offer) => {
     try {
       const { token } = await offersApi.portalLink(offer.id);
@@ -306,223 +123,291 @@ export function OffersPage() {
   const canInitiate = hasPermission(PERMISSIONS.OFFER_INITIATE);
   const canViewSalary = hasPermission(PERMISSIONS.SALARY_VIEW);
 
-  return (
-    <div className="offers-page">
-      {/* 页面头部 */}
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-header-title">录用管理</h1>
-          <p className="page-header-subtitle">发起 Offer、审批流转、发送候选人、跟踪答复状态</p>
-        </div>
-      </div>
+  const all = offersQuery.data ?? [];
+  /** 分组键：已答复的按 decision 归组，其余按审批状态 */
+  const groupKey = (o: Offer) => (o.decision ? o.decision : o.approvalStatus);
+  const visible = all.filter((o) => {
+    if (filter === 'approve') return o.approvalStatus === 'PENDING';
+    if (filter === 'reply') return o.approvalStatus === 'SENT' && !o.decision;
+    return true;
+  });
 
-      {/* 流程说明 */}
-      <div className="process-flow-card">
-        <div className="process-flow-title">
-          <InfoCircleOutlined className="process-flow-icon" />
-          <span>Offer 流程说明</span>
-        </div>
-        <div className="process-flow-steps">
-          <span className="flow-step">HR 发起</span>
-          <span className="flow-arrow">→</span>
-          <span className="flow-step">审批（可驳回重提）</span>
-          <span className="flow-arrow">→</span>
-          <span className="flow-step">发送候选人</span>
-          <span className="flow-arrow">→</span>
-          <span className="flow-step">在线答复</span>
-          <span className="flow-arrow">→</span>
-          <span className="flow-step flow-step--final">自动生成入职单</span>
-        </div>
-      </div>
+  const pending = all.filter((o) => o.approvalStatus === 'PENDING').length;
+  const toSend = all.filter((o) => o.approvalStatus === 'APPROVED').length;
+  const toReply = all.filter((o) => o.approvalStatus === 'SENT' && !o.decision).length;
+  const accepted = all.filter((o) => o.decision === 'ACCEPTED').length;
+  const answered = accepted + all.filter((o) => o.decision === 'DECLINED').length;
+  const avgBase =
+    all.filter((o) => o.salary).reduce((s, o) => s + (o.salary?.base ?? 0), 0) /
+    Math.max(all.filter((o) => o.salary).length, 1);
 
-      {/* Offer 列表 */}
-      <Card className="list-main-card u-mt-16">
-        {offersQuery.isError ? (
+  const kpis = [
+    { label: '待审批', value: pending, unit: '份' },
+    { label: '待发送', value: toSend, unit: '份' },
+    { label: '待答复', value: toReply, unit: '份' },
+    { label: '接受率', value: answered ? `${Math.round((accepted / answered) * 100)}%` : '—', unit: '' },
+    {
+      label: '平均月薪',
+      value: canViewSalary && avgBase ? `¥${Math.round(avgBase / 100) * 100}` : '—',
+      unit: '',
+    },
+  ];
+
+  /** 时效 / 答复：只有紧迫与终态才着色 */
+  const replyCell = (o: Offer) => {
+    if (o.decision) {
+      const ok = o.decision === 'ACCEPTED';
+      return (
+        <span className={ok ? 'hf-state--ok hf-strong' : 'hf-state--off'}>
+          {OFFER_DECISION_LABEL[o.decision as OfferDecision] ?? o.decision}
+          {!ok && o.decisionReason ? ` · ${o.decisionReason}` : ''}
+        </span>
+      );
+    }
+    if (o.approvalStatus === 'SENT' && o.expiresAt) {
+      const left = Math.max(dayjs(o.expiresAt).diff(dayjs(), 'day'), 0);
+      return (
+        <span className={left <= 2 ? 'hf-state--err hf-strong' : 'hf-muted'}>
+          <FieldTimeOutlined /> 剩 {left} 天{o.extendedOnce ? '（已续期）' : ''}
+        </span>
+      );
+    }
+    if (o.approvalStatus === 'EXPIRED') return <span className="hf-state--err">超期未答复</span>;
+    if (o.approvalStatus === 'REJECTED') return <span className="hf-muted">{o.approvalNote ?? '已驳回'}</span>;
+    return <span className="hf-faint">—</span>;
+  };
+
+  /** 操作列：按状态只给一个最可能的动作，其余进 Popconfirm/弹窗 */
+  const actionCell = (o: Offer) => {
+    const st = o.approvalStatus;
+    if (st === 'PENDING' && canApprove)
+      return (
+        <span className="u-flex-end u-flex-gap-12">
+          <RetentionPopover offerId={o.id} />
+          <Popconfirm title="批准该 Offer？" onConfirm={() => act(() => offersApi.approve(o.id), '已批准')}>
+            <span className="hf-link" onClick={(e) => e.stopPropagation()}>
+              通过
+            </span>
+          </Popconfirm>
+          <span
+            className="hf-link hf-link--danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRejectTarget(o);
+            }}
+          >
+            驳回
+          </span>
+        </span>
+      );
+    if (st === 'REJECTED' && canInitiate)
+      return (
+        <span
+          className="hf-link"
+          onClick={(e) => {
+            e.stopPropagation();
+            setResubmitTarget(o);
+          }}
+        >
+          修改重提
+        </span>
+      );
+    if (st === 'APPROVED' && canInitiate)
+      return (
+        <Popconfirm
+          title="电子发送 Offer？"
+          description="将生成候选人免登录链接，答复期 5 个工作日"
+          onConfirm={() => act(() => offersApi.send(o.id), 'Offer 已发送，可复制候选人链接')}
+        >
+          <span className="hf-link" onClick={(e) => e.stopPropagation()}>
+            发送
+          </span>
+        </Popconfirm>
+      );
+    if ((st === 'SENT' || st === 'EXPIRED') && canInitiate)
+      return (
+        <span className="u-flex-end u-flex-gap-12">
+          <span
+            className="hf-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              void copyPortalLink(o);
+            }}
+          >
+            复制链接
+          </span>
+          {!o.decision && !o.extendedOnce && (
+            <Popconfirm
+              title="续期该 Offer？"
+              description="重新给予 5 个工作日答复期（仅可续期一次）"
+              onConfirm={() => act(() => offersApi.extend(o.id), '已续期 5 个工作日')}
+            >
+              <span className="hf-link" onClick={(e) => e.stopPropagation()}>
+                续期
+              </span>
+            </Popconfirm>
+          )}
+          {st === 'SENT' && !o.decision && (
+            <Popconfirm
+              title="候选人已接受 Offer？将自动创建入职单"
+              onConfirm={() => act(() => offersApi.respond(o.id, 'ACCEPTED'), '已录入：接受，入职单已创建')}
+            >
+              <span className="hf-link" onClick={(e) => e.stopPropagation()}>
+                录入接受
+              </span>
+            </Popconfirm>
+          )}
+          {/* 录入拒绝：设计稿挂了 DeclineEntryModal 却没留入口，会让「代录拒绝」能力整个丢失，按原页面补回。
+              门控必须与「录入接受」一致限定 SENT——offers.service.applyDecision 对 EXPIRED 直接抛
+              BadRequestException，放开到 EXPIRED 会得到一个点了必然失败的按钮。 */}
+          {st === 'SENT' && !o.decision && (
+            <span
+              className="hf-link hf-link--danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeclineTarget(o);
+              }}
+            >
+              录入拒绝
+            </span>
+          )}
+        </span>
+      );
+    return <span className="hf-link">详情</span>;
+  };
+
+  if (offersQuery.isError) {
+    return (
+      <div className="hf-page">
+        <div className="hf-body">
           <QueryErrorResult error={offersQuery.error} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="hf-page">
+      {/* 控制栏：分段筛选 + 流程说明内联（取代整块蓝底流程卡） */}
+      <div className="hf-bar">
+        <div className="hf-bar-left">
+          <div className="hf-seg">
+            <span className={filter === 'all' ? 'hf-seg--on' : undefined} onClick={() => setFilter('all')}>
+              全部
+            </span>
+            <span className={filter === 'approve' ? 'hf-seg--on' : undefined} onClick={() => setFilter('approve')}>
+              待我审批
+            </span>
+            <span className={filter === 'reply' ? 'hf-seg--on' : undefined} onClick={() => setFilter('reply')}>
+              待答复
+            </span>
+          </div>
+          <span className="hf-muted">
+            <InfoCircleOutlined /> HR 发起 → 审批 → 发送 → 候选人答复 → <b>自动生成入职单</b>
+          </span>
+        </div>
+      </div>
+
+      <div className="hf-body">
+        <div className="hf-kpis">
+          {kpis.map((k) => (
+            <div className="hf-kpi" key={k.label}>
+              <div className="hf-kpi-label">{k.label}</div>
+              <div className="hf-kpi-val">
+                <span className="hf-kpi-num">{k.value}</span>
+                <span className="hf-kpi-unit">{k.unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {offersQuery.isLoading ? (
+          <div className="hf-state-block">
+            <Spin />
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="hf-state-block">
+            <div className="hf-state-icon">
+              <AuditOutlined />
+            </div>
+            <div>
+              <div className="hf-state-title">{filter === 'all' ? '还没有 Offer' : '没有符合条件的 Offer'}</div>
+              <div className="hf-state-desc">
+                在候选人详情里点「发起 Offer」，提交后会进入审批，审批通过才能发送候选人。
+              </div>
+            </div>
+          </div>
         ) : (
-          <Table<Offer>
-            rowKey="id"
-            scroll={{ x: 1300 }}
-            loading={offersQuery.isLoading}
-            dataSource={offersQuery.data}
-            pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 份 Offer` }}
-            columns={[
-              {
-                title: '候选人',
-                width: 140,
-                render: (_, r) => (
-                  <div className="offer-candidate-cell">
-                    <span className="candidate-name-text">{r.application.candidate.name}</span>
+          /* 按流程阶段分组，待审批排最上；取代分页 */
+          <div className="hf-table">
+            <div className="hf-thead">
+              <span className="hf-td w-170">候选人</span>
+              <span className="hf-td--grow">职位</span>
+              <span className="hf-td w-70">职级</span>
+              <span className="hf-td w-180">薪资</span>
+              <span className="hf-td--grow">时效 / 答复</span>
+              <span className="hf-td hf-td--right w-120">更新</span>
+              <span className="hf-td hf-td--right w-180">操作</span>
+            </div>
+            <div className="hf-tbody">
+              {GROUPS.map((g) => {
+                const items = visible.filter((o) => groupKey(o) === g.key);
+                if (items.length === 0) return null;
+                return (
+                  <div key={g.key}>
+                    <div className="hf-group-head">
+                      <span className={g.dot} />
+                      <span className={`hf-group-title ${g.tone}`}>{g.label}</span>
+                      <span className="hf-group-count">{items.length}</span>
+                    </div>
+                    {items.map((o) => (
+                      <div key={o.id} className={g.key === 'PENDING' ? 'hf-tr hf-tr--focus' : 'hf-tr'}>
+                        <span className="hf-td w-170 u-flex-gap-8">
+                          <span className="hf-avatar">{o.application.candidate.name.charAt(0)}</span>
+                          <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>
+                        </span>
+                        <span className="hf-td--grow u-flex-gap-10">
+                          <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
+                          <span className="hf-faint">{o.application.job.department.name}</span>
+                        </span>
+                        <span className="hf-td w-70 hf-secondary hf-td--num">{o.grade ?? '—'}</span>
+                        {/* 薪资：无权限直接弱化，不再显示「无权查看」四字 Tag */}
+                        <span className="hf-td w-180 hf-td--num">
+                          {!canViewSalary ? (
+                            <span className="hf-faint">••••</span>
+                          ) : o.salary ? (
+                            <>
+                              <b className="hf-secondary">¥{o.salary.base.toLocaleString()}</b>
+                              <span className="hf-faint u-ml-4">× {12 + (o.salary.bonusMonths ?? 0)} 薪</span>
+                            </>
+                          ) : (
+                            <span className="hf-faint">—</span>
+                          )}
+                        </span>
+                        <span className="hf-td--grow hf-ellipsis">{replyCell(o)}</span>
+                        <span className="hf-td hf-td--right w-120 hf-muted hf-td--num">
+                          {dayjs(o.updatedAt).format('MM-DD HH:mm')}
+                        </span>
+                        <span className="hf-td hf-td--right w-180">{actionCell(o)}</span>
+                      </div>
+                    ))}
                   </div>
-                ),
-              },
-              {
-                title: '职位',
-                render: (_, r) => (
-                  <div className="offer-job-cell">
-                    <div className="job-title-text">{r.application.job.title}</div>
-                    <div className="job-dept-text">{r.application.job.department.name}</div>
-                  </div>
-                ),
-              },
-              {
-                title: '职级',
-                dataIndex: 'grade',
-                width: 90,
-                render: (v?: string) => v ? <span className="grade-badge">{v}</span> : '-',
-              },
-              {
-                title: '薪资',
-                width: 180,
-                render: (_, r) =>
-                  !canViewSalary ? (
-                    <Typography.Text type="secondary" className="u-meta">
-                      无权查看
-                    </Typography.Text>
-                  ) : r.salary ? (
-                    <span className="salary-text">
-                      ¥{r.salary.base.toLocaleString()} <span className="salary-months">× {12 + (r.salary.bonusMonths ?? 0)} 薪</span>
-                    </span>
-                  ) : (
-                    '-'
-                  ),
-              },
-              {
-                title: '审批状态',
-                dataIndex: 'approvalStatus',
-                width: 130,
-                render: (v: string, r) => (
-                  <Space size={4}>
-                    <Tag className="approval-tag" color={STATUS_COLOR[v]}>
-                      {OFFER_APPROVAL_STATUS_LABEL[v as OfferApprovalStatus] ?? v}
-                    </Tag>
-                    {v === 'REJECTED' && r.approvalNote && (
-                      <Tooltip title={`驳回意见：${r.approvalNote}`}>
-                        <InfoCircleOutlined className="ico-warning" />
-                      </Tooltip>
-                    )}
-                  </Space>
-                ),
-              },
-              {
-                title: '候选人答复',
-                width: 160,
-                render: (_, r) => {
-                  if (r.decision) {
-                    return (
-                      <Space size={4}>
-                        <Tag className="decision-tag" color={r.decision === 'ACCEPTED' ? 'success' : 'error'}>
-                          {OFFER_DECISION_LABEL[r.decision as OfferDecision] ?? r.decision}
-                        </Tag>
-                        {r.decision === 'DECLINED' && r.decisionReason && (
-                          <Tooltip title={`原因：${r.decisionReason}`}>
-                            <InfoCircleOutlined className="ico-error" />
-                          </Tooltip>
-                        )}
-                      </Space>
-                    );
-                  }
-                  if (r.approvalStatus === 'SENT' && r.expiresAt) {
-                    const daysLeft = dayjs(r.expiresAt).diff(dayjs(), 'day');
-                    return (
-                      <Tooltip title={`答复截止：${dayjs(r.expiresAt).format('YYYY-MM-DD HH:mm')}${r.extendedOnce ? '（已续期）' : ''}`}>
-                        <Tag className="expire-tag" color={daysLeft <= 1 ? 'error' : 'default'} icon={<FieldTimeOutlined />}>
-                          剩 {Math.max(daysLeft, 0)} 天
-                        </Tag>
-                      </Tooltip>
-                    );
-                  }
-                  if (r.approvalStatus === 'EXPIRED') {
-                    return <Tag color="error" className="expired-tag">超期未答复</Tag>;
-                  }
-                  return <span className="u-meta">待答复</span>;
-                },
-              },
-              {
-                title: '更新时间',
-                dataIndex: 'updatedAt',
-                width: 140,
-                render: (v: string) => <span className="u-meta">{dayjs(v).format('MM-DD HH:mm')}</span>,
-              },
-              {
-                title: '操作',
-                width: 280,
-                fixed: 'right',
-                render: (_, r) => (
-                  <Space size={4} wrap>
-                    {r.approvalStatus === 'PENDING' && <RetentionPopover offerId={r.id} />}
-                    {r.approvalStatus === 'PENDING' && canApprove && (
-                      <>
-                        <Popconfirm title="批准该 Offer？" onConfirm={() => act(() => offersApi.approve(r.id), '已批准')}>
-                          <Button size="small" type="link" className="action-link">
-                            通过
-                          </Button>
-                        </Popconfirm>
-                        <Button size="small" type="link" danger className="action-link" onClick={() => setRejectTarget(r)}>
-                          驳回
-                        </Button>
-                      </>
-                    )}
-                    {r.approvalStatus === 'REJECTED' && canInitiate && (
-                      <Button size="small" type="link" className="action-link" onClick={() => setResubmitTarget(r)}>
-                        修改重提
-                      </Button>
-                    )}
-                    {r.approvalStatus === 'APPROVED' && canInitiate && (
-                      <Popconfirm
-                        title="电子发送 Offer？"
-                        description="将生成候选人免登录链接，答复期 5 个工作日"
-                        onConfirm={() => act(() => offersApi.send(r.id), 'Offer 已发送，可复制候选人链接')}
-                      >
-                        <Button size="small" type="link" className="action-link">
-                          发送
-                        </Button>
-                      </Popconfirm>
-                    )}
-                    {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') && canInitiate && (
-                      <Button size="small" type="link" className="action-link" onClick={() => void copyPortalLink(r)}>
-                        复制链接
-                      </Button>
-                    )}
-                    {(r.approvalStatus === 'SENT' || r.approvalStatus === 'EXPIRED') &&
-                      !r.decision &&
-                      !r.extendedOnce &&
-                      canInitiate && (
-                        <Popconfirm
-                          title="续期该 Offer？"
-                          description="重新给予 5 个工作日答复期（仅可续期一次）"
-                          onConfirm={() => act(() => offersApi.extend(r.id), '已续期 5 个工作日')}
-                        >
-                          <Button size="small" type="link" className="action-link">
-                            续期
-                          </Button>
-                        </Popconfirm>
-                      )}
-                    {r.approvalStatus === 'SENT' && !r.decision && canInitiate && (
-                      <>
-                        <Popconfirm
-                          title="候选人已接受 Offer？将自动创建入职单"
-                          onConfirm={() => act(() => offersApi.respond(r.id, 'ACCEPTED'), '已录入：接受，入职单已创建')}
-                        >
-                          <Button size="small" type="link" className="action-link">
-                            录入接受
-                          </Button>
-                        </Popconfirm>
-                        <Button size="small" type="link" className="action-link" onClick={() => setDeclineTarget(r)}>
-                          录入拒绝
-                        </Button>
-                      </>
-                    )}
-                  </Space>
-                ),
-              },
-            ]}
-          />
+                );
+              })}
+            </div>
+            <div className="hf-panel-foot hf-panel-foot--tight">
+              <span>全部 {all.length} 份 Offer</span>
+              <span className="hf-faint">
+                {OFFER_APPROVAL_STATUS_LABEL['PENDING' as OfferApprovalStatus]}的 Offer 需用人经理处理
+              </span>
+            </div>
+          </div>
         )}
-        <RejectApprovalModal offer={rejectTarget} onClose={() => setRejectTarget(null)} onDone={invalidate} />
-        <ResubmitModal offer={resubmitTarget} onClose={() => setResubmitTarget(null)} onDone={invalidate} />
-        <DeclineEntryModal offer={declineTarget} onClose={() => setDeclineTarget(null)} onDone={invalidate} />
-      </Card>
+      </div>
+
+      <RejectApprovalModal offer={rejectTarget} onClose={() => setRejectTarget(null)} onDone={invalidate} />
+      <ResubmitModal offer={resubmitTarget} onClose={() => setResubmitTarget(null)} onDone={invalidate} />
+      <DeclineEntryModal offer={declineTarget} onClose={() => setDeclineTarget(null)} onDone={invalidate} />
     </div>
   );
 }
