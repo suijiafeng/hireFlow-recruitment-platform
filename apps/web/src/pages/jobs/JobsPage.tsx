@@ -1,234 +1,43 @@
-import { PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Drawer,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Progress,
-  Select,
-  Space,
-  Spin,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+import { App, Button, Dropdown, Form, Input, InputNumber, Modal, Select, Spin } from 'antd';
 import dayjs from 'dayjs';
+import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { aiApi, departmentsApi, jobsApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import type { Job, TalentPoolScanResult } from '../../api/types';
-import { EmptyBlock } from '../../components/ui';
-import { BRAND } from '../../theme';
+import type { Job } from '../../api/types';
+import { ScorecardModal } from './ScorecardModal';
+import { TalentPoolDrawer } from './TalentPoolDrawer';
 import { useAuthStore } from '../../stores/auth';
 
-/** 岗位评分卡模板配置 */
-function ScorecardModal({ job, onClose }: { job: Job | null; onClose: () => void }) {
-  const { message } = App.useApp();
-  const queryClient = useQueryClient();
-  const [form] = Form.useForm<{ template: Array<{ dimension: string; weight: number }> }>();
+const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
 
-  const saveMutation = useMutation({
-    mutationFn: (template: Array<{ dimension: string; weight: number }>) =>
-      jobsApi.update(job!.id, { scorecardTemplate: template }),
-    onSuccess: () => {
-      message.success('评分卡模板已保存，面评表单与 AI 草稿将按新维度出题');
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
-      void queryClient.invalidateQueries({ queryKey: ['interviews'] });
-      onClose();
-    },
-    onError: (error) => message.error(extractErrorMessage(error, '保存失败')),
-  });
+const PAGE_SIZE = 20;
 
-  return (
-    <Modal
-      title={job ? `评分卡模板 · ${job.title}` : '评分卡模板'}
-      open={Boolean(job)}
-      classNames={{ body: 'modal-body-scroll' }}
-      onCancel={onClose}
-      onOk={() => form.submit()}
-      confirmLoading={saveMutation.isPending}
-      destroyOnHidden
-    >
-      <Typography.Paragraph type="secondary" className="u-meta">
-        面评表单与 AI 面评草稿都会按此模板出维度（2-8 个）；权重供终审对比参考。
-      </Typography.Paragraph>
-      <Form
-        form={form}
-        initialValues={{
-          template: job?.scorecardTemplate?.length
-            ? job.scorecardTemplate
-            : [
-                { dimension: '技术能力', weight: 40 },
-                { dimension: '工程素养', weight: 30 },
-                { dimension: '沟通协作', weight: 30 },
-              ],
-        }}
-        onFinish={(v) => saveMutation.mutate(v.template)}
-      >
-        <Form.List
-          name="template"
-          rules={[
-            {
-              validator: async (_, value: unknown[]) => {
-                if (!value || value.length < 2) throw new Error('至少 2 个维度');
-                if (value.length > 8) throw new Error('最多 8 个维度');
-              },
-            },
-          ]}
-        >
-          {(fields, { add, remove }, { errors }) => (
-            <>
-              {fields.map((field) => (
-                <Space key={field.key} align="baseline" className="u-flex-row u-mb-4">
-                  <Form.Item
-                    name={[field.name, 'dimension']}
-                    rules={[{ required: true, message: '维度名必填' }, { max: 20 }]}
-                  >
-                    <Input placeholder="维度名，如：系统设计" className="w-220" />
-                  </Form.Item>
-                  <Form.Item
-                    name={[field.name, 'weight']}
-                    rules={[{ required: true, message: '权重必填' }]}
-                  >
-                    <InputNumber min={0} max={100} placeholder="权重" className="w-100" addonAfter="%" />
-                  </Form.Item>
-                  <Button type="link" danger size="small" onClick={() => remove(field.name)}>
-                    删除
-                  </Button>
-                </Space>
-              ))}
-              <Button block type="dashed" icon={<PlusOutlined />} onClick={() => add({ dimension: '', weight: 10 })}>
-                添加维度
-              </Button>
-              <Form.ErrorList errors={errors} />
-            </>
-          )}
-        </Form.List>
-      </Form>
-    </Modal>
-  );
-}
-
-/** 人才库唤醒抽屉：打开即扫描，AI 打分推荐 + 一键激活 */
-function TalentPoolDrawer({ job, onClose }: { job: Job | null; onClose: () => void }) {
-  const { message } = App.useApp();
-  const queryClient = useQueryClient();
-  const [result, setResult] = useState<TalentPoolScanResult | null>(null);
-  const [activated, setActivated] = useState<Set<string>>(new Set());
-
-  const scanMutation = useMutation({
-    mutationFn: (jobId: string) => jobsApi.talentPoolScan(jobId),
-    onSuccess: setResult,
-    onError: (error) => message.error(extractErrorMessage(error, '扫描失败')),
-  });
-
-  const activateMutation = useMutation({
-    mutationFn: (candidateId: string) => jobsApi.talentPoolActivate(job!.id, candidateId),
-    onSuccess: (_card, candidateId) => {
-      setActivated((prev) => new Set(prev).add(candidateId));
-      message.success('已激活：新应聘已进入简历初筛');
-      void queryClient.invalidateQueries({ queryKey: ['board'] });
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
-    },
-    onError: (error) => message.error(extractErrorMessage(error, '激活失败')),
-  });
-
-  return (
-    <Drawer
-      title={job ? `人才库唤醒 · ${job.title}` : '人才库唤醒'}
-      size={560}
-      open={Boolean(job)}
-      onClose={() => {
-        setResult(null);
-        setActivated(new Set());
-        onClose();
-      }}
-      destroyOnHidden
-      afterOpenChange={(open) => {
-        if (open && job) scanMutation.mutate(job.id);
-      }}
-    >
-      {scanMutation.isPending ? (
-        <div className="loading-center loading-center--xl">
-          <Spin description="AI 正在按本职位要求重新评估历史候选人…" />
-        </div>
-      ) : !result ? (
-        <EmptyBlock minHeight={200} description="扫描未完成，请关闭后重试" />
-      ) : result.recommendations.length === 0 ? (
-        <EmptyBlock
-          minHeight={200}
-          description={`已扫描 ${result.scanned} 位历史候选人，暂无匹配推荐`}
-        />
-      ) : (
-        <>
-          <Alert
-            type="info"
-            showIcon
-            className="u-mb-16"
-            title={`已扫描 ${result.scanned} 位历史淘汰/撤回候选人，按匹配度推荐 ${result.recommendations.length} 位`}
-            description={result.recommendations[0]?.aiMeta.degraded ? 'AI 引擎降级中，结果由规则引擎生成' : undefined}
-          />
-          {result.recommendations.map((rec) => (
-            <Card key={rec.candidate.id} size="small" className="u-mb-16 talent-pool-card">
-              <div className="u-flex-between">
-                <Space>
-                  <Typography.Text className="talent-pool-name">{rec.candidate.name}</Typography.Text>
-                  <Tag color={rec.score >= 85 ? 'success' : rec.score >= 70 ? 'processing' : 'default'}>
-                    匹配 {rec.score}
-                  </Tag>
-                </Space>
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
-                  disabled={activated.has(rec.candidate.id)}
-                  loading={activateMutation.isPending && activateMutation.variables === rec.candidate.id}
-                  onClick={() => activateMutation.mutate(rec.candidate.id)}
-                >
-                  {activated.has(rec.candidate.id) ? '已激活' : '激活到本职位'}
-                </Button>
-              </div>
-              <div className="kanban-card-tags u-mt-8">
-                {rec.hits.map((h) => (
-                  <Tag key={h} className="tag-meta">
-                    {h}
-                  </Tag>
-                ))}
-              </div>
-              <Typography.Paragraph className="talent-pool-highlights u-mb-4">
-                {rec.highlights}
-              </Typography.Paragraph>
-              {rec.lastApplication && (
-                <Typography.Text className="talent-pool-meta">
-                  上次：{rec.lastApplication.jobTitle} ·{' '}
-                  {rec.lastApplication.status === 'WITHDRAWN' ? '已撤回' : '已淘汰'}
-                  {rec.lastApplication.rejectReason ? `（${rec.lastApplication.rejectReason}）` : ''} ·{' '}
-                  {dayjs(rec.lastApplication.updatedAt).format('YYYY-MM-DD')}
-                </Typography.Text>
-              )}
-            </Card>
-          ))}
-        </>
-      )}
-    </Drawer>
-  );
-}
-
-const STATUS_COLOR: Record<JobStatus, string> = {
-  DRAFT: 'default',
-  PENDING_APPROVAL: 'warning',
-  OPEN: 'success',
-  PAUSED: 'processing',
-  CLOSED: 'error',
+/** 状态色点：招聘中正向 / 暂停预警 / 待审批主色 / 草稿与关闭中性 */
+const STATUS_DOT: Record<JobStatus, string> = {
+  OPEN: 'hf-dot hf-dot--ok',
+  PAUSED: 'hf-dot hf-dot--alert',
+  PENDING_APPROVAL: 'hf-dot hf-dot--on',
+  DRAFT: 'hf-dot hf-dot--off',
+  CLOSED: 'hf-dot hf-dot--off',
 };
+const STATUS_TEXT: Record<JobStatus, string> = {
+  OPEN: '',
+  PAUSED: 'hf-state--warn',
+  PENDING_APPROVAL: '',
+  DRAFT: 'hf-state--off',
+  CLOSED: 'hf-state--off',
+};
+
+const STATUS_FILTERS: Array<{ key: string; label: string }> = [
+  { key: '', label: '全部' },
+  { key: 'OPEN', label: '招聘中' },
+  { key: 'PENDING_APPROVAL', label: '待审批' },
+];
 
 export function JobsPage() {
   const { message } = App.useApp();
@@ -238,6 +47,8 @@ export function JobsPage() {
 
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState('');
+  const [deptId, setDeptId] = useState<string | undefined>();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Job | null>(null);
   const [talentPoolJob, setTalentPoolJob] = useState<Job | null>(null);
@@ -246,13 +57,13 @@ export function JobsPage() {
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', page, keyword],
-    queryFn: () => jobsApi.list({ page, pageSize: 10, keyword: keyword || undefined }),
+    queryFn: () => jobsApi.list({ page, pageSize: PAGE_SIZE, keyword: keyword || undefined }),
   });
   const departmentsQuery = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list });
   const managersQuery = useQuery({
     queryKey: ['users', 'HIRING_MANAGER'],
     queryFn: () => usersApi.list('HIRING_MANAGER'),
-    enabled: createOpen,
+    enabled: createOpen || editing != null,
   });
 
   const createMutation = useMutation({
@@ -277,19 +88,6 @@ export function JobsPage() {
     },
     onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
   });
-
-  const openEdit = (job: Job) => {
-    setEditing(job);
-    form.setFieldsValue({
-      title: job.title,
-      departmentId: job.department.id,
-      hiringManagerId: job.hiringManager?.id,
-      headcount: job.headcount,
-      description: job.description ?? undefined,
-      requirement: job.requirement ?? undefined,
-      status: job.status,
-    });
-  };
 
   const generateJdMutation = useMutation({
     mutationFn: aiApi.generateJd,
@@ -318,15 +116,76 @@ export function JobsPage() {
     });
   };
 
+  const openEdit = (job: Job) => {
+    setEditing(job);
+    form.setFieldsValue({
+      title: job.title,
+      departmentId: job.department.id,
+      hiringManagerId: job.hiringManager?.id,
+      headcount: job.headcount,
+      description: job.description ?? undefined,
+      requirement: job.requirement ?? undefined,
+      status: job.status,
+    });
+  };
+
+  const all = jobsQuery.data?.items ?? [];
+  /** 状态与部门筛选在前端做（列表接口只支持 keyword），不额外增加请求 */
+  const items = all.filter((j) => (!status || j.status === status) && (!deptId || j.department.id === deptId));
+  const total = jobsQuery.data?.total ?? 0;
+  const maxPage = Math.max(Math.ceil(total / PAGE_SIZE), 1);
+
+  /** KPI 带：全部取自当前列表，不新增请求 */
+  const hcTotal = all.reduce((s, j) => s + j.headcount, 0);
+  const hcUsed = all.reduce((s, j) => s + ((j as Job & { hcUsed?: number }).hcUsed ?? 0), 0);
+  const kpis = [
+    { label: '招聘中', value: all.filter((j) => j.status === 'OPEN').length, unit: '个' },
+    { label: '待审批', value: all.filter((j) => j.status === 'PENDING_APPROVAL').length, unit: '个' },
+    { label: 'HC 总量', value: hcTotal, unit: '人' },
+    { label: '已录用', value: hcUsed, unit: '人' },
+    {
+      label: '在流程候选人',
+      value: all.reduce((s, j) => s + (j._count?.applications ?? 0), 0),
+      unit: '人',
+    },
+  ];
+
   return (
-    <div className="jobs-page">
-      {/* 页面头部 */}
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-header-title">职位管理</h1>
-          <p className="page-header-subtitle">管理所有招聘职位，查看招聘进度，配置评分卡</p>
+    <div className="hf-page">
+      {/* 控制栏：搜索 + 状态分段 + 部门 + 新建 */}
+      <div className="hf-bar">
+        <div className="hf-bar-left">
+          <Input.Search
+            className="w-260"
+            placeholder="搜索职位名称、部门"
+            allowClear
+            onSearch={(value) => {
+              setPage(1);
+              setKeyword(value.trim());
+            }}
+          />
+          <div className="hf-seg">
+            {STATUS_FILTERS.map((f) => (
+              <span
+                key={f.key || 'all'}
+                className={status === f.key ? 'hf-seg--on' : undefined}
+                onClick={() => setStatus(f.key)}
+              >
+                {f.label}
+              </span>
+            ))}
+          </div>
+          <Select
+            className="w-140"
+            placeholder="全部部门"
+            allowClear
+            value={deptId}
+            onChange={setDeptId}
+            loading={departmentsQuery.isLoading}
+            options={departmentsQuery.data?.map((d) => ({ value: d.id, label: d.name }))}
+          />
         </div>
-        <div className="page-header-actions">
+        <div className="hf-bar-right">
           {hasPermission(PERMISSIONS.JOB_CREATE) && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               新建职位
@@ -335,141 +194,150 @@ export function JobsPage() {
         </div>
       </div>
 
-      {/* 筛选栏 */}
-      <div className="filter-bar">
-        <div className="filter-bar-row">
-          <Input.Search
-            placeholder="搜索职位名称、部门"
-            allowClear
-            onSearch={(value) => {
-              setPage(1);
-              setKeyword(value.trim());
-            }}
-            className="w-280"
-          />
+      <div className="hf-body">
+        <div className="hf-kpis">
+          {kpis.map((k) => (
+            <div className="hf-kpi" key={k.label}>
+              <div className="hf-kpi-label">{k.label}</div>
+              <div className="hf-kpi-val">
+                <span className="hf-kpi-num">{k.value}</span>
+                <span className="hf-kpi-unit">{k.unit}</span>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
 
-      {/* 职位列表 */}
-      <Card className="list-main-card">
-        <Table<Job>
-          rowKey="id"
-          scroll={{ x: 1200 }}
-          loading={jobsQuery.isLoading}
-          dataSource={jobsQuery.data?.items}
-          pagination={{
-            current: page,
-            pageSize: 10,
-            total: jobsQuery.data?.total,
-            onChange: setPage,
-            showTotal: (total) => `共 ${total} 个职位`,
-          }}
-          columns={[
-            {
-              title: '职位名称',
-              dataIndex: 'title',
-              render: (title: string) => (
-                <div className="job-title-cell">
-                  <span className="job-name">{title}</span>
-                </div>
-              ),
-            },
-            { title: '部门', dataIndex: ['department', 'name'], width: 130 },
-            {
-              title: '用人经理',
-              dataIndex: ['hiringManager', 'name'],
-              width: 140,
-              render: (name: string | undefined) => name ?? '-',
-            },
-            {
-              title: '状态',
-              dataIndex: 'status',
-              width: 120,
-              render: (status: JobStatus) => (
-                <Tag color={STATUS_COLOR[status]} className="status-tag">
-                  {JOB_STATUS_LABEL[status]}
-                </Tag>
-              ),
-            },
-            {
-              title: 'HC 进度',
-              width: 160,
-              render: (_, record) => {
-                const used = (record as Job & { hcUsed?: number }).hcUsed ?? 0;
-                const pct = Math.min(100, Math.round((used / record.headcount) * 100));
+        {jobsQuery.isLoading ? (
+          <div className="hf-state-block">
+            <Spin />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="hf-state-block">
+            <div className="hf-state-icon">
+              <AppstoreOutlined />
+            </div>
+            <div>
+              <div className="hf-state-title">没有符合条件的职位</div>
+              <div className="hf-state-desc">调整筛选条件，或新建一个职位——创建后会自动生成默认招聘流程。</div>
+            </div>
+            {hasPermission(PERMISSIONS.JOB_CREATE) && (
+              <div className="hf-state-actions">
+                <Button type="primary" onClick={() => setCreateOpen(true)}>
+                  新建职位
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="hf-table">
+            <div className="hf-thead">
+              <span className="hf-td--grow">职位</span>
+              <span className="hf-td w-120">用人经理</span>
+              <span className="hf-td w-110">状态</span>
+              <span className="hf-td w-170">HC 进度</span>
+              <span className="hf-td hf-td--right w-100">在流程</span>
+              <span className="hf-td hf-td--right w-100">创建</span>
+              <span className="hf-td hf-td--right w-110">操作</span>
+            </div>
+            <div className="hf-tbody">
+              {items.map((job) => {
+                const used = (job as Job & { hcUsed?: number }).hcUsed ?? 0;
+                const pct = Math.min(100, Math.round((used / job.headcount) * 100));
+                const barColor = pct >= 100 ? '#059669' : pct >= 80 ? '#B45309' : '#2563EB';
+                const inFlow = job._count?.applications ?? 0;
                 return (
-                  <div className="hc-progress-cell">
-                    <Progress
-                      type="circle"
-                      size={28}
-                      percent={pct}
-                      strokeColor={pct >= 100 ? BRAND.error : pct >= 80 ? BRAND.warning : BRAND.primary}
-                      format={() => ''}
-                    />
-                    <span className="hc-text">
-                      <span className="hc-used">{used}</span>
-                      <span className="hc-sep">/</span>
-                      <span className="hc-total">{record.headcount}</span>
+                  <div key={job.id} className="hf-tr" onClick={() => navigate(`/pipeline?jobId=${job.id}`)}>
+                    <span className="hf-td--grow u-flex-gap-10">
+                      <span className="hf-primary hf-ellipsis">{job.title}</span>
+                      <span className="hf-muted">{job.department.name}</span>
+                    </span>
+                    <span className="hf-td w-120 hf-secondary">{job.hiringManager?.name ?? '—'}</span>
+                    {/* 状态：色点 + 文字，不用彩色 Tag */}
+                    <span className={`hf-td w-110 hf-state ${STATUS_TEXT[job.status]}`}>
+                      <span className={STATUS_DOT[job.status]} />
+                      {JOB_STATUS_LABEL[job.status]}
+                    </span>
+                    {/* HC 进度：横向条，取代 28px 环形进度 */}
+                    <span className="hf-td w-170 hf-progress">
+                      <span className="hf-bar-track">
+                        <span
+                          className="hf-bar-fill"
+                          style={cssVars({ '--w': `${Math.max(pct, 2)}%`, '--c': barColor })}
+                        />
+                      </span>
+                      <span className="hf-progress-num">
+                        {used} / {job.headcount}
+                      </span>
+                    </span>
+                    <span className="hf-td hf-td--right w-100 hf-td--num">
+                      {inFlow > 0 ? <span className="hf-secondary">{inFlow}</span> : <span className="hf-faint">—</span>}
+                    </span>
+                    <span className="hf-td hf-td--right w-100 hf-muted hf-td--num">
+                      {dayjs(job.createdAt).format('MM-DD')}
+                    </span>
+                    {/* 操作：主动作 + 「···」更多，取代 300px 四连链接 */}
+                    <span className="hf-td hf-td--right w-110 u-flex-end u-flex-gap-12">
+                      <span className="hf-link">看板</span>
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [
+                            hasPermission(PERMISSIONS.APPLICATION_CREATE)
+                              ? { key: 'pool', icon: <ThunderboltOutlined />, label: '人才库唤醒' }
+                              : null,
+                            hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'scorecard', label: '评分卡模板' } : null,
+                            hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'edit', label: '编辑职位' } : null,
+                          ].filter(Boolean) as Array<{ key: string; label: string }>,
+                          onClick: ({ key }) => {
+                            if (key === 'pool') setTalentPoolJob(job);
+                            if (key === 'scorecard') setScorecardJob(job);
+                            if (key === 'edit') openEdit(job);
+                          },
+                        }}
+                      >
+                        <span className="hf-more" onClick={(e) => e.stopPropagation()}>
+                          ···
+                        </span>
+                      </Dropdown>
                     </span>
                   </div>
                 );
-              },
-            },
-            {
-              title: '候选人',
-              width: 90,
-              align: 'center',
-              render: (_, record) => (
-                <span className="candidate-count">{record._count?.applications ?? 0}</span>
-              ),
-            },
-            {
-              title: '创建时间',
-              dataIndex: 'createdAt',
-              width: 140,
-              render: (v: string) => <span className="u-meta">{dayjs(v).format('YYYY-MM-DD')}</span>,
-            },
-            {
-              title: '操作',
-              width: 300,
-              fixed: 'right',
-              render: (_, record) => (
-                <Space size={4} className="action-btns">
-                  <Button type="link" size="small" onClick={() => navigate(`/pipeline?jobId=${record.id}`)}>
-                    查看看板
+              })}
+            </div>
+            <div className="hf-panel-foot">
+              <span>全部 {total} 个职位</span>
+              <span className="u-flex-gap-16">
+                <span>
+                  HC 已用 <b className="hf-td--num">{hcUsed}</b> / {hcTotal}
+                </span>
+                <span className="u-flex-gap-8">
+                  <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                    上一页
                   </Button>
-                  {hasPermission(PERMISSIONS.APPLICATION_CREATE) && (
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<ThunderboltOutlined />}
-                      onClick={() => setTalentPoolJob(record)}
-                    >
-                      人才库
-                    </Button>
-                  )}
-                  {hasPermission(PERMISSIONS.JOB_UPDATE) && (
-                    <Button type="link" size="small" onClick={() => setScorecardJob(record)}>
-                      评分卡
-                    </Button>
-                  )}
-                  {hasPermission(PERMISSIONS.JOB_UPDATE) && (
-                    <Button type="link" size="small" onClick={() => openEdit(record)}>
-                      编辑
-                    </Button>
-                  )}
-                </Space>
-              ),
-            },
-          ]}
-        />
-      </Card>
+                  <span className="hf-td--num">
+                    {page} / {maxPage}
+                  </span>
+                  <Button size="small" disabled={page >= maxPage} onClick={() => setPage(page + 1)}>
+                    下一页
+                  </Button>
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
 
       <TalentPoolDrawer job={talentPoolJob} onClose={() => setTalentPoolJob(null)} />
       <ScorecardModal job={scorecardJob} onClose={() => setScorecardJob(null)} />
 
       <Modal
-        title={editing ? `编辑职位：${editing.title}` : '新建职位'}
+        className="hf-modal"
+        title={
+          <>
+            {editing ? '编辑职位' : '新建职位'}
+            {editing && <div className="hf-modal-sub">{editing.title}</div>}
+          </>
+        }
         open={createOpen || editing != null}
         onCancel={() => {
           setCreateOpen(false);
@@ -477,67 +345,77 @@ export function JobsPage() {
           form.resetFields();
         }}
         onOk={() => form.submit()}
+        okText={editing ? '保存' : '创建职位'}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
         destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
-          onFinish={(values) =>
-            editing
-              ? updateMutation.mutate({ id: editing.id, values })
-              : createMutation.mutate(values)
-          }
           initialValues={{ headcount: 1 }}
+          onFinish={(values) =>
+            editing ? updateMutation.mutate({ id: editing.id, values }) : createMutation.mutate(values)
+          }
         >
           {editing && (
             <Form.Item name="status" label="职位状态">
-              <Select
-                options={Object.entries(JOB_STATUS_LABEL).map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-              />
+              <Select options={Object.entries(JOB_STATUS_LABEL).map(([value, label]) => ({ value, label }))} />
             </Form.Item>
           )}
           <Form.Item name="title" label="职位名称" rules={[{ required: true, min: 2 }]}>
             <Input placeholder="如：后端工程师" />
           </Form.Item>
-          <Form.Item name="departmentId" label="所属部门" rules={[{ required: true, message: '请选择部门' }]}>
-            <Select
-              placeholder="选择部门"
-              loading={departmentsQuery.isLoading}
-              options={departmentsQuery.data?.map((d) => ({ value: d.id, label: d.name }))}
-            />
-          </Form.Item>
-          <Form.Item name="hiringManagerId" label="用人经理">
-            <Select
-              allowClear
-              placeholder="选择用人经理（可选）"
-              loading={managersQuery.isLoading}
-              options={managersQuery.data?.map((u) => ({ value: u.id, label: u.name }))}
-            />
-          </Form.Item>
-          <Form.Item name="headcount" label="招聘人数（HC）">
-            <InputNumber min={1} max={999} className="u-w-full" />
-          </Form.Item>
-          <Form.Item name="keywords" label="核心诉求（供 AI 扩写用，可选）">
-            <Input placeholder='如："需要一个懂 React 和 Node.js 的三年经验前端"' />
-          </Form.Item>
-          <Form.Item className="u-mb-16">
+          <div className="u-flex-gap-12">
+            <Form.Item
+              name="departmentId"
+              label="所属部门"
+              rules={[{ required: true, message: '请选择部门' }]}
+              className="u-flex-1"
+            >
+              <Select
+                placeholder="选择部门"
+                loading={departmentsQuery.isLoading}
+                options={departmentsQuery.data?.map((d) => ({ value: d.id, label: d.name }))}
+              />
+            </Form.Item>
+            <Form.Item name="hiringManagerId" label="用人经理" className="u-flex-1">
+              <Select
+                allowClear
+                placeholder="可选"
+                loading={managersQuery.isLoading}
+                options={managersQuery.data?.map((u) => ({ value: u.id, label: u.name }))}
+              />
+            </Form.Item>
+            <Form.Item name="headcount" label="HC" className="w-100">
+              <InputNumber min={1} max={999} className="u-w-full" />
+            </Form.Item>
+          </div>
+
+          {/* AI 辅助区：中性底，不用蓝底 Alert */}
+          <div className="hf-ai-box u-mb-16">
+            <div className="hf-ai-head">
+              <RobotOutlined /> AI 扩写 JD
+            </div>
+            <div className="hf-ai-desc">填好职位名称与核心诉求后生成草稿，生成结果可直接修改。</div>
+            <Form.Item name="keywords" className="u-mt-8 u-mb-8" noStyle>
+              <Input placeholder='如："懂 React 和 Node.js 的三年经验前端"' />
+            </Form.Item>
             <Button
+              size="small"
               icon={<RobotOutlined />}
+              className="u-mt-8"
               onClick={handleGenerateJd}
               loading={generateJdMutation.isPending}
             >
-              AI 生成 JD
+              生成草稿
             </Button>
-          </Form.Item>
+          </div>
+
           <Form.Item name="description" label="岗位职责（JD）">
-            <Input.TextArea rows={5} placeholder="可点击上方「AI 生成 JD」自动扩写，生成后可修改" />
+            <Input.TextArea rows={5} placeholder="可用上方「AI 扩写 JD」生成后修改" />
           </Form.Item>
           <Form.Item name="requirement" label="任职要求">
-            <Input.TextArea rows={4} placeholder="任职要求（AI 生成后可修改）" />
+            <Input.TextArea rows={4} placeholder="任职要求" />
           </Form.Item>
         </Form>
       </Modal>
