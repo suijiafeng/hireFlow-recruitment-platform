@@ -1,11 +1,11 @@
 import { AppstoreOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
-import { App, Button, Dropdown, Form, Input, InputNumber, Modal, Select, Spin } from 'antd';
+import { App, Button, Dropdown, Form, Input, InputNumber, Modal, Select, Spin, Table } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
 import { aiApi, departmentsApi, jobsApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Job } from '../../api/types';
@@ -41,7 +41,6 @@ const STATUS_FILTERS: Array<{ key: string; label: string }> = [
 
 export function JobsPage() {
   const { message } = App.useApp();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
 
@@ -133,11 +132,116 @@ export function JobsPage() {
   /** 状态与部门筛选在前端做（列表接口只支持 keyword），不额外增加请求 */
   const items = all.filter((j) => (!status || j.status === status) && (!deptId || j.department.id === deptId));
   const total = jobsQuery.data?.total ?? 0;
-  const maxPage = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   /** KPI 带：全部取自当前列表，不新增请求 */
   const hcTotal = all.reduce((s, j) => s + j.headcount, 0);
   const hcUsed = all.reduce((s, j) => s + ((j as Job & { hcUsed?: number }).hcUsed ?? 0), 0);
+
+  const jobColumns: TableProps<Job>['columns'] = [
+    {
+      title: '职位',
+      key: 'title',
+      width: 300,
+      onCell: (job) => ({ title: `${job.title} · ${job.department.name}` }),
+      render: (_, job) => (
+        <span className="u-flex-gap-10">
+          <span className="hf-primary hf-ellipsis">{job.title}</span>
+          <span className="hf-muted">{job.department.name}</span>
+        </span>
+      ),
+    },
+    {
+      title: '用人经理',
+      key: 'hm',
+      width: 110,
+      ellipsis: true,
+      onCell: (job) => ({ title: job.hiringManager?.name ?? '' }),
+      render: (_, job) => <span className="hf-secondary">{job.hiringManager?.name ?? '—'}</span>,
+    },
+    {
+      // 状态：色点 + 文字，不用彩色 Tag
+      title: '状态',
+      dataIndex: 'status',
+      width: 110,
+      render: (status: JobStatus) => (
+        <span className={`hf-state ${STATUS_TEXT[status]}`}>
+          <span className={STATUS_DOT[status]} />
+          {JOB_STATUS_LABEL[status]}
+        </span>
+      ),
+    },
+    {
+      // HC 进度：横向条，取代 28px 环形进度
+      title: 'HC 进度',
+      key: 'hc',
+      width: 170,
+      render: (_, job) => {
+        const used = (job as Job & { hcUsed?: number }).hcUsed ?? 0;
+        const pct = Math.min(100, Math.round((used / job.headcount) * 100));
+        const barColor = pct >= 100 ? '#059669' : pct >= 80 ? '#B45309' : '#2563EB';
+        return (
+          <span className="hf-progress">
+            <span className="hf-bar-track">
+              <span className="hf-bar-fill" style={cssVars({ '--w': `${Math.max(pct, 2)}%`, '--c': barColor })} />
+            </span>
+            <span className="hf-progress-num">
+              {used} / {job.headcount}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      title: '在流程',
+      key: 'inFlow',
+      width: 90,
+      align: 'right',
+      render: (_, job) => {
+        const n = job._count?.applications ?? 0;
+        return n > 0 ? <span className="hf-secondary hf-td--num">{n}</span> : <span className="hf-faint">—</span>;
+      },
+    },
+    {
+      title: '创建',
+      dataIndex: 'createdAt',
+      width: 90,
+      align: 'right',
+      render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD')}</span>,
+    },
+    {
+      // 操作：主动作 + 「···」更多，取代 300px 四连链接
+      title: '操作',
+      key: 'action',
+      width: 140,
+      align: 'right',
+      fixed: 'right',
+      render: (_, job) => (
+        <span className="u-flex-end u-flex-gap-12">
+          <span className="hf-link">看板</span>
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                hasPermission(PERMISSIONS.APPLICATION_CREATE) ? { key: 'pool', label: '人才库唤醒' } : null,
+                hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'scorecard', label: '评分卡模板' } : null,
+                hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'edit', label: '编辑职位' } : null,
+              ].filter(Boolean) as Array<{ key: string; label: string }>,
+              onClick: ({ key, domEvent }) => {
+                domEvent.stopPropagation();
+                if (key === 'pool') setTalentPoolJob(job);
+                if (key === 'scorecard') setScorecardJob(job);
+                if (key === 'edit') openEdit(job);
+              },
+            }}
+          >
+            <span className="hf-more" onClick={(e) => e.stopPropagation()}>
+              ···
+            </span>
+          </Dropdown>
+        </span>
+      ),
+    },
+  ];
   const kpis = [
     { label: '招聘中', value: all.filter((j) => j.status === 'OPEN').length, unit: '个' },
     { label: '待审批', value: all.filter((j) => j.status === 'PENDING_APPROVAL').length, unit: '个' },
@@ -229,101 +333,28 @@ export function JobsPage() {
             )}
           </div>
         ) : (
-          <div className="hf-table">
-            <div className="hf-thead">
-              <span className="hf-td--grow">职位</span>
-              <span className="hf-td w-110">用人经理</span>
-              <span className="hf-td w-100">状态</span>
-              <span className="hf-td w-160">HC 进度</span>
-              <span className="hf-td hf-td--right w-90">在流程</span>
-              <span className="hf-td hf-td--right w-90">创建</span>
-              <span className="hf-td hf-td--right w-140">操作</span>
-            </div>
-            <div className="hf-tbody">
-              {items.map((job) => {
-                const used = (job as Job & { hcUsed?: number }).hcUsed ?? 0;
-                const pct = Math.min(100, Math.round((used / job.headcount) * 100));
-                const barColor = pct >= 100 ? '#059669' : pct >= 80 ? '#B45309' : '#2563EB';
-                const inFlow = job._count?.applications ?? 0;
-                return (
-                  <div key={job.id} className="hf-tr" onClick={() => navigate(`/pipeline?jobId=${job.id}`)}>
-                    <span className="hf-td--grow u-flex-gap-10">
-                      <span className="hf-primary hf-ellipsis">{job.title}</span>
-                      <span className="hf-muted">{job.department.name}</span>
+          <div className="hf-atable">
+            <Table<Job>
+              columns={jobColumns}
+              dataSource={items}
+              rowKey="id"
+              scroll={{ x: 1010, y: 1 }}
+              pagination={{
+                current: page,
+                pageSize: PAGE_SIZE,
+                total,
+                showSizeChanger: false,
+                showTotal: (t) => (
+                  <span className="u-flex-gap-16">
+                    <span>全部 {t} 个职位</span>
+                    <span>
+                      HC 已用 <b className="hf-td--num">{hcUsed}</b> / {hcTotal}
                     </span>
-                    <span className="hf-td w-110 hf-secondary">{job.hiringManager?.name ?? '—'}</span>
-                    {/* 状态：色点 + 文字，不用彩色 Tag */}
-                    <span className={`hf-td w-100 hf-state ${STATUS_TEXT[job.status]}`}>
-                      <span className={STATUS_DOT[job.status]} />
-                      {JOB_STATUS_LABEL[job.status]}
-                    </span>
-                    {/* HC 进度：横向条，取代 28px 环形进度 */}
-                    <span className="hf-td w-160 hf-progress">
-                      <span className="hf-bar-track">
-                        <span
-                          className="hf-bar-fill"
-                          style={cssVars({ '--w': `${Math.max(pct, 2)}%`, '--c': barColor })}
-                        />
-                      </span>
-                      <span className="hf-progress-num">
-                        {used} / {job.headcount}
-                      </span>
-                    </span>
-                    <span className="hf-td hf-td--right w-90 hf-td--num">
-                      {inFlow > 0 ? <span className="hf-secondary">{inFlow}</span> : <span className="hf-faint">—</span>}
-                    </span>
-                    <span className="hf-td hf-td--right w-90 hf-muted hf-td--num">
-                      {dayjs(job.createdAt).format('MM-DD')}
-                    </span>
-                    {/* 操作：主动作 + 「···」更多，取代 300px 四连链接 */}
-                    <span className="hf-td hf-td--right w-140 u-flex-end u-flex-gap-12">
-                      <span className="hf-link">看板</span>
-                      <Dropdown
-                        trigger={['click']}
-                        menu={{
-                          items: [
-                            hasPermission(PERMISSIONS.APPLICATION_CREATE)
-                              ? { key: 'pool', label: '人才库唤醒' }
-                              : null,
-                            hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'scorecard', label: '评分卡模板' } : null,
-                            hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'edit', label: '编辑职位' } : null,
-                          ].filter(Boolean) as Array<{ key: string; label: string }>,
-                          onClick: ({ key, domEvent }) => {
-                            domEvent.stopPropagation();
-                            if (key === 'pool') setTalentPoolJob(job);
-                            if (key === 'scorecard') setScorecardJob(job);
-                            if (key === 'edit') openEdit(job);
-                          },
-                        }}
-                      >
-                        <span className="hf-more" onClick={(e) => e.stopPropagation()}>
-                          ···
-                        </span>
-                      </Dropdown>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="hf-panel-foot">
-              <span>全部 {total} 个职位</span>
-              <span className="u-flex-gap-16">
-                <span>
-                  HC 已用 <b className="hf-td--num">{hcUsed}</b> / {hcTotal}
-                </span>
-                <span className="u-flex-gap-8">
-                  <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                    上一页
-                  </Button>
-                  <span className="hf-td--num">
-                    {page} / {maxPage}
                   </span>
-                  <Button size="small" disabled={page >= maxPage} onClick={() => setPage(page + 1)}>
-                    下一页
-                  </Button>
-                </span>
-              </span>
-            </div>
+                ),
+                onChange: setPage,
+              }}
+            />
           </div>
         )}
       </div>
