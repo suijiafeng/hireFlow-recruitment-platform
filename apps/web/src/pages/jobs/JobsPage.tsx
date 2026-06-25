@@ -1,4 +1,4 @@
-import { AppstoreOutlined, PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
 import { App, Button, Dropdown, Form, Input, InputNumber, Modal, Select, Spin } from 'antd';
@@ -232,12 +232,12 @@ export function JobsPage() {
           <div className="hf-table">
             <div className="hf-thead">
               <span className="hf-td--grow">职位</span>
-              <span className="hf-td w-120">用人经理</span>
-              <span className="hf-td w-110">状态</span>
-              <span className="hf-td w-170">HC 进度</span>
-              <span className="hf-td hf-td--right w-100">在流程</span>
-              <span className="hf-td hf-td--right w-100">创建</span>
-              <span className="hf-td hf-td--right w-110">操作</span>
+              <span className="hf-td w-110">用人经理</span>
+              <span className="hf-td w-100">状态</span>
+              <span className="hf-td w-160">HC 进度</span>
+              <span className="hf-td hf-td--right w-90">在流程</span>
+              <span className="hf-td hf-td--right w-90">创建</span>
+              <span className="hf-td hf-td--right w-140">操作</span>
             </div>
             <div className="hf-tbody">
               {items.map((job) => {
@@ -251,14 +251,14 @@ export function JobsPage() {
                       <span className="hf-primary hf-ellipsis">{job.title}</span>
                       <span className="hf-muted">{job.department.name}</span>
                     </span>
-                    <span className="hf-td w-120 hf-secondary">{job.hiringManager?.name ?? '—'}</span>
+                    <span className="hf-td w-110 hf-secondary">{job.hiringManager?.name ?? '—'}</span>
                     {/* 状态：色点 + 文字，不用彩色 Tag */}
-                    <span className={`hf-td w-110 hf-state ${STATUS_TEXT[job.status]}`}>
+                    <span className={`hf-td w-100 hf-state ${STATUS_TEXT[job.status]}`}>
                       <span className={STATUS_DOT[job.status]} />
                       {JOB_STATUS_LABEL[job.status]}
                     </span>
                     {/* HC 进度：横向条，取代 28px 环形进度 */}
-                    <span className="hf-td w-170 hf-progress">
+                    <span className="hf-td w-160 hf-progress">
                       <span className="hf-bar-track">
                         <span
                           className="hf-bar-fill"
@@ -269,26 +269,27 @@ export function JobsPage() {
                         {used} / {job.headcount}
                       </span>
                     </span>
-                    <span className="hf-td hf-td--right w-100 hf-td--num">
+                    <span className="hf-td hf-td--right w-90 hf-td--num">
                       {inFlow > 0 ? <span className="hf-secondary">{inFlow}</span> : <span className="hf-faint">—</span>}
                     </span>
-                    <span className="hf-td hf-td--right w-100 hf-muted hf-td--num">
+                    <span className="hf-td hf-td--right w-90 hf-muted hf-td--num">
                       {dayjs(job.createdAt).format('MM-DD')}
                     </span>
                     {/* 操作：主动作 + 「···」更多，取代 300px 四连链接 */}
-                    <span className="hf-td hf-td--right w-110 u-flex-end u-flex-gap-12">
+                    <span className="hf-td hf-td--right w-140 u-flex-end u-flex-gap-12">
                       <span className="hf-link">看板</span>
                       <Dropdown
                         trigger={['click']}
                         menu={{
                           items: [
                             hasPermission(PERMISSIONS.APPLICATION_CREATE)
-                              ? { key: 'pool', icon: <ThunderboltOutlined />, label: '人才库唤醒' }
+                              ? { key: 'pool', label: '人才库唤醒' }
                               : null,
                             hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'scorecard', label: '评分卡模板' } : null,
                             hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'edit', label: '编辑职位' } : null,
                           ].filter(Boolean) as Array<{ key: string; label: string }>,
-                          onClick: ({ key }) => {
+                          onClick: ({ key, domEvent }) => {
+                            domEvent.stopPropagation();
                             if (key === 'pool') setTalentPoolJob(job);
                             if (key === 'scorecard') setScorecardJob(job);
                             if (key === 'edit') openEdit(job);
