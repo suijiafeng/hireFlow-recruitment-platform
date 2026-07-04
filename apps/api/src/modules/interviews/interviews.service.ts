@@ -354,10 +354,38 @@ export class InterviewsService {
 
   /** 我的可约时段（面试官自维护，替代外部日历集成的低成本路径） */
   async mySlots(user: JwtUser) {
-    return this.prisma.interviewerSlot.findMany({
+    const slots = await this.prisma.interviewerSlot.findMany({
       where: { userId: user.sub, endAt: { gte: new Date() } },
       orderBy: { startAt: 'asc' },
     });
+    // bookedBy 存的是 interview.id，直接给前端会渲染成一串 cuid：
+    // 这里补一个「候选人 · 职位」的可读标签，前端只展示标签。
+    const bookedIds = slots.map((s) => s.bookedBy).filter((v): v is string => Boolean(v));
+    if (bookedIds.length === 0) return slots.map((s) => ({ ...s, bookedLabel: null }));
+    const interviews = await this.prisma.interview.findMany({
+      where: { id: { in: bookedIds } },
+      include: {
+        application: {
+          include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+        },
+      },
+    });
+    const booked = new Map(
+      interviews.map((i) => [
+        i.id,
+        {
+          bookedLabel: `${i.application.candidate.name} · ${i.application.job.title}`,
+          bookedCandidateId: i.application.candidateId,
+          bookedRound: i.round,
+        },
+      ]),
+    );
+    const empty = { bookedLabel: null, bookedCandidateId: null, bookedRound: null };
+    return slots.map((s) => ({
+      ...s,
+      ...empty,
+      ...(s.bookedBy ? (booked.get(s.bookedBy) ?? { ...empty, bookedLabel: '已被预约' }) : empty),
+    }));
   }
 
   async addSlot(startAt: string, endAt: string, user: JwtUser) {

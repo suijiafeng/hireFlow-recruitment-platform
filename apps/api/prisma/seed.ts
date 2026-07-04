@@ -1118,13 +1118,36 @@ async function seedBulkDemo() {
             userId: u.id,
             startAt,
             endAt,
-            // 少量已被预约：右栏「已约」灰态 + 自助选时页不展示
-            bookedBy: (d + h) % 7 === 0 ? 'demo-booked' : null,
+            bookedBy: null,
           },
         });
         slotCount += 1;
       }
     }
+  }
+
+  // 少量「已被预约」的档，用于演示右栏灰态。必须指向真实面试：bookedBy 存的是 interview.id，
+  // 早先这里写死 'demo-booked'，面试官在右栏看到「已约」却查不到是谁约的，纯属误导。
+  const bookableInterviews = await prisma.interview.findMany({
+    where: { status: 'SCHEDULED', scheduledAt: null },
+    include: { interviewers: true },
+    take: 2,
+  });
+  for (const iv of bookableInterviews) {
+    // 把 admin 也指派进去，演示账号一登录就能在右栏看到「已约」样例并点进候选人
+    if (!iv.interviewers.some((i) => i.userId === admin.id)) {
+      await prisma.interviewInterviewer.create({ data: { interviewId: iv.id, userId: admin.id } });
+    }
+    const slot = await prisma.interviewerSlot.findFirst({
+      where: { bookedBy: null, userId: admin.id },
+      orderBy: { startAt: 'asc' },
+    });
+    if (!slot) continue;
+    await prisma.interviewerSlot.update({ where: { id: slot.id }, data: { bookedBy: iv.id } });
+    await prisma.interview.update({
+      where: { id: iv.id },
+      data: { scheduledAt: slot.startAt, durationMins: 60 },
+    });
   }
 
   // ---- 站内通知：铃铛之前是空的，未读/已读都要有 ----
