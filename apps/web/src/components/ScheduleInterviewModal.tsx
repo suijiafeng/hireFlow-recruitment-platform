@@ -40,6 +40,7 @@ export function ScheduleInterviewModal({ applicationId, existingRounds = 0, onCl
 
   return (
     <Modal
+      className="hf-modal"
       title="安排面试"
       open={Boolean(applicationId)}
       onCancel={onClose}

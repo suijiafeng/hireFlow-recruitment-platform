@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClockCircleOutlined, PlusOutlined, ScheduleOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, CloseOutlined, PlusOutlined, ScheduleOutlined } from '@ant-design/icons';
 import { EVALUATION_CONCLUSION_LABEL, PERMISSIONS, type EvaluationConclusion } from '@hireflow/shared';
-import { App, Button, DatePicker, Form, Modal, Select, Spin, Table, Typography } from 'antd';
+import { App, Button, DatePicker, Form, Modal, Popconfirm, Select, Spin, Table, Tooltip, Typography } from 'antd';
 import type { TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useState } from 'react';
 import { interviewsApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import type { Interview } from '../../api/types';
+import type { Interview, InterviewerSlot } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { EvaluationModal } from '../../components/EvaluationModal';
+import { RowActions } from '../../components/RowActions';
+import { SetInterviewTimeModal } from '../../components/SetInterviewTimeModal';
 import { useSyncedTableScroll } from '../../hooks/useSyncedTableScroll';
 import { useAuthStore } from '../../stores/auth';
 
@@ -36,23 +38,88 @@ function dayLabel(date: string) {
   return { text: d.format('ddd'), today: false };
 }
 
-/** 右栏：我的可约时段。按日分组，标注「N / M 可约」，取代横向 Tag 云 */
-function SlotsRail() {
+/** 单行时段。删除入口常驻（不靠 hover 才出现），已被预约的行根本不渲染删除按钮 */
+function SlotRow({
+  slot,
+  onRemove,
+  removing,
+  onOpenBooked,
+}: {
+  slot: InterviewerSlot;
+  onRemove: (id: string) => void;
+  removing: boolean;
+  onOpenBooked: (candidateId: string) => void;
+}) {
+  const time = `${dayjs(slot.startAt).format('HH:mm')} – ${dayjs(slot.endAt).format('HH:mm')}`;
+  return (
+    <div className={slot.bookedBy ? 'hf-slot hf-slot--booked' : 'hf-slot'}>
+      <span className="hf-slot-time hf-td--num">{time}</span>
+      <span className="u-flex-1" />
+      {slot.bookedBy ? (
+        <Tooltip
+          title={
+            slot.bookedCandidateId
+              ? `${slot.bookedLabel}${slot.bookedRound ? ` · 第 ${slot.bookedRound} 轮` : ''}，点击查看候选人详情。要释放这个档需先改期或取消该面试`
+              : '关联的面试已不存在（历史脏数据）。这个档不会被候选人选到，可联系管理员清理'
+          }
+        >
+          <span
+            className={slot.bookedCandidateId ? 'hf-slot-badge hf-slot-badge--link' : 'hf-slot-badge'}
+            onClick={() => slot.bookedCandidateId && onOpenBooked(slot.bookedCandidateId)}
+          >
+            {slot.bookedCandidateId ? `${slot.bookedLabel} 已约` : '已约（面试已失效）'}
+          </span>
+        </Tooltip>
+      ) : (
+        <Popconfirm
+          title="删除该时段？"
+          description="删除后候选人自助选时链接将不再展示它。"
+          okText="删除"
+          okButtonProps={{ danger: true, loading: removing }}
+          cancelText="取消"
+          onConfirm={() => onRemove(slot.id)}
+        >
+          <button type="button" className="hf-slot-del" aria-label={`删除 ${time} 时段`} title="删除该时段">
+            <CloseOutlined />
+          </button>
+        </Popconfirm>
+      )}
+    </div>
+  );
+}
+
+/** 右栏：我的可约时段。按日分组（接口只返回未过期的档） */
+function SlotsRail({ onOpenCandidate }: { onOpenCandidate: (candidateId: string) => void }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
-  const [form] = Form.useForm<{ date: Dayjs; startTime: string; endTime: string }>();
+  const [form] = Form.useForm<{ dates: Dayjs[]; startTime: string; endTime: string }>();
   const startTime = Form.useWatch('startTime', form);
+  const pickedDates = Form.useWatch('dates', form);
 
   const slotsQuery = useQuery({ queryKey: ['my-slots'], queryFn: interviewsApi.mySlots });
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['my-slots'] });
+
+  /** 一次可提交多天：接口按单个时段建，逐个发再汇总成败 */
   const addMutation = useMutation({
-    mutationFn: (range: [Dayjs, Dayjs]) => interviewsApi.addSlot(range[0].toISOString(), range[1].toISOString()),
-    onSuccess: () => {
-      message.success('时段已添加，候选人可从中自助选时');
-      setAddOpen(false);
-      form.resetFields();
-      void queryClient.invalidateQueries({ queryKey: ['my-slots'] });
+    mutationFn: async (ranges: Array<[Dayjs, Dayjs]>) => {
+      const results = await Promise.allSettled(
+        ranges.map(([a, b]) => interviewsApi.addSlot(a.toISOString(), b.toISOString())),
+      );
+      const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      return { ok: results.length - failed.length, failed };
+    },
+    onSuccess: ({ ok, failed }) => {
+      if (ok > 0) message.success(`已添加 ${ok} 个时段，候选人可从中自助选时`);
+      if (failed.length > 0) {
+        message.warning(`${failed.length} 个未添加：${extractErrorMessage(failed[0].reason, '添加失败')}`);
+      }
+      if (ok > 0) {
+        setAddOpen(false);
+        form.resetFields();
+      }
+      void invalidate();
     },
     onError: (error) => message.error(extractErrorMessage(error, '添加失败')),
   });
@@ -61,22 +128,32 @@ function SlotsRail() {
     mutationFn: interviewsApi.removeSlot,
     onSuccess: () => {
       message.success('时段已删除');
-      void queryClient.invalidateQueries({ queryKey: ['my-slots'] });
+      void invalidate();
     },
     onError: (error) => message.error(extractErrorMessage(error, '删除失败')),
   });
 
-  const slots = slotsQuery.data ?? [];
-  const groups: Array<{ key: string; items: typeof slots }> = [];
-  slots
-    .slice()
-    .sort((a, b) => a.startAt.localeCompare(b.startAt))
-    .forEach((s) => {
-      const key = dayjs(s.startAt).format('MM-DD');
-      const last = groups[groups.length - 1];
-      if (last && last.key === key) last.items.push(s);
-      else groups.push({ key, items: [s] });
-    });
+  const now = dayjs();
+  const all = (slotsQuery.data ?? []).slice().sort((a, b) => a.startAt.localeCompare(b.startAt));
+
+  // 分组键即展示文案，统一用 YYYY-MM-DD：MM-DD 既看不出年份，也会让不同年份的同月同日撞成一组
+  const groups: Array<{ key: string; items: InterviewerSlot[] }> = [];
+  all.forEach((s) => {
+    const d = dayjs(s.startAt);
+    const key = d.format('YYYY-MM-DD');
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(s);
+    else groups.push({ key, items: [s] });
+  });
+
+  /** 选中的日期里，已存在的时段区间——用于提交前的重叠自检（后端也会拦，这里只是即时反馈） */
+  const overlapsExisting = (start: Dayjs, end: Dayjs) =>
+    all.some((s) => dayjs(s.startAt).isBefore(end) && dayjs(s.endAt).isAfter(start));
+
+  const isToday = (pickedDates ?? []).some((d) => d.isSame(now, 'day'));
+  const startOptions = TIME_OPTIONS.filter(
+    (t) => !isToday || t.value > now.format('HH:mm'),
+  );
 
   return (
     <div className="hf-panel hf-panel--grow">
@@ -96,7 +173,12 @@ function SlotsRail() {
       <div className="hf-panel-body">
         {slotsQuery.isLoading ? (
           <Spin size="small" />
-        ) : groups.length === 0 ? (
+        ) : slotsQuery.isError ? (
+          // 加载失败必须与「一条都没有」区分开：都渲染成空态会让人以为自己的档丢了
+          <Typography.Text type="danger" className="hf-muted">
+            时段加载失败，请刷新重试。
+          </Typography.Text>
+        ) : all.length === 0 ? (
           <Typography.Text type="secondary" className="hf-muted">
             尚未维护空闲时段。添加后，HR 发出的「候选人自助选时」链接将展示你的空闲档。
           </Typography.Text>
@@ -115,28 +197,13 @@ function SlotsRail() {
                   </span>
                 </div>
                 {g.items.map((s) => (
-                  <div
+                  <SlotRow
                     key={s.id}
-                    className={s.bookedBy ? 'hf-opt hf-opt--off' : 'hf-opt'}
-                    onClick={() => {
-                      if (!s.bookedBy) removeMutation.mutate(s.id);
-                    }}
-                    title={s.bookedBy ? '已被预约，不可删除' : '点击删除该时段'}
-                  >
-                    <span className="hf-td--num">
-                      {dayjs(s.startAt).format('HH:mm')} – {dayjs(s.endAt).format('HH:mm')}
-                    </span>
-                    <span className="u-flex-1" />
-                    {s.bookedBy ? (
-                      <span className="hf-faint" onClick={(e) => e.stopPropagation()}>
-                        {s.bookedBy} 已约
-                      </span>
-                    ) : (
-                      <span className="hf-link" onClick={(e) => e.stopPropagation()}>
-                        可约
-                      </span>
-                    )}
-                  </div>
+                    slot={s}
+                    onRemove={removeMutation.mutate}
+                    removing={removeMutation.isPending && removeMutation.variables === s.id}
+                    onOpenBooked={onOpenCandidate}
+                  />
                 ))}
               </div>
             );
@@ -159,14 +226,28 @@ function SlotsRail() {
           onFinish={(v) => {
             const [h1, m1] = v.startTime.split(':').map(Number);
             const [h2, m2] = v.endTime.split(':').map(Number);
-            addMutation.mutate([
-              v.date.hour(h1).minute(m1).second(0).millisecond(0),
-              v.date.hour(h2).minute(m2).second(0).millisecond(0),
-            ]);
+            const ranges = v.dates.map(
+              (d) =>
+                [
+                  d.hour(h1).minute(m1).second(0).millisecond(0),
+                  d.hour(h2).minute(m2).second(0).millisecond(0),
+                ] as [Dayjs, Dayjs],
+            );
+            const clash = ranges.filter(([a, b]) => overlapsExisting(a, b));
+            if (clash.length > 0) {
+              message.error(`${clash.map(([a]) => a.format('MM-DD')).join('、')} 与已有时段重叠`);
+              return;
+            }
+            addMutation.mutate(ranges);
           }}
         >
-          <Form.Item name="date" label="日期" rules={[{ required: true, message: '请选择日期' }]}>
-            <DatePicker minDate={dayjs()} className="w-160" />
+          <Form.Item
+            name="dates"
+            label="日期"
+            extra="可多选，一次为多天添加同一时间段"
+            rules={[{ required: true, message: '请选择日期' }]}
+          >
+            <DatePicker multiple minDate={dayjs()} maxTagCount="responsive" className="u-w-full" />
           </Form.Item>
           <div className="u-flex-gap-12">
             <Form.Item
@@ -178,7 +259,7 @@ function SlotsRail() {
               <Select
                 showSearch
                 placeholder="00:00"
-                options={TIME_OPTIONS}
+                options={startOptions}
                 onChange={() => form.setFieldValue('endTime', undefined)}
               />
             </Form.Item>
@@ -210,6 +291,7 @@ export function InterviewsPage() {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [evaluateFor, setEvaluateFor] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [scheduleFor, setScheduleFor] = useState<Interview | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
 
   const interviewsQuery = useQuery({ queryKey: ['interviews', 'all'], queryFn: () => interviewsApi.list() });
@@ -366,38 +448,36 @@ export function InterviewsPage() {
     {
       title: '操作',
       key: 'action',
-      width: 90,
+      width: 120,
       align: 'right',
       fixed: 'right',
       render: (_, iv) => {
         const pending = !iv.scheduledAt;
-        const done = iv.status === 'COMPLETED';
-        const mineTodo = needsMyEval(iv);
-        if (pending && hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE))
-          return (
-            <span
-              className="hf-link"
-              onClick={(e) => {
-                e.stopPropagation();
-                void copySelfScheduleLink(iv.id);
-              }}
-            >
-              选时链接
-            </span>
-          );
-        if ((done || mineTodo) && hasPermission(PERMISSIONS.EVALUATION_SUBMIT))
-          return (
-            <span
-              className="hf-link"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEvaluateFor(iv.id);
-              }}
-            >
-              提交面评
-            </span>
-          );
-        return <span className="hf-link">详情</span>;
+        const canSchedule = hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE);
+        const canEvaluate = hasPermission(PERMISSIONS.EVALUATION_SUBMIT);
+        const detail = iv.application
+          ? { key: 'detail', label: '详情', hint: '查看候选人详情', onClick: () => setDetailId(iv.application!.candidate.id) }
+          : null;
+        return (
+          <RowActions
+            actions={[
+              // 待安排：手动敲定是主路径，自助选时链接退到「···」里
+              pending && canSchedule
+                ? { key: 'schedule', label: '安排', hint: '直接填写面试时间', onClick: () => setScheduleFor(iv) }
+                : null,
+              !pending && iv.status === 'SCHEDULED' && canSchedule
+                ? { key: 'reschedule', label: '改期', hint: '修改面试时间（自动释放原档、占用新档）', onClick: () => setScheduleFor(iv) }
+                : null,
+              (iv.status === 'COMPLETED' || needsMyEval(iv)) && canEvaluate
+                ? { key: 'evaluate', label: '面评', hint: '提交面试评价', onClick: () => setEvaluateFor(iv.id) }
+                : null,
+              detail,
+              pending && canSchedule
+                ? { key: 'link', label: '选时', hint: '生成自助选时链接发给候选人', onClick: () => void copySelfScheduleLink(iv.id) }
+                : null,
+            ]}
+          />
+        );
       },
     },
   ];
@@ -480,9 +560,6 @@ export function InterviewsPage() {
                       showHeader={gi === 0}
                       scroll={{ x: IV_TABLE_X }}
                       rowClassName={(iv) => (!iv.scheduledAt ? 'hf-row--todo' : '')}
-                      onRow={(iv) => ({
-                        onClick: () => iv.application && setDetailId(iv.application.candidate.id),
-                      })}
                     />
                   </div>
                 </div>
@@ -496,7 +573,7 @@ export function InterviewsPage() {
           )}
 
           <div className="hf-rail hf-rail--narrow">
-            <SlotsRail />
+            <SlotsRail onOpenCandidate={setDetailId} />
           </div>
         </div>
       </div>
@@ -506,6 +583,7 @@ export function InterviewsPage() {
         dimensions={all.find((i) => i.id === evaluateFor)?.application?.job.scorecardTemplate?.map((t) => t.dimension)}
         onClose={() => setEvaluateFor(null)}
       />
+      <SetInterviewTimeModal interview={scheduleFor} onClose={() => setScheduleFor(null)} />
       <CandidateDetailDrawer candidateId={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
