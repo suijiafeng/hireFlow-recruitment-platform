@@ -420,7 +420,7 @@ function MembersSection() {
 
       <div className="hf-table">
         <div className="hf-thead">
-          <span className="hf-td w-180">姓名</span>
+          <span className="hf-td w-148">姓名</span>
           <span className="hf-td w-240">邮箱</span>
           <span className="hf-td w-140">部门</span>
           <span className="hf-td w-100">状态</span>
@@ -437,8 +437,7 @@ function MembersSection() {
               const on = u.status === 'ACTIVE';
               return (
                 <div key={u.id} className={on ? 'hf-tr' : 'hf-tr hf-tr--muted'} onClick={() => setEditing(u)}>
-                  <span className="hf-td w-180 u-flex-gap-8">
-                    <span className="hf-avatar">{u.name.charAt(0)}</span>
+                  <span className="hf-td w-148">
                     <span className="hf-primary hf-ellipsis">{u.name}</span>
                   </span>
                   <span className="hf-td w-240 hf-secondary hf-ellipsis">{u.email}</span>

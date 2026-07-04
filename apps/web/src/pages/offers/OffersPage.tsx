@@ -341,13 +341,13 @@ export function OffersPage() {
           /* 按流程阶段分组，待审批排最上；取代分页 */
           <div className="hf-table">
             <div className="hf-thead">
-              <span className="hf-td w-170">候选人</span>
+              <span className="hf-td w-160">候选人</span>
               <span className="hf-td--grow">职位</span>
-              <span className="hf-td w-70">职级</span>
-              <span className="hf-td w-180">薪资</span>
+              <span className="hf-td w-48">职级</span>
+              <span className="hf-td w-130">薪资</span>
               <span className="hf-td--grow">时效 / 答复</span>
-              <span className="hf-td hf-td--right w-120">更新</span>
-              <span className="hf-td hf-td--right w-180">操作</span>
+              <span className="hf-td hf-td--right w-100">更新</span>
+              <span className="hf-td hf-td--right w-240">操作</span>
             </div>
             <div className="hf-tbody">
               {GROUPS.map((g) => {
@@ -362,17 +362,16 @@ export function OffersPage() {
                     </div>
                     {items.map((o) => (
                       <div key={o.id} className={g.key === 'PENDING' ? 'hf-tr hf-tr--focus' : 'hf-tr'}>
-                        <span className="hf-td w-170 u-flex-gap-8">
-                          <span className="hf-avatar">{o.application.candidate.name.charAt(0)}</span>
+                        <span className="hf-td w-160">
                           <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>
                         </span>
                         <span className="hf-td--grow u-flex-gap-10">
                           <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
                           <span className="hf-faint">{o.application.job.department.name}</span>
                         </span>
-                        <span className="hf-td w-70 hf-secondary hf-td--num">{o.grade ?? '—'}</span>
+                        <span className="hf-td w-48 hf-secondary hf-td--num">{o.grade ?? '—'}</span>
                         {/* 薪资：无权限直接弱化，不再显示「无权查看」四字 Tag */}
-                        <span className="hf-td w-180 hf-td--num">
+                        <span className="hf-td w-130 hf-td--num">
                           {!canViewSalary ? (
                             <span className="hf-faint">••••</span>
                           ) : o.salary ? (
@@ -385,10 +384,10 @@ export function OffersPage() {
                           )}
                         </span>
                         <span className="hf-td--grow hf-ellipsis">{replyCell(o)}</span>
-                        <span className="hf-td hf-td--right w-120 hf-muted hf-td--num">
+                        <span className="hf-td hf-td--right w-100 hf-muted hf-td--num">
                           {dayjs(o.updatedAt).format('MM-DD HH:mm')}
                         </span>
-                        <span className="hf-td hf-td--right w-180">{actionCell(o)}</span>
+                        <span className="hf-td hf-td--right w-240">{actionCell(o)}</span>
                       </div>
                     ))}
                   </div>
