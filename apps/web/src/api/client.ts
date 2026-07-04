@@ -22,6 +22,11 @@ http.interceptors.response.use(
   },
 );
 
+/** 409：后端把「可覆盖的冲突」与「非法请求」分开，前端据此决定是提示还是二次确认 */
+export function isConflictError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 409;
+}
+
 /** 从 axios 错误中提取后端返回的 message，供 message.error 展示 */
 export function extractErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
   if (axios.isAxiosError(error)) {

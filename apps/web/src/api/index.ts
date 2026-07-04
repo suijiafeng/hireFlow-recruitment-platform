@@ -71,6 +71,7 @@ export const jobsApi = {
       scorecardTemplate: Array<{ dimension: string; weight: number }>;
     }>,
   ) => http.patch<Job>(`/jobs/${id}`, data).then((r) => r.data),
+  remove: (id: string) => http.delete<{ ok: true }>(`/jobs/${id}`).then((r) => r.data),
   talentPoolScan: (jobId: string) =>
     http.post<TalentPoolScanResult>(`/jobs/${jobId}/talent-pool/scan`).then((r) => r.data),
   talentPoolActivate: (jobId: string, candidateId: string) =>
@@ -100,6 +101,7 @@ export const candidatesApi = {
     id: string,
     data: Partial<{ name: string; email: string; phone: string; source: string; tags: string[] }>,
   ) => http.patch<Candidate>(`/candidates/${id}`, data).then((r) => r.data),
+  remove: (id: string) => http.delete<{ ok: true }>(`/candidates/${id}`).then((r) => r.data),
   get: (id: string) => http.get<CandidateDetail>(`/candidates/${id}`).then((r) => r.data),
   addResume: (id: string, data: { rawText: string; fileName?: string }) =>
     http.post<Resume>(`/candidates/${id}/resumes`, data).then((r) => r.data),
@@ -277,6 +279,11 @@ export const interviewsApi = {
       .then((r) => r.data),
   cancel: (interviewId: string) =>
     http.post<Interview>(`/interviews/${interviewId}/cancel`).then((r) => r.data),
+  /** HR 直接敲定/改期，不走候选人自助选时 */
+  schedule: (
+    interviewId: string,
+    data: { scheduledAt: string; durationMins?: number; ignoreConflict?: boolean },
+  ) => http.post<Interview>(`/interviews/${interviewId}/schedule`, data).then((r) => r.data),
   selfScheduleLink: (interviewId: string) =>
     http.post<{ token: string }>(`/interviews/${interviewId}/self-schedule-link`).then((r) => r.data),
   mySlots: () => http.get<InterviewerSlot[]>('/interviewer-slots/mine').then((r) => r.data),

@@ -387,6 +387,11 @@ export interface InterviewerSlot {
   startAt: string;
   endAt: string;
   bookedBy: string | null;
+  /** 被预约时的可读说明「候选人 · 职位」；bookedBy 本身是面试 ID，不可直接展示 */
+  bookedLabel: string | null;
+  /** 预约方候选人，供面试官点进详情 */
+  bookedCandidateId: string | null;
+  bookedRound: number | null;
 }
 
 export interface InterviewPortalView {
