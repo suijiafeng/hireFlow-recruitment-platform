@@ -1,7 +1,8 @@
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PERMISSIONS } from '@hireflow/shared';
-import { App, Button, Form, Input, Modal, Select, Spin } from 'antd';
+import { App, Button, Form, Input, Modal, Select, Spin, Table } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { candidatesApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Candidate } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
+import { RowActions } from '../../components/RowActions';
 import { useAuthStore } from '../../stores/auth';
 
 const cssVars = (v: Record<string, string | number>) => v as CSSProperties;
@@ -81,11 +83,127 @@ export function CandidatesPage() {
     });
   };
 
+  /**
+   * 列宽给的是「内容撑得开」的自然宽度，合计 1260 > 容器约 1020，
+   * 于是交给 scroll.x 出横向滚动条，而不是把各列互相挤瘦。
+   * 操作列 fixed:'right'，横向滚动时始终可见。
+   */
+  const columns: TableProps<Candidate>['columns'] = [
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      width: 180,
+      ellipsis: true,
+      onCell: (c) => ({ title: c.name }),
+      render: (name: string) => <span className="hf-primary">{name}</span>,
+    },
+    {
+      // 匹配分：色点 + 数字 + 细条，与看板同一套色带
+      title: '匹配分',
+      key: 'score',
+      width: 110,
+      render: (_, c) => {
+        const app = c.applications?.[0];
+        const score = (c as Candidate & { matchScore?: number | null }).matchScore ?? app?.matchScore ?? null;
+        if (score == null) return <span className="hf-muted">—</span>;
+        return (
+          <span className="u-flex-gap-6">
+            <span className="hf-dot" style={cssVars({ background: scoreColor(score) })} />
+            <span className="hf-progress-num">{score}</span>
+            <span className="hf-bar-track hf-bar-track--thin">
+              <span className="hf-bar-fill" style={cssVars({ '--w': `${score}%`, '--c': scoreColor(score) })} />
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      // 联系方式两行：邮箱在上、电话弱化在下
+      // 两行结构，不能用 antd 的 ellipsis（它给 td 加 nowrap 会把两行压成一行），
+      // 改为内层 span 各自省略、title 挂到 td 上
+      title: '联系方式',
+      key: 'contact',
+      width: 230,
+      onCell: (c) => ({ title: `${c.email ?? '-'}\n${c.phone ?? '-'}` }),
+      render: (_, c) => (
+        <span className="contact-stack">
+          <span className="hf-secondary hf-ellipsis">{c.email ?? '-'}</span>
+          <span className="hf-faint hf-td--num">{c.phone ?? '-'}</span>
+        </span>
+      ),
+    },
+    {
+      title: '来源',
+      dataIndex: 'source',
+      width: 100,
+      ellipsis: true,
+      onCell: (c) => ({ title: c.source ?? '' }),
+      render: (source: string | null) => <span className="hf-secondary">{source ?? '-'}</span>,
+    },
+    {
+      // 技能：一行点分文本，取代 4 个彩色 Tag
+      title: '技能',
+      dataIndex: 'tags',
+      width: 220,
+      ellipsis: true,
+      onCell: (c) => ({ title: c.tags.join(' · ') }),
+      render: (tags: string[]) => <span className="hf-secondary">{tags.length ? tags.join(' · ') : '—'}</span>,
+    },
+    {
+      // 应聘进展：职位为文本，只有阶段用 Tag（Tag 不能被 nowrap 截掉，故不用 antd ellipsis）
+      title: '应聘进展',
+      key: 'progress',
+      width: 260,
+      onCell: (c) => {
+        const a = c.applications?.[0];
+        return { title: a ? `${a.job.title} · ${a.stage.name}` : '未投递' };
+      },
+      render: (_, c) => {
+        const app = c.applications?.[0];
+        if (!app) return <span className="hf-faint">未投递</span>;
+        return (
+          <span className="u-flex-gap-6">
+            <span className="hf-secondary hf-ellipsis">{app.job.title}</span>
+            <span className={stageTagClass(app.stage.name)}>{app.stage.name}</span>
+            {(c.applications?.length ?? 0) > 1 && (
+              <span className="hf-faint">+{(c.applications?.length ?? 1) - 1}</span>
+            )}
+          </span>
+        );
+      },
+    },
+    {
+      title: '录入',
+      dataIndex: 'createdAt',
+      width: 90,
+      align: 'right',
+      render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD')}</span>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 130,
+      align: 'right',
+      fixed: 'right',
+      render: (_, c) => (
+        <RowActions
+          actions={[
+            { key: 'detail', label: '详情', onClick: () => setDetailId(c.id) },
+            hasPermission(PERMISSIONS.CANDIDATE_UPDATE) && {
+              key: 'edit',
+              label: '编辑',
+              onClick: () => openEdit(c),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+  const TABLE_X = 1300;
+
   const items = candidatesQuery.data?.items ?? [];
   const total = candidatesQuery.data?.total ?? 0;
-  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to = Math.min(page * PAGE_SIZE, total);
-  const maxPage = Math.max(Math.ceil(total / PAGE_SIZE), 1);
+  // 页码区间与总页数改由 antd 分页器自己算（showTotal 回调里拿 range）
 
   return (
     <div className="hf-page">
@@ -152,107 +270,24 @@ export function CandidatesPage() {
             )}
           </div>
         ) : (
-          /* 表格直接铺满，不再包 Card；表头 40、行高 48 */
-          <div className="hf-table">
-            <div className="hf-thead">
-              <span className="hf-td w-150">姓名</span>
-              <span className="hf-td w-96">匹配分</span>
-              <span className="hf-td w-230">联系方式</span>
-              <span className="hf-td w-110">来源</span>
-              <span className="hf-td--grow">技能</span>
-              <span className="hf-td--grow">应聘进展</span>
-              <span className="hf-td hf-td--right w-96">录入</span>
-              <span className="hf-td hf-td--right w-76">操作</span>
-            </div>
-            <div className="hf-tbody">
-              {items.map((c) => {
-                const app = c.applications?.[0];
-                const score = (c as Candidate & { matchScore?: number | null }).matchScore ?? app?.matchScore ?? null;
-                return (
-                  <div key={c.id} className="hf-tr" onClick={() => setDetailId(c.id)}>
-                    <span className="hf-td w-150 u-flex-gap-8">
-                      <span className="hf-avatar">{c.name.charAt(0)}</span>
-                      <span className="hf-primary hf-ellipsis">{c.name}</span>
-                    </span>
-                    {/* 匹配分：色点 + 数字 + 细条，与看板同一套色带 */}
-                    <span className="hf-td w-96 u-flex-gap-6">
-                      {score == null ? (
-                        <span className="hf-muted">—</span>
-                      ) : (
-                        <>
-                          <span className="hf-dot" style={cssVars({ background: scoreColor(score) })} />
-                          <span className="hf-progress-num">{score}</span>
-                          <span className="hf-bar-track hf-bar-track--thin">
-                            <span
-                              className="hf-bar-fill"
-                              style={cssVars({ '--w': `${score}%`, '--c': scoreColor(score) })}
-                            />
-                          </span>
-                        </>
-                      )}
-                    </span>
-                    {/* 联系方式两行：邮箱在上、电话弱化在下 */}
-                    <span className="hf-td w-230 contact-stack">
-                      <span className="hf-secondary hf-ellipsis">{c.email ?? '-'}</span>
-                      <span className="hf-faint hf-td--num">{c.phone ?? '-'}</span>
-                    </span>
-                    <span className="hf-td w-110 hf-secondary">{c.source ?? '-'}</span>
-                    {/* 技能：一行点分文本，取代 4 个彩色 Tag */}
-                    <span className="hf-td--grow hf-secondary hf-ellipsis" title={c.tags.join(' · ')}>
-                      {c.tags.length ? c.tags.join(' · ') : '—'}
-                    </span>
-                    {/* 应聘进展：职位为文本，只有阶段用 Tag */}
-                    <span className="hf-td--grow u-flex-gap-6">
-                      {app ? (
-                        <>
-                          <span className="hf-secondary hf-ellipsis">{app.job.title}</span>
-                          <span className={stageTagClass(app.stage.name)}>{app.stage.name}</span>
-                          {(c.applications?.length ?? 0) > 1 && (
-                            <span className="hf-faint">+{(c.applications?.length ?? 1) - 1}</span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="hf-faint">未投递</span>
-                      )}
-                    </span>
-                    <span className="hf-td hf-td--right hf-muted hf-td--num w-96">
-                      {dayjs(c.createdAt).format('MM-DD')}
-                    </span>
-                    <span className="hf-td hf-td--right w-76">
-                      {hasPermission(PERMISSIONS.CANDIDATE_UPDATE) ? (
-                        <span
-                          className="hf-link"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEdit(c);
-                          }}
-                        >
-                          编辑
-                        </span>
-                      ) : (
-                        <span className="hf-link">详情</span>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="hf-panel-foot">
-              <span>
-                第 {from}–{to} 条 / 共 {total} 条
-              </span>
-              <span className="u-flex-gap-8">
-                <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  上一页
-                </Button>
-                <span className="hf-td--num">
-                  {page} / {maxPage}
-                </span>
-                <Button size="small" disabled={page >= maxPage} onClick={() => setPage(page + 1)}>
-                  下一页
-                </Button>
-              </span>
-            </div>
+          /* 表格直接铺满，不再包 Card；表头 40、行高 48（观感由 .hf-atable 统一） */
+          <div className="hf-atable">
+            <Table<Candidate>
+              columns={columns}
+              dataSource={items}
+              rowKey="id"
+              /* y 只是开关：给了它 antd 才拆成 header/body 两张表用自己的滚动容器，
+                 实际高度由 .hf-atable 的 flex 撑满（CSS 里把 max-height 解掉了） */
+              scroll={{ x: TABLE_X, y: 1 }}
+              pagination={{
+                current: page,
+                pageSize: PAGE_SIZE,
+                total,
+                showSizeChanger: false,
+                showTotal: (t, [f, to]) => `第 ${f}–${to} 条 / 共 ${t} 条`,
+                onChange: setPage,
+              }}
+            />
           </div>
         )}
       </div>
