@@ -9,6 +9,7 @@ import {
 import { ACTIVITY_ACTIONS, RoleCode } from '@hireflow/shared';
 import { departmentScopeOf, isAssignedScope } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
+import { maskEmail, maskPhone } from '../../common/mask';
 import type { Prisma } from '../../generated/prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AiService } from '../ai/ai.service';
@@ -47,8 +48,8 @@ export class CandidatesService {
     if (!this.shouldMaskContact(user)) return candidate;
     return {
       ...candidate,
-      email: candidate.email ? '（已脱敏）' : null,
-      phone: candidate.phone ? '（已脱敏）' : null,
+      email: candidate.email ? maskEmail(candidate.email) : null,
+      phone: candidate.phone ? maskPhone(candidate.phone) : null,
     };
   }
 
