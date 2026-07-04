@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
@@ -48,6 +48,13 @@ export class JobsController {
   @ApiOperation({ summary: '职位的 Pipeline 阶段列表' })
   getStages(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.jobsService.getStages(id, user);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.JOB_DELETE)
+  @ApiOperation({ summary: '删除职位（仅无应聘记录的职位）' })
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.jobsService.remove(id, user);
   }
 
   @Put(':id/stages')

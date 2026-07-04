@@ -201,6 +201,30 @@ export class CandidatesService {
   }
 
   /**
+   * 删除候选人。与职位删除同一口径：有应聘记录就拒绝。
+   * 候选人一旦进过流程，面试、面评、Offer 全挂在应聘记录下，删掉等于抹掉招聘留痕；
+   * 这里只放行「录错了、还没投过任何职位」的记录。简历是候选人的从属数据，随之清理。
+   */
+  async remove(id: string, user: JwtUser) {
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id },
+      select: { id: true, name: true, _count: { select: { applications: true } } },
+    });
+    if (!candidate) throw new NotFoundException('候选人不存在');
+    if (candidate._count.applications > 0) {
+      throw new BadRequestException(
+        `该候选人已有 ${candidate._count.applications} 条应聘记录，不能删除。如需终止流程请在流程中做「淘汰」`,
+      );
+    }
+    await this.prisma.resume.deleteMany({ where: { candidateId: id } });
+    await this.prisma.candidate.delete({ where: { id } });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.CANDIDATE_DELETED, 'Candidate', id, {
+      name: candidate.name,
+    });
+    return { ok: true };
+  }
+
+  /**
    * AI 解析简历：结构化抽取 + 语义技能标签 + 150 字亮点风险摘要，标签合并进候选人。
    */
   async parseResume(resumeId: string, user: JwtUser) {

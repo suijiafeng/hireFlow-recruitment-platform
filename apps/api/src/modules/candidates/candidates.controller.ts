@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -54,6 +55,13 @@ export class CandidatesController {
   @ApiOperation({ summary: '更新候选人（局部字段）' })
   update(@Param('id') id: string, @Body() dto: UpdateCandidateDto, @CurrentUser() user: JwtUser) {
     return this.candidatesService.update(id, dto, user);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.CANDIDATE_DELETE)
+  @ApiOperation({ summary: '删除候选人（仅无应聘记录的候选人）' })
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.candidatesService.remove(id, user);
   }
 
   @Post(':id/resumes')

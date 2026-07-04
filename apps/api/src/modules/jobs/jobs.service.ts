@@ -142,6 +142,30 @@ export class JobsService {
     return job;
   }
 
+  /**
+   * 删除职位。沿用部门删除的口径：有关联数据就拒绝，不做级联。
+   * 职位一旦有人投递，其 Pipeline、面试、Offer 全挂在应聘记录上，级联删会把招聘留痕一并抹掉；
+   * 想让职位下线用「关闭」状态，删除只留给建错了的空职位。
+   */
+  async remove(id: string, user: JwtUser) {
+    const job = await this.prisma.job.findUnique({
+      where: { id },
+      select: { id: true, title: true, departmentId: true, _count: { select: { applications: true } } },
+    });
+    if (!job) throw new NotFoundException('职位不存在');
+    this.assertJobInDeptScope(job, user);
+    if (job._count.applications > 0) {
+      throw new BadRequestException(
+        `该职位下还有 ${job._count.applications} 条应聘记录，不能删除。如需下线请把状态改为「已关闭」`,
+      );
+    }
+    // Pipeline 阶段是职位的从属数据，且上面已确认无人投递，随职位一起清掉
+    await this.prisma.pipelineStage.deleteMany({ where: { jobId: id } });
+    await this.prisma.job.delete({ where: { id } });
+    await this.activityLog.record(user, ACTIVITY_ACTIONS.JOB_DELETED, 'Job', id, { title: job.title });
+    return { ok: true };
+  }
+
   async getStages(jobId: string, user?: JwtUser) {
     const job = await this.prisma.job.findUnique({ where: { id: jobId }, select: { departmentId: true } });
     if (!job) throw new NotFoundException('职位不存在');
