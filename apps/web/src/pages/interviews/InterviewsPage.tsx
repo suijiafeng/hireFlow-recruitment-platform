@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClockCircleOutlined, PlusOutlined, ScheduleOutlined } from '@ant-design/icons';
 import { EVALUATION_CONCLUSION_LABEL, PERMISSIONS, type EvaluationConclusion } from '@hireflow/shared';
-import { App, Button, DatePicker, Form, Modal, Select, Spin, Typography } from 'antd';
+import { App, Button, DatePicker, Form, Modal, Select, Spin, Table, Typography } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useState } from 'react';
 import { interviewsApi } from '../../api';
@@ -126,9 +127,13 @@ function SlotsRail() {
                     </span>
                     <span className="u-flex-1" />
                     {s.bookedBy ? (
-                      <span className="hf-faint">{s.bookedBy} 已约</span>
+                      <span className="hf-faint" onClick={(e) => e.stopPropagation()}>
+                        {s.bookedBy} 已约
+                      </span>
                     ) : (
-                      <span className="hf-link">可约</span>
+                      <span className="hf-link" onClick={(e) => e.stopPropagation()}>
+                        可约
+                      </span>
                     )}
                   </div>
                 ))}
@@ -261,38 +266,85 @@ export function InterviewsPage() {
   });
   const groups = [...(noDate.length ? [{ key: '待安排', label: '', today: false, items: noDate }] : []), ...dayGroups];
 
-  const rowFor = (iv: Interview) => {
-    const pending = !iv.scheduledAt;
-    const done = iv.status === 'COMPLETED';
-    const evals = iv.evaluations.filter((ev) => ev.conclusion);
-    const mineTodo = needsMyEval(iv);
-    return (
-      <div
-        key={iv.id}
-        className={pending ? 'hf-tr hf-tr--todo' : 'hf-tr'}
-        onClick={() => iv.application && setDetailId(iv.application.candidate.id)}
-      >
-        <span className="hf-td w-56 hf-primary hf-primary--sm hf-td--num">
+  /** 所有分组共用同一套列定义，宽度写死，各组之间才对得齐 */
+  const IV_TABLE_X = 820;
+  const ivColumns: TableProps<Interview>['columns'] = [
+    {
+      title: '时间',
+      key: 'time',
+      width: 60,
+      render: (_, iv) => (
+        <span className="hf-primary hf-primary--sm hf-td--num">
           {iv.scheduledAt ? dayjs(iv.scheduledAt).format('HH:mm') : '—'}
         </span>
-        <span className="hf-td w-16 u-flex-center">
-          <span className={pending ? 'hf-dot hf-dot--warn' : done ? 'hf-dot hf-dot--off' : 'hf-dot hf-dot--on'} />
-        </span>
-        <span className="hf-td w-150 u-flex-gap-8">
-          <span className="hf-avatar">{iv.application?.candidate.name.charAt(0) ?? '?'}</span>
-          <span className="hf-primary hf-primary--sm hf-ellipsis">{iv.application?.candidate.name ?? '—'}</span>
-        </span>
-        <span className="hf-td--grow u-flex-gap-8">
+      ),
+    },
+    {
+      title: '',
+      key: 'dot',
+      width: 20,
+      render: (_, iv) => {
+        const pending = !iv.scheduledAt;
+        const done = iv.status === 'COMPLETED';
+        return (
+          <span className="u-flex-center">
+            <span className={pending ? 'hf-dot hf-dot--warn' : done ? 'hf-dot hf-dot--off' : 'hf-dot hf-dot--on'} />
+          </span>
+        );
+      },
+    },
+    {
+      title: '候选人',
+      key: 'candidate',
+      width: 150,
+      ellipsis: true,
+      onCell: (iv) => ({ title: iv.application?.candidate.name ?? '' }),
+      render: (_, iv) => (
+        <span className="hf-primary hf-primary--sm">{iv.application?.candidate.name ?? '—'}</span>
+      ),
+    },
+    {
+      title: '职位',
+      key: 'job',
+      width: 200,
+      onCell: (iv) => ({ title: `${iv.application?.job.title ?? '—'} · 第 ${iv.round} 轮` }),
+      render: (_, iv) => (
+        <span className="u-flex-gap-8">
           <span className="hf-secondary hf-ellipsis">{iv.application?.job.title ?? '—'}</span>
           <span className="hf-faint">第 {iv.round} 轮</span>
         </span>
-        <span className="hf-td--grow hf-secondary hf-ellipsis">
-          {iv.interviewers.map((i) => i.user.name).join('、') || '—'}
-        </span>
-        {/* 面评：结论缩为短标；未提交时按状态给不同弱化文案 */}
-        <span className="hf-td w-180 u-flex-gap-6">
-          {evals.length > 0 ? (
-            evals.map((ev) => {
+      ),
+    },
+    {
+      title: '面试官',
+      key: 'interviewers',
+      width: 180,
+      ellipsis: true,
+      onCell: (iv) => ({ title: iv.interviewers.map((i) => i.user.name).join('、') }),
+      render: (_, iv) => (
+        <span className="hf-secondary">{iv.interviewers.map((i) => i.user.name).join('、') || '—'}</span>
+      ),
+    },
+    {
+      // 面评：结论缩为短标；未提交时按状态给不同弱化文案
+      title: '面评',
+      key: 'eval',
+      width: 120,
+      render: (_, iv) => {
+        const evals = iv.evaluations.filter((ev) => ev.conclusion);
+        if (evals.length === 0) {
+          const pending = !iv.scheduledAt;
+          const done = iv.status === 'COMPLETED';
+          const mineTodo = needsMyEval(iv);
+          return (
+            <span className={mineTodo ? 'hf-faint hf-state--warn' : 'hf-faint'}>
+              {pending ? '未安排' : done ? '待面评' : '面试后提交'}
+            </span>
+          );
+        }
+        return (
+          <span className="u-flex-gap-6">
+            {evals.map((ev) => {
               const c = CONCLUSION_SHORT[ev.conclusion!] ?? {
                 text: EVALUATION_CONCLUSION_LABEL[ev.conclusion as EvaluationConclusion],
                 cls: 'hf-tag',
@@ -302,15 +354,23 @@ export function InterviewsPage() {
                   {c.text}
                 </span>
               );
-            })
-          ) : (
-            <span className={mineTodo ? 'hf-faint hf-state--warn' : 'hf-faint'}>
-              {pending ? '未安排' : done ? '待面评' : '面试后提交'}
-            </span>
-          )}
-        </span>
-        <span className="hf-td hf-td--right w-88">
-          {pending && hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE) ? (
+            })}
+          </span>
+        );
+      },
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 90,
+      align: 'right',
+      fixed: 'right',
+      render: (_, iv) => {
+        const pending = !iv.scheduledAt;
+        const done = iv.status === 'COMPLETED';
+        const mineTodo = needsMyEval(iv);
+        if (pending && hasPermission(PERMISSIONS.INTERVIEW_SCHEDULE))
+          return (
             <span
               className="hf-link"
               onClick={(e) => {
@@ -320,7 +380,9 @@ export function InterviewsPage() {
             >
               选时链接
             </span>
-          ) : (done || mineTodo) && hasPermission(PERMISSIONS.EVALUATION_SUBMIT) ? (
+          );
+        if ((done || mineTodo) && hasPermission(PERMISSIONS.EVALUATION_SUBMIT))
+          return (
             <span
               className="hf-link"
               onClick={(e) => {
@@ -330,13 +392,11 @@ export function InterviewsPage() {
             >
               提交面评
             </span>
-          ) : (
-            <span className="hf-link">详情</span>
-          )}
-        </span>
-      </div>
-    );
-  };
+          );
+        return <span className="hf-link">详情</span>;
+      },
+    },
+  ];
 
   return (
     <div className="hf-page">
@@ -392,33 +452,36 @@ export function InterviewsPage() {
               </div>
             </div>
           ) : (
-            /* 按日分组的日程列表：分组头粘性，取代无序表格 + 分页 */
-            <div className="hf-table">
-              <div className="hf-thead">
-                <span className="hf-td w-56">时间</span>
-                <span className="hf-td w-16" />
-                <span className="hf-td w-150">候选人</span>
-                <span className="hf-td--grow">职位</span>
-                <span className="hf-td--grow">面试官</span>
-                <span className="hf-td w-180">面评</span>
-                <span className="hf-td hf-td--right w-88">操作</span>
-              </div>
-              <div className="hf-tbody">
-                {groups.map((g) => (
-                  <div key={g.key}>
-                    <div className="hf-group-head">
-                      <span className="hf-group-title hf-td--num">{g.key}</span>
-                      {g.label && (
-                        <span className={g.today ? 'hf-group-badge hf-group-badge--today' : 'hf-group-badge'}>
-                          {g.label}
-                        </span>
-                      )}
-                      <span className="hf-group-count">{g.items.length} 场</span>
-                    </div>
-                    {g.items.map(rowFor)}
+            /* 按日分组：每组一张独立的 Table。
+               各组是彼此独立的横向滚动容器，所以每组都要带自己的表头——只在首组显示表头的话，
+               任何一组横向滚动后，列就和顶部那一行表头对不上了。 */
+            <div className="hf-agroup-list">
+              {groups.map((g) => (
+                <div key={g.key} className="hf-agroup-item">
+                  <div className="hf-group-head">
+                    <span className="hf-group-title hf-td--num">{g.key}</span>
+                    {g.label && (
+                      <span className={g.today ? 'hf-group-badge hf-group-badge--today' : 'hf-group-badge'}>
+                        {g.label}
+                      </span>
+                    )}
+                    <span className="hf-group-count">{g.items.length} 场</span>
                   </div>
-                ))}
-              </div>
+                  <div className="hf-atable hf-atable--fit">
+                    <Table<Interview>
+                      columns={ivColumns}
+                      dataSource={g.items}
+                      rowKey="id"
+                      pagination={false}
+                      scroll={{ x: IV_TABLE_X }}
+                      rowClassName={(iv) => (!iv.scheduledAt ? 'hf-row--todo' : '')}
+                      onRow={(iv) => ({
+                        onClick: () => iv.application && setDetailId(iv.application.candidate.id),
+                      })}
+                    />
+                  </div>
+                </div>
+              ))}
               <div className="hf-panel-foot hf-panel-foot--tight">
                 <span>
                   待进行 {upcoming} 场 · 共 {all.length} 场面试
