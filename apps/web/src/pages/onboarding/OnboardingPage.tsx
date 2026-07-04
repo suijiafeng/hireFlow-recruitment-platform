@@ -1,7 +1,8 @@
 import { FileProtectOutlined, IdcardOutlined, LinkOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CONTRACT_SIGN_STATUS_LABEL, DOCUMENT_TYPE_META, PERMISSIONS, type ContractSignStatus } from '@hireflow/shared';
-import { App, Button, Form, Input, Modal, Select, Spin, Steps, Typography, Upload } from 'antd';
+import { App, Button, Form, Input, Modal, Select, Spin, Steps, Table, Typography, Upload } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
@@ -359,6 +360,90 @@ export function OnboardingPage() {
     return o.status !== 'COMPLETED';
   });
 
+  /** 左栏窄（约 666px），列按内容给自然宽，合计 760 触发横向滚动 */
+  const onboardingColumns: TableProps<Onboarding>['columns'] = [
+    {
+      title: '候选人',
+      key: 'name',
+      width: 150,
+      onCell: (o) => ({ title: o.application.candidate.name }),
+      render: (_, o) => (
+        <span className="u-flex-gap-8">
+          <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>
+          {reviewCount(o) > 0 && <span className="hf-dot hf-dot--alert" title="有材料待人工核对" />}
+        </span>
+      ),
+    },
+    {
+      title: '职位',
+      key: 'job',
+      width: 200,
+      onCell: (o) => ({ title: `${o.application.job.title} · ${o.application.job.department.name}` }),
+      render: (_, o) => (
+        <span className="u-flex-gap-10">
+          <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
+          <span className="hf-faint">{o.application.job.department.name}</span>
+        </span>
+      ),
+    },
+    {
+      title: '清单进度',
+      key: 'progress',
+      width: 150,
+      render: (_, o) => {
+        const pct = Math.round((o.progress.done / o.progress.total) * 100);
+        const complete = o.status === 'COMPLETED';
+        return (
+          <span className="hf-progress">
+            <span className="hf-bar-track">
+              <span
+                className="hf-bar-fill"
+                style={cssVars({ '--w': `${Math.max(pct, 2)}%`, '--c': complete ? '#059669' : '#2563EB' })}
+              />
+            </span>
+            <span className="hf-progress-num">
+              {o.progress.done} / {o.progress.total}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      title: '合同',
+      key: 'contract',
+      width: 90,
+      render: (_, o) => {
+        const signed = o.contract?.signStatus === 'SIGNED' || o.contract?.signStatus === 'ARCHIVED';
+        return (
+          <span className={signed ? 'hf-state--ok' : o.contract ? 'hf-secondary' : 'hf-faint'}>
+            {o.contract ? CONTRACT_SIGN_STATUS_LABEL[o.contract.signStatus as ContractSignStatus] : '未生成'}
+          </span>
+        );
+      },
+    },
+    {
+      title: '状态',
+      key: 'status',
+      width: 90,
+      render: (_, o) => {
+        const complete = o.status === 'COMPLETED';
+        return (
+          <span className={`hf-state ${complete ? 'hf-state--ok' : ''}`}>
+            <span className={complete ? 'hf-dot hf-dot--ok' : 'hf-dot hf-dot--on'} />
+            {complete ? '已完成' : '进行中'}
+          </span>
+        );
+      },
+    },
+    {
+      title: '创建',
+      dataIndex: 'createdAt',
+      width: 80,
+      align: 'right',
+      render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD')}</span>,
+    },
+  ];
+
   const doneCount = all.filter((o) => o.status === 'COMPLETED').length;
   const kpis = [
     { label: '进行中', value: all.length - doneCount, unit: '张' },
@@ -438,62 +523,16 @@ export function OnboardingPage() {
               </div>
             </div>
           ) : (
-            <div className="hf-table">
-              <div className="hf-thead">
-                <span className="hf-td w-160">候选人</span>
-                <span className="hf-td--grow">职位</span>
-                <span className="hf-td w-180">清单进度</span>
-                <span className="hf-td w-100">合同</span>
-                <span className="hf-td w-110">状态</span>
-                <span className="hf-td hf-td--right w-96">创建</span>
-              </div>
-              <div className="hf-tbody">
-                {visible.map((o) => {
-                  const pct = Math.round((o.progress.done / o.progress.total) * 100);
-                  const complete = o.status === 'COMPLETED';
-                  const signed = o.contract?.signStatus === 'SIGNED' || o.contract?.signStatus === 'ARCHIVED';
-                  return (
-                    <div
-                      key={o.id}
-                      className={o.id === selected ? 'hf-tr hf-tr--on' : 'hf-tr'}
-                      onClick={() => setSelected(o.id)}
-                    >
-                      <span className="hf-td w-160 u-flex-gap-8">
-                        <span className="hf-avatar">{o.application.candidate.name.charAt(0)}</span>
-                        <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>
-                        {reviewCount(o) > 0 && <span className="hf-dot hf-dot--alert" title="有材料待人工核对" />}
-                      </span>
-                      <span className="hf-td--grow u-flex-gap-10">
-                        <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
-                        <span className="hf-faint">{o.application.job.department.name}</span>
-                      </span>
-                      <span className="hf-td w-180 hf-progress">
-                        <span className="hf-bar-track">
-                          <span
-                            className="hf-bar-fill"
-                            style={cssVars({ '--w': `${Math.max(pct, 2)}%`, '--c': complete ? '#059669' : '#2563EB' })}
-                          />
-                        </span>
-                        <span className="hf-progress-num">
-                          {o.progress.done} / {o.progress.total}
-                        </span>
-                      </span>
-                      <span className="hf-td w-100">
-                        <span className={signed ? 'hf-state--ok' : o.contract ? 'hf-secondary' : 'hf-faint'}>
-                          {o.contract ? CONTRACT_SIGN_STATUS_LABEL[o.contract.signStatus as ContractSignStatus] : '未生成'}
-                        </span>
-                      </span>
-                      <span className={`hf-td w-110 hf-state ${complete ? 'hf-state--ok' : ''}`}>
-                        <span className={complete ? 'hf-dot hf-dot--ok' : 'hf-dot hf-dot--on'} />
-                        {complete ? '已完成' : '进行中'}
-                      </span>
-                      <span className="hf-td hf-td--right w-96 hf-muted hf-td--num">
-                        {dayjs(o.createdAt).format('MM-DD')}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="hf-atable">
+              <Table<Onboarding>
+                columns={onboardingColumns}
+                dataSource={visible}
+                rowKey="id"
+                pagination={false}
+                scroll={{ x: 760, y: 1 }}
+                rowClassName={(o) => (o.id === selected ? 'hf-row--on' : '')}
+                onRow={(o) => ({ onClick: () => setSelected(o.id) })}
+              />
               <div className="hf-panel-foot hf-panel-foot--tight">
                 <span>全部 {all.length} 张入职单</span>
                 <span className="hf-faint">
