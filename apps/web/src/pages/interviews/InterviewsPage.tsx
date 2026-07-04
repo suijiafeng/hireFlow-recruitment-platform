@@ -10,6 +10,7 @@ import { extractErrorMessage } from '../../api/client';
 import type { Interview } from '../../api/types';
 import { CandidateDetailDrawer } from '../../components/CandidateDetailDrawer';
 import { EvaluationModal } from '../../components/EvaluationModal';
+import { useSyncedTableScroll } from '../../hooks/useSyncedTableScroll';
 import { useAuthStore } from '../../stores/auth';
 
 /** 15 分钟一档的全天时间选项 */
@@ -266,6 +267,9 @@ export function InterviewsPage() {
   });
   const groups = [...(noDate.length ? [{ key: '待安排', label: '', today: false, items: noDate }] : []), ...dayGroups];
 
+  /** 各分组的横向滚动串在一起，表头才能只留首组一行 */
+  const groupListRef = useSyncedTableScroll<HTMLDivElement>();
+
   /** 所有分组共用同一套列定义，宽度写死，各组之间才对得齐 */
   const IV_TABLE_X = 820;
   const ivColumns: TableProps<Interview>['columns'] = [
@@ -453,10 +457,10 @@ export function InterviewsPage() {
             </div>
           ) : (
             /* 按日分组：每组一张独立的 Table。
-               各组是彼此独立的横向滚动容器，所以每组都要带自己的表头——只在首组显示表头的话，
-               任何一组横向滚动后，列就和顶部那一行表头对不上了。 */
-            <div className="hf-agroup-list">
-              {groups.map((g) => (
+               各组本是彼此独立的横向滚动容器，useSyncedTableScroll 把它们的 scrollLeft 串起来，
+               于是表头只需首组保留一行——任何一组横滚，首组表头随其表体一起走，列不会错位。 */
+            <div className="hf-agroup-list" ref={groupListRef}>
+              {groups.map((g, gi) => (
                 <div key={g.key} className="hf-agroup-item">
                   <div className="hf-group-head">
                     <span className="hf-group-title hf-td--num">{g.key}</span>
@@ -473,6 +477,7 @@ export function InterviewsPage() {
                       dataSource={g.items}
                       rowKey="id"
                       pagination={false}
+                      showHeader={gi === 0}
                       scroll={{ x: IV_TABLE_X }}
                       rowClassName={(iv) => (!iv.scheduledAt ? 'hf-row--todo' : '')}
                       onRow={(iv) => ({
