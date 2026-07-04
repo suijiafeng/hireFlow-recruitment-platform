@@ -4,6 +4,7 @@ import { PERMISSIONS } from '@hireflow/shared';
 import { CurrentUser, type JwtUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CreateInterviewDto } from './dto/create-interview.dto';
+import { ScheduleInterviewDto } from './dto/schedule-interview.dto';
 import { DraftEvaluationDto } from './dto/draft-evaluation.dto';
 import { SubmitEvaluationDto } from './dto/submit-evaluation.dto';
 import { InterviewsService } from './interviews.service';
@@ -26,6 +27,13 @@ export class InterviewsController {
   @ApiOperation({ summary: '面试列表（?applicationId= 过滤；缺省返回近期总览）' })
   list(@Query('applicationId') applicationId: string | undefined, @CurrentUser() user: JwtUser) {
     return this.interviewsService.list(applicationId, user);
+  }
+
+  @Post(':id/schedule')
+  @RequirePermissions(PERMISSIONS.INTERVIEW_SCHEDULE)
+  @ApiOperation({ summary: '直接敲定/改期面试时间（无需候选人自助选时）' })
+  schedule(@Param('id') id: string, @Body() dto: ScheduleInterviewDto, @CurrentUser() user: JwtUser) {
+    return this.interviewsService.schedule(id, dto, user);
   }
 
   @Post(':id/cancel')

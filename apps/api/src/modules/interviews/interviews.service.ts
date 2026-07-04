@@ -15,6 +15,7 @@ import { AiService } from '../ai/ai.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
+import { ScheduleInterviewDto } from './dto/schedule-interview.dto';
 import { SubmitEvaluationDto } from './dto/submit-evaluation.dto';
 
 const INTERVIEW_INCLUDE = {
@@ -74,6 +75,99 @@ export class InterviewsService {
       '/interviews',
     );
     return interview;
+  }
+
+  /**
+   * HR 直接敲定/改期面试时间——不必让候选人去点自助选时链接。
+   * 与 portalPick 是同一件事的两条入口，所以时段占用规则必须一致：
+   * 落在面试官空闲档内的，把档标成本场占用，否则同一档还能被别的链接选走造成双约。
+   */
+  async schedule(id: string, dto: ScheduleInterviewDto, user: JwtUser) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id },
+      include: {
+        interviewers: true,
+        application: {
+          include: { candidate: { select: { name: true } }, job: { select: { title: true } } },
+        },
+      },
+    });
+    if (!interview) throw new NotFoundException('面试不存在');
+    if (interview.status === 'CANCELED') throw new BadRequestException('已取消的面试不可再安排时间');
+    if (interview.status === 'COMPLETED') throw new BadRequestException('已完成的面试不可改期');
+
+    const start = new Date(dto.scheduledAt);
+    if (Number.isNaN(start.getTime())) throw new BadRequestException('面试时间格式不正确');
+    if (start < new Date()) throw new BadRequestException('面试时间不能早于当前时间');
+    const durationMins = dto.durationMins ?? interview.durationMins ?? 60;
+    const end = new Date(start.getTime() + durationMins * 60_000);
+    const interviewerIds = interview.interviewers.map((i) => i.userId);
+
+    // 面试官撞场检查：同一人同一时间段已有另一场未取消的面试
+    if (!dto.ignoreConflict) {
+      const busy = await this.prisma.interview.findMany({
+        where: {
+          id: { not: id },
+          status: { not: 'CANCELED' },
+          scheduledAt: { not: null },
+          interviewers: { some: { userId: { in: interviewerIds } } },
+        },
+        include: {
+          interviewers: { include: { user: { select: { name: true } } } },
+          application: { include: { candidate: { select: { name: true } } } },
+        },
+      });
+      const clash = busy.find((b) => {
+        const bStart = b.scheduledAt!;
+        const bEnd = new Date(bStart.getTime() + (b.durationMins ?? 60) * 60_000);
+        return bStart < end && bEnd > start;
+      });
+      if (clash) {
+        const who = clash.interviewers
+          .filter((i) => interviewerIds.includes(i.userId))
+          .map((i) => i.user.name)
+          .join('、');
+        throw new ConflictException(
+          `${who} 同一时间已有面试：${clash.application.candidate.name}（第 ${clash.round} 轮）`,
+        );
+      }
+    }
+
+    // 改期时先释放原本占住的档，再占新档；顺序反了会把刚占的档又释放掉
+    await this.prisma.interviewerSlot.updateMany({ where: { bookedBy: id }, data: { bookedBy: null } });
+    await this.prisma.interviewerSlot.updateMany({
+      where: {
+        userId: { in: interviewerIds },
+        bookedBy: null,
+        startAt: { lte: start },
+        endAt: { gte: end },
+      },
+      data: { bookedBy: id },
+    });
+
+    const updated = await this.prisma.interview.update({
+      where: { id },
+      data: { scheduledAt: start, durationMins, status: 'SCHEDULED' },
+      include: INTERVIEW_INCLUDE,
+    });
+    await this.activityLog.record(
+      user,
+      ACTIVITY_ACTIONS.INTERVIEW_SCHEDULED,
+      'Application',
+      interview.applicationId,
+      {
+        candidate: interview.application.candidate.name,
+        round: interview.round,
+        scheduledAt: start.toISOString(),
+      },
+    );
+    await this.notifications.push(
+      interviewerIds,
+      `面试时间已确定：${interview.application.candidate.name}（第 ${interview.round} 轮）`,
+      `${interview.application.job.title} · ${start.toLocaleString('zh-CN')}`,
+      '/interviews',
+    );
+    return updated;
   }
 
   /** 取消面试：仅未开始的场次；通知被指派面试官，留痕后状态终结 */
