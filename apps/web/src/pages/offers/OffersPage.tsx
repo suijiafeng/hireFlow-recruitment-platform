@@ -7,12 +7,15 @@ import {
   type OfferApprovalStatus,
   type OfferDecision,
 } from '@hireflow/shared';
-import { App, Popconfirm, Popover, Spin, Typography } from 'antd';
+import { App, Modal, Spin, Table, Typography } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { offersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
+import { RowActions } from '../../components/RowActions';
+import { useSyncedTableScroll } from '../../hooks/useSyncedTableScroll';
 import type { Offer, RetentionHint } from '../../api/types';
 import { DeclineEntryModal } from './DeclineEntryModal';
 import { RejectApprovalModal } from './RejectApprovalModal';
@@ -30,49 +33,50 @@ const GROUPS: Array<{ key: string; label: string; dot: string; tone: string }> =
   { key: 'DECLINED', label: '已拒绝', dot: 'hf-dot hf-dot--off', tone: 'hf-state--off' },
 ];
 
-/** AI 留存预测（辅助参考） */
-function RetentionPopover({ offerId }: { offerId: string }) {
+/** AI 留存预测（辅助参考）。从操作列的「···」里唤起，不再占一个常驻链接位 */
+function RetentionModal({ offerId, onClose }: { offerId: string | null; onClose: () => void }) {
   const [hint, setHint] = useState<RetentionHint | null>(null);
   const retentionMutation = useMutation({
-    mutationFn: () => offersApi.retention(offerId),
+    mutationFn: (id: string) => offersApi.retention(id),
     onSuccess: setHint,
   });
   return (
-    <Popover
+    <Modal
+      className="hf-modal"
       title="AI 留存预测（辅助参考）"
-      trigger="click"
-      onOpenChange={(open) => {
-        if (open && !hint && !retentionMutation.isPending) retentionMutation.mutate();
+      open={Boolean(offerId)}
+      onCancel={onClose}
+      footer={null}
+      destroyOnHidden
+      afterOpenChange={(open) => {
+        if (open && offerId) {
+          setHint(null);
+          retentionMutation.mutate(offerId);
+        }
       }}
-      content={
-        retentionMutation.isPending ? (
-          <Spin size="small" />
-        ) : hint ? (
-          <div className="w-260">
-            <span className="hf-kpi-num">{Math.round(hint.probability * 100)}%</span>
-            <span className="hf-muted u-ml-8">预计通过试用期并留存</span>
-            <ul className="plain-ol u-mt-8">
-              {hint.factors.map((f, i) => (
-                <li key={i} className="hf-secondary">
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <span className="hf-muted">点击生成</span>
-        )
-      }
     >
-      <span className="hf-link" onClick={(e) => e.stopPropagation()}>
-        AI 参考
-      </span>
-    </Popover>
+      {retentionMutation.isPending || !hint ? (
+        <Spin size="small" />
+      ) : (
+        <>
+          <span className="hf-kpi-num">{Math.round(hint.probability * 100)}%</span>
+          <span className="hf-muted u-ml-8">预计通过试用期并留存</span>
+          <ul className="plain-ol u-mt-8">
+            {hint.factors.map((f, i) => (
+              <li key={i} className="hf-secondary">
+                {f}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Modal>
   );
 }
 
 export function OffersPage() {
   const { message, modal } = App.useApp();
+  const [retentionFor, setRetentionFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const [rejectTarget, setRejectTarget] = useState<Offer | null>(null);
@@ -88,14 +92,13 @@ export function OffersPage() {
     void queryClient.invalidateQueries({ queryKey: ['board'] });
   };
 
-  const act = (fn: () => Promise<Offer>, success: string) => {
+  const act = (fn: () => Promise<Offer>, success: string) =>
     fn()
       .then(() => {
         message.success(success);
         invalidate();
       })
       .catch((error) => message.error(extractErrorMessage(error, '操作失败')));
-  };
 
   const copyPortalLink = async (offer: Offer) => {
     try {
@@ -177,103 +180,95 @@ export function OffersPage() {
     return <span className="hf-faint">—</span>;
   };
 
-  /** 操作列：按状态只给一个最可能的动作，其余进 Popconfirm/弹窗 */
+  /**
+   * 操作列：所有动作走 RowActions —— 平铺 2 个最常用的，其余收进「···」。
+   * 按「同一门控条件下的动作」分组展开，每个状态判断只写一次，避免同样的条件散在各处漂移。
+   */
   const actionCell = (o: Offer) => {
     const st = o.approvalStatus;
-    if (st === 'PENDING' && canApprove)
-      return (
-        <span className="u-flex-end u-flex-gap-12">
-          <RetentionPopover offerId={o.id} />
-          <Popconfirm title="批准该 Offer？" onConfirm={() => act(() => offersApi.approve(o.id), '已批准')}>
-            <span className="hf-link" onClick={(e) => e.stopPropagation()}>
-              通过
-            </span>
-          </Popconfirm>
-          <span
-            className="hf-link hf-link--danger"
-            onClick={(e) => {
-              e.stopPropagation();
-              setRejectTarget(o);
-            }}
-          >
-            驳回
-          </span>
-        </span>
-      );
-    if (st === 'REJECTED' && canInitiate)
-      return (
-        <span
-          className="hf-link"
-          onClick={(e) => {
-            e.stopPropagation();
-            setResubmitTarget(o);
-          }}
-        >
-          修改重提
-        </span>
-      );
-    if (st === 'APPROVED' && canInitiate)
-      return (
-        <Popconfirm
-          title="电子发送 Offer？"
-          description="将生成候选人免登录链接，答复期 5 个工作日"
-          onConfirm={() => act(() => offersApi.send(o.id), 'Offer 已发送，可复制候选人链接')}
-        >
-          <span className="hf-link" onClick={(e) => e.stopPropagation()}>
-            发送
-          </span>
-        </Popconfirm>
-      );
-    if ((st === 'SENT' || st === 'EXPIRED') && canInitiate)
-      return (
-        <span className="u-flex-end u-flex-gap-12">
-          <span
-            className="hf-link"
-            onClick={(e) => {
-              e.stopPropagation();
-              void copyPortalLink(o);
-            }}
-          >
-            复制链接
-          </span>
-          {!o.decision && !o.extendedOnce && (
-            <Popconfirm
-              title="续期该 Offer？"
-              description="重新给予 5 个工作日答复期（仅可续期一次）"
-              onConfirm={() => act(() => offersApi.extend(o.id), '已续期 5 个工作日')}
-            >
-              <span className="hf-link" onClick={(e) => e.stopPropagation()}>
-                续期
-              </span>
-            </Popconfirm>
-          )}
-          {st === 'SENT' && !o.decision && (
-            <Popconfirm
-              title="候选人已接受 Offer？将自动创建入职单"
-              onConfirm={() => act(() => offersApi.respond(o.id, 'ACCEPTED'), '已录入：接受，入职单已创建')}
-            >
-              <span className="hf-link" onClick={(e) => e.stopPropagation()}>
-                录入接受
-              </span>
-            </Popconfirm>
-          )}
-          {/* 录入拒绝：设计稿挂了 DeclineEntryModal 却没留入口，会让「代录拒绝」能力整个丢失，按原页面补回。
-              门控必须与「录入接受」一致限定 SENT——offers.service.applyDecision 对 EXPIRED 直接抛
-              BadRequestException，放开到 EXPIRED 会得到一个点了必然失败的按钮。 */}
-          {st === 'SENT' && !o.decision && (
-            <span
-              className="hf-link hf-link--danger"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeclineTarget(o);
-              }}
-            >
-              录入拒绝
-            </span>
-          )}
-        </span>
-      );
-    return <span className="hf-link">详情</span>;
+    const pendingApproval = st === 'PENDING' && canApprove;
+    /** 已发出、还挂在候选人那边（含超期）：链接与续期都归这一组 */
+    const outstanding = (st === 'SENT' || st === 'EXPIRED') && canInitiate;
+    /** 代录答复仅限 SENT：服务层 applyDecision 对 EXPIRED 直接抛错，放开只会得到点了必然失败的按钮 */
+    const answerable = st === 'SENT' && !o.decision;
+
+    /** 二次确认 + 请求 + 成功提示，是这一列里唯一重复的模板，收成一个函数 */
+    const ask = (title: string, content: string, run: () => Promise<Offer>, success: string) => () =>
+      modal.confirm({ title, content, cancelText: '取消', onOk: () => act(run, success) });
+
+    return (
+      <RowActions
+        actions={[
+          ...(pendingApproval
+            ? [
+                {
+                  key: 'approve',
+                  label: '通过',
+                  hint: '批准该 Offer',
+                  onClick: ask('批准该 Offer？', '批准后可发送给候选人。', () => offersApi.approve(o.id), '已批准'),
+                },
+                { key: 'reject', label: '驳回', hint: '驳回并填写原因', danger: true, onClick: () => setRejectTarget(o) },
+              ]
+            : []),
+          ...(st === 'REJECTED' && canInitiate
+            ? [{ key: 'resubmit', label: '重提', hint: '修改后重新提交审批', onClick: () => setResubmitTarget(o) }]
+            : []),
+          ...(st === 'APPROVED' && canInitiate
+            ? [
+                {
+                  key: 'send',
+                  label: '发送',
+                  hint: '电子发送 Offer 给候选人',
+                  onClick: ask(
+                    '电子发送 Offer？',
+                    '将生成候选人免登录链接，答复期 5 个工作日。',
+                    () => offersApi.send(o.id),
+                    'Offer 已发送，可复制候选人链接',
+                  ),
+                },
+              ]
+            : []),
+          ...(outstanding
+            ? [
+                { key: 'link', label: '通知', hint: '复制录用通知链接发给候选人', onClick: () => void copyPortalLink(o) },
+                ...(answerable
+                  ? [
+                      {
+                        key: 'accept',
+                        label: '接受',
+                        hint: '代候选人录入「接受」，将自动创建入职单',
+                        onClick: ask(
+                          '候选人已接受 Offer？',
+                          '将自动创建入职单。',
+                          () => offersApi.respond(o.id, 'ACCEPTED'),
+                          '已录入：接受，入职单已创建',
+                        ),
+                      },
+                      { key: 'decline', label: '拒绝', hint: '代候选人录入「拒绝」', danger: true, onClick: () => setDeclineTarget(o) },
+                    ]
+                  : []),
+                ...(!o.decision && !o.extendedOnce
+                  ? [
+                      {
+                        key: 'extend',
+                        label: '续期',
+                        hint: '重新给予 5 个工作日答复期（仅一次）',
+                        onClick: ask(
+                          '续期该 Offer？',
+                          '重新给予 5 个工作日答复期（仅可续期一次）。',
+                          () => offersApi.extend(o.id),
+                          '已续期 5 个工作日',
+                        ),
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
+          // 辅助参考，排在最后 —— 顺序靠后自然会被收进「···」
+          { key: 'retention', label: '预测', hint: 'AI 留存预测（辅助参考）', onClick: () => setRetentionFor(o.id) },
+        ]}
+      />
+    );
   };
 
   if (offersQuery.isError) {
@@ -285,6 +280,77 @@ export function OffersPage() {
       </div>
     );
   }
+
+  const groupListRef = useSyncedTableScroll<HTMLDivElement>();
+  /** 列宽合计，低于此宽度出现横向滚动而不是把列挤扁 */
+  const OFFER_TABLE_X = 848;
+  /** 首个非空分组才画表头，其余组直接接在下面，避免整页都是表头 */
+  const firstGroupKey = GROUPS.find((g) => visible.some((o) => groupKey(o) === g.key))?.key;
+
+  const offerColumns: TableProps<Offer>['columns'] = [
+    {
+      title: '候选人',
+      key: 'candidate',
+      width: 120,
+      render: (_, o) => <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>,
+    },
+    {
+      title: '职位',
+      key: 'job',
+      ellipsis: true,
+      render: (_, o) => (
+        <span className="u-flex-gap-10">
+          <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
+          <span className="hf-faint">{o.application.job.department.name}</span>
+        </span>
+      ),
+    },
+    {
+      title: '职级',
+      dataIndex: 'grade',
+      width: 60,
+      render: (grade: string | null) => <span className="hf-secondary hf-td--num">{grade ?? '—'}</span>,
+    },
+    {
+      title: '薪资',
+      key: 'salary',
+      width: 140,
+      // 无权限直接弱化，不显示「无权查看」四字 Tag
+      render: (_, o) =>
+        !canViewSalary ? (
+          <span className="hf-faint">••••</span>
+        ) : o.salary ? (
+          <span className="hf-td--num">
+            <b className="hf-secondary">¥{o.salary.base.toLocaleString()}</b>
+            <span className="hf-faint u-ml-4">× {12 + (o.salary.bonusMonths ?? 0)} 薪</span>
+          </span>
+        ) : (
+          <span className="hf-faint">—</span>
+        ),
+    },
+    {
+      title: '时效 / 答复',
+      key: 'reply',
+      width: 180,
+      ellipsis: true,
+      render: (_, o) => <span className="hf-ellipsis">{replyCell(o)}</span>,
+    },
+    {
+      title: '更新',
+      dataIndex: 'updatedAt',
+      width: 116,
+      align: 'right',
+      render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD HH:mm')}</span>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 132,
+      align: 'right',
+      fixed: 'right',
+      render: (_, o) => actionCell(o),
+    },
+  ];
 
   return (
     <div className="hf-page">
@@ -338,62 +404,34 @@ export function OffersPage() {
             </div>
           </div>
         ) : (
-          /* 按流程阶段分组，待审批排最上；取代分页 */
-          <div className="hf-table">
-            <div className="hf-thead">
-              <span className="hf-td w-160">候选人</span>
-              <span className="hf-td--grow">职位</span>
-              <span className="hf-td w-48">职级</span>
-              <span className="hf-td w-130">薪资</span>
-              <span className="hf-td--grow">时效 / 答复</span>
-              <span className="hf-td hf-td--right w-100">更新</span>
-              <span className="hf-td hf-td--right w-240">操作</span>
-            </div>
-            <div className="hf-tbody">
-              {GROUPS.map((g) => {
-                const items = visible.filter((o) => groupKey(o) === g.key);
-                if (items.length === 0) return null;
-                return (
-                  <div key={g.key}>
-                    <div className="hf-group-head">
-                      <span className={g.dot} />
-                      <span className={`hf-group-title ${g.tone}`}>{g.label}</span>
-                      <span className="hf-group-count">{items.length}</span>
-                    </div>
-                    {items.map((o) => (
-                      <div key={o.id} className={g.key === 'PENDING' ? 'hf-tr hf-tr--focus' : 'hf-tr'}>
-                        <span className="hf-td w-160">
-                          <span className="hf-primary hf-ellipsis">{o.application.candidate.name}</span>
-                        </span>
-                        <span className="hf-td--grow u-flex-gap-10">
-                          <span className="hf-secondary hf-ellipsis">{o.application.job.title}</span>
-                          <span className="hf-faint">{o.application.job.department.name}</span>
-                        </span>
-                        <span className="hf-td w-48 hf-secondary hf-td--num">{o.grade ?? '—'}</span>
-                        {/* 薪资：无权限直接弱化，不再显示「无权查看」四字 Tag */}
-                        <span className="hf-td w-130 hf-td--num">
-                          {!canViewSalary ? (
-                            <span className="hf-faint">••••</span>
-                          ) : o.salary ? (
-                            <>
-                              <b className="hf-secondary">¥{o.salary.base.toLocaleString()}</b>
-                              <span className="hf-faint u-ml-4">× {12 + (o.salary.bonusMonths ?? 0)} 薪</span>
-                            </>
-                          ) : (
-                            <span className="hf-faint">—</span>
-                          )}
-                        </span>
-                        <span className="hf-td--grow hf-ellipsis">{replyCell(o)}</span>
-                        <span className="hf-td hf-td--right w-100 hf-muted hf-td--num">
-                          {dayjs(o.updatedAt).format('MM-DD HH:mm')}
-                        </span>
-                        <span className="hf-td hf-td--right w-240">{actionCell(o)}</span>
-                      </div>
-                    ))}
+          /* 按流程阶段分组，待审批排最上；取代分页。
+             每组一张 Table：只有首个非空组显示表头，各组横滚由 useSyncedTableScroll 串起来 */
+          <div ref={groupListRef}>
+            {GROUPS.map((g) => {
+              const items = visible.filter((o) => groupKey(o) === g.key);
+              if (items.length === 0) return null;
+              const first = firstGroupKey === g.key;
+              return (
+                <div key={g.key}>
+                  <div className="hf-group-head">
+                    <span className={g.dot} />
+                    <span className={`hf-group-title ${g.tone}`}>{g.label}</span>
+                    <span className="hf-group-count">{items.length}</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="hf-atable hf-atable--fit">
+                    <Table<Offer>
+                      columns={offerColumns}
+                      dataSource={items}
+                      rowKey="id"
+                      pagination={false}
+                      showHeader={first}
+                      scroll={{ x: OFFER_TABLE_X }}
+                      rowClassName={() => (g.key === 'PENDING' ? 'hf-row--todo' : '')}
+                    />
+                  </div>
+                </div>
+              );
+            })}
             <div className="hf-panel-foot hf-panel-foot--tight">
               <span>全部 {all.length} 份 Offer</span>
               <span className="hf-faint">
@@ -404,6 +442,7 @@ export function OffersPage() {
         )}
       </div>
 
+      <RetentionModal offerId={retentionFor} onClose={() => setRetentionFor(null)} />
       <RejectApprovalModal offer={rejectTarget} onClose={() => setRejectTarget(null)} onDone={invalidate} />
       <ResubmitModal offer={resubmitTarget} onClose={() => setResubmitTarget(null)} onDone={invalidate} />
       <DeclineEntryModal offer={declineTarget} onClose={() => setDeclineTarget(null)} onDone={invalidate} />
