@@ -15,8 +15,8 @@ export class AnalyticsController {
   @Get('overview')
   @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
   @ApiOperation({ summary: '大盘总览指标' })
-  overview() {
-    return this.analyticsService.overview();
+  overview(@CurrentUser() user: JwtUser) {
+    return this.analyticsService.overview(user);
   }
 
   @Get('todos')
@@ -28,22 +28,22 @@ export class AnalyticsController {
   @Get('funnel/:jobId')
   @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
   @ApiOperation({ summary: '职位招聘漏斗（人数与转化率）' })
-  funnel(@Param('jobId') jobId: string) {
-    return this.analyticsService.funnel(jobId);
+  funnel(@Param('jobId') jobId: string, @CurrentUser() user: JwtUser) {
+    return this.analyticsService.funnel(jobId, user);
   }
 
   @Post('insight/:jobId')
   @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
   @ApiOperation({ summary: 'AI 招聘健康度诊断' })
-  insight(@Param('jobId') jobId: string) {
-    return this.analyticsService.insight(jobId);
+  insight(@Param('jobId') jobId: string, @CurrentUser() user: JwtUser) {
+    return this.analyticsService.insight(jobId, user);
   }
 
   @Get('trend')
   @RequirePermissions(PERMISSIONS.DASHBOARD_VIEW)
   @ApiOperation({ summary: '近 8 周投递/入职趋势（大盘折线图）' })
-  trend() {
-    return this.analyticsService.trend();
+  trend(@CurrentUser() user: JwtUser) {
+    return this.analyticsService.trend(user);
   }
 
   @Get('insights')
@@ -53,7 +53,7 @@ export class AnalyticsController {
     description:
       'range 与 deptId 按「应聘创建时间」划同期群，五组指标共用同一 scope；响应 scope 字段回显实际生效口径与样本量。',
   })
-  insights(@Query() query: QueryInsightsDto) {
-    return this.analyticsService.insights(query);
+  insights(@Query() query: QueryInsightsDto, @CurrentUser() user: JwtUser) {
+    return this.analyticsService.insights(query, user);
   }
 }

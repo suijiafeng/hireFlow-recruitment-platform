@@ -82,8 +82,8 @@
 ### 步骤 1：克隆并安装依赖
 
 ```bash
-git clone https://github.com/suijiafeng/ai-powered-pecruitment-platform.git
-cd ai-powered-pecruitment-platform
+git clone https://github.com/suijiafeng/hireFlow-recruitment-platform.git
+cd hireFlow-recruitment-platform
 npm install
 ```
 
@@ -412,8 +412,8 @@ HireFlow 遵循以下核心设计理念，确保系统稳定、安全、可追�
 
 1. **Fork & Clone**
    ```bash
-   git clone https://github.com/suijiafeng/ai-powered-pecruitment-platform.git
-   cd ai-powered-pecruitment-platform
+   git clone https://github.com/suijiafeng/hireFlow-recruitment-platform.git
+   cd hireFlow-recruitment-platform
    npm install
    ```
 
@@ -450,7 +450,7 @@ HireFlow 遵循以下核心设计理念，确保系统稳定、安全、可追�
 
 ### 报告 Bug
 
-如发现 bug，请通过 [Issues](https://github.com/suijiafeng/ai-powered-pecruitment-platform.issues) 报告，包含：
+如发现 bug，请通过 [Issues](https://github.com/suijiafeng/hireFlow-recruitment-platform.issues) 报告，包含：
 - 复现步骤
 - 预期行为 vs 实际行为
 - 环境信息（Node 版本、浏览器等）

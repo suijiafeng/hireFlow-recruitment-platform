@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ACTIVITY_ACTIONS, PERMISSIONS } from '@hireflow/shared';
+import { departmentScopeOf } from '../../common/data-scope';
 import type { JwtUser } from '../../common/decorators/current-user.decorator';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -12,6 +13,15 @@ export class AnalyticsService {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
   ) {}
+
+  /**
+   * 报表侧的行级范围：用人经理（DEPARTMENT）只统计本部门职位的应聘。
+   * 看板/候选人/Offer 都按部门收紧，报表若不收紧，同一批数据换个端点就全公司可见
+   * （TTH、渠道效能、面试官姓名 + 通过率偏离度都在里面）。
+   */
+  private deptScopeOf(user: JwtUser): string | null {
+    return departmentScopeOf(user);
+  }
 
   /** 待办事项聚合 To-Do Center */
   async todos(user: JwtUser) {
@@ -80,14 +90,19 @@ export class AnalyticsService {
   }
 
   /** 大盘总览指标。pausedJobs 单列：满编自动暂停后「招聘中 0」需要有解释 */
-  async overview() {
+  async overview(user: JwtUser) {
     const now = new Date();
+    const dept = this.deptScopeOf(user);
+    const jobWhere = dept ? { departmentId: dept } : {};
+    const appJobWhere = dept ? { job: { departmentId: dept } } : {};
     const [openJobs, pausedJobs, candidates, upcomingInterviews, hired] = await this.prisma.$transaction([
-      this.prisma.job.count({ where: { status: 'OPEN' } }),
-      this.prisma.job.count({ where: { status: 'PAUSED' } }),
-      this.prisma.candidate.count(),
-      this.prisma.interview.count({ where: { status: 'SCHEDULED', scheduledAt: { gte: now } } }),
-      this.prisma.application.count({ where: { status: 'HIRED' } }),
+      this.prisma.job.count({ where: { ...jobWhere, status: 'OPEN' } }),
+      this.prisma.job.count({ where: { ...jobWhere, status: 'PAUSED' } }),
+      this.prisma.candidate.count(dept ? { where: { applications: { some: appJobWhere } } } : undefined),
+      this.prisma.interview.count({
+        where: { status: 'SCHEDULED', scheduledAt: { gte: now }, ...(dept ? { application: appJobWhere } : {}) },
+      }),
+      this.prisma.application.count({ where: { status: 'HIRED', ...appJobWhere } }),
     ]);
     return { openJobs, pausedJobs, candidates, upcomingInterviews, hired };
   }
@@ -99,12 +114,17 @@ export class AnalyticsService {
    * 漏斗最该回答的「卡在哪一环」反而看不出来。回放口径与阶段停留 P50/P90 一致（见 insights）。
    * current 仍是快照：停留在该阶段的在途 + 末列已入职。
    */
-  async funnel(jobId: string) {
+  async funnel(jobId: string, user: JwtUser) {
+    const dept = this.deptScopeOf(user);
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
       include: { stages: { orderBy: { order: 'asc' } } },
     });
     if (!job) throw new NotFoundException('职位不存在');
+    // 与看板同规则：用人经理只看本部门职位的漏斗
+    if (dept && job.departmentId !== dept) {
+      throw new ForbiddenException('仅可查看本部门职位的漏斗（数据范围：本部门）');
+    }
 
     const apps = await this.prisma.application.findMany({
       where: { jobId },
@@ -159,8 +179,8 @@ export class AnalyticsService {
   }
 
   /** AI 招聘健康度诊断 */
-  async insight(jobId: string) {
-    const funnel = await this.funnel(jobId);
+  async insight(jobId: string, user: JwtUser) {
+    const funnel = await this.funnel(jobId, user);
     const { data, meta } = await this.ai.funnelInsight({
       jobTitle: funnel.job.title,
       stages: funnel.stages.map((s) => ({ name: s.name, count: s.reached })),
@@ -173,20 +193,34 @@ export class AnalyticsService {
    * 投递 = Application.createdAt；入职 = onboarding.completed 留痕（与 TTH 口径一致）。
    * 周一为周起点；当前数据量级直接内存分桶。
    */
-  async trend(weeks = 8) {
+  async trend(user: JwtUser, weeks = 8) {
+    const dept = this.deptScopeOf(user);
     const WEEK = 7 * 86_400_000;
     const now = new Date();
     const dayOfWeek = (now.getDay() + 6) % 7; // 周一=0
     const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
     const start = new Date(thisMonday.getTime() - (weeks - 1) * WEEK);
 
+    // onboarding.completed 留痕的 entityId 是 Application id，部门收紧时先取本部门应聘 id 再回查留痕
+    const scopedAppIds = dept
+      ? (
+          await this.prisma.application.findMany({
+            where: { job: { departmentId: dept } },
+            select: { id: true },
+          })
+        ).map((a) => a.id)
+      : null;
     const [apps, completions] = await Promise.all([
       this.prisma.application.findMany({
-        where: { createdAt: { gte: start } },
+        where: { createdAt: { gte: start }, ...(dept ? { job: { departmentId: dept } } : {}) },
         select: { createdAt: true },
       }),
       this.prisma.activityLog.findMany({
-        where: { action: 'onboarding.completed', createdAt: { gte: start } },
+        where: {
+          action: 'onboarding.completed',
+          createdAt: { gte: start },
+          ...(scopedAppIds ? { entityId: { in: scopedAppIds } } : {}),
+        },
         select: { createdAt: true },
       }),
     ]);
@@ -218,9 +252,12 @@ export class AnalyticsService {
    * 五组指标（TTH / 渠道 / Offer / 面试官 / 阶段停留）共用下面这一个 scope，
    * 不允许只过滤其中一部分——那会让四张图的分母互相对不上。
    */
-  async insights(query: QueryInsightsDto = {}) {
+  async insights(query: QueryInsightsDto = {}, user?: JwtUser) {
     const DAY = 86_400_000;
-    const { range = 'all', deptId } = query;
+    const { range = 'all' } = query;
+    // 行级范围优先于查询参数：用人经理传任何 deptId 都被本部门覆盖，不是「默认值」而是上限
+    const forcedDept = user ? this.deptScopeOf(user) : null;
+    const deptId = forcedDept ?? query.deptId;
 
     const rangeStart = (() => {
       const now = new Date();
