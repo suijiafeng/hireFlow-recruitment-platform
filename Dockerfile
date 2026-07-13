@@ -10,7 +10,8 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-# 保留 devDependencies：运行期入口需要 prisma CLI（迁移）与 tsx（种子）
+# 构建 web 产物需要 vite/tsc，因此这里装全量依赖；devDependencies 只存在于构建阶段，
+# 最终 nginx 镜像只拷 dist，不带 node_modules（API 镜像的依赖裁剪见 Dockerfile.api）
 RUN npm ci
 
 # ---- 构建层：只需 shared → web（api 镜像见 Dockerfile.api，构建互不影响）----
