@@ -1,13 +1,23 @@
 import { PlusOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS, RoleCode } from '@hireflow/shared';
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Spin, Typography } from 'antd';
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Spin, Table, Typography } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { auditApi, companyDocsApi, departmentsApi, rbacApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
-import type { CompanyDoc, CreateRoleInput, DepartmentItem, InviteUserInput, PermissionDef, UserItem } from '../../api/types';
+import type {
+  ActivityItem,
+  CompanyDoc,
+  CreateRoleInput,
+  DepartmentItem,
+  InviteUserInput,
+  PermissionDef,
+  Role,
+  UserItem,
+} from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
 import { downloadCsv } from '../../utils/csv';
 
@@ -50,7 +60,7 @@ function RolesSection({ onGoAudit }: { onGoAudit: () => void }) {
   const auditQuery = useQuery({ queryKey: ['audit', 1], queryFn: () => auditApi.recent(1) });
 
   const roles = rolesQuery.data ?? [];
-  const role = roles.find((r) => r.id === selectedId) ?? roles.find((r) => r.code === 'HR') ?? roles[0];
+  const role = roles.find((r) => r.id === selectedId) ?? null;
   const roleId = role?.id;
 
   useEffect(() => {
@@ -76,7 +86,7 @@ function RolesSection({ onGoAudit }: { onGoAudit: () => void }) {
         dataScope: values.dataScope as CreateRoleInput['dataScope'],
       }),
     onSuccess: (role) => {
-      message.success(`角色「${role.name}」已创建，接下来在右栏勾选权限并保存`);
+      message.success(`角色「${role.name}」已创建，接着勾选权限并保存`);
       setCreateOpen(false);
       createForm.resetFields();
       void queryClient.invalidateQueries({ queryKey: ['roles'] });
@@ -117,6 +127,66 @@ function RolesSection({ onGoAudit }: { onGoAudit: () => void }) {
   const toggle = (code: string) =>
     setSelectedCodes((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
 
+  const roleColumns: TableProps<Role>['columns'] = [
+    {
+      title: '角色',
+      dataIndex: 'name',
+      render: (name: string) => <span className="hf-primary hf-ellipsis">{name}</span>,
+    },
+    {
+      title: '角色码',
+      dataIndex: 'code',
+      width: 152,
+      render: (code: string) => <span className="hf-muted hf-mono">{code}</span>,
+    },
+    {
+      title: '数据范围',
+      dataIndex: 'dataScope',
+      width: 100,
+      render: (scope: string) => <span className="hf-secondary">{DATA_SCOPE_LABEL[scope] ?? scope}</span>,
+    },
+    {
+      title: '成员',
+      key: 'members',
+      width: 64,
+      align: 'right',
+      render: (_, r) =>
+        r._count.users > 0 ? (
+          <span className="hf-secondary hf-td--num">{r._count.users}</span>
+        ) : (
+          <span className="hf-faint">—</span>
+        ),
+    },
+    {
+      title: '权限',
+      key: 'perms',
+      width: 116,
+      align: 'right',
+      render: (_, r) =>
+        // 门户角色没有后台权限，显示 0 项会被误读成「权限被清空了」
+        r.permissions.length === 0 ? (
+          <span className="hf-faint">门户角色 · 无后台权限</span>
+        ) : (
+          <span className="hf-progress-num">{r.permissions.length} 项</span>
+        ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 72,
+      align: 'right',
+      fixed: 'right',
+      render: (_, r) => {
+        const editable = canManage && r.code !== 'ADMIN';
+        return (
+          <span className={editable ? 'hf-link' : 'hf-link--off'} onClick={() => editable && setSelectedId(r.id)}>
+            编辑
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
     <>
       <div className="hf-section-head">
@@ -141,60 +211,18 @@ function RolesSection({ onGoAudit }: { onGoAudit: () => void }) {
         <span>权限与数据范围随登录令牌下发，调整后相关账号需重新登录方可生效。系统管理员始终拥有全部权限，不可编辑。</span>
       </div>
 
-      <div className="hf-cols">
-        <div className="hf-col-main">
-          {/* 角色不多，表格高度随内容；剩余空间给「最近权限变更」 */}
-          <div className="hf-table hf-table--fit">
-            <div className="hf-thead">
-              <span className="hf-td--grow">角色</span>
-              <span className="hf-td w-180">角色码</span>
-              <span className="hf-td w-120">数据范围</span>
-              <span className="hf-td hf-td--right w-90">成员</span>
-              <span className="hf-td hf-td--right w-180">功能点权限</span>
-              <span className="hf-td hf-td--right w-90">操作</span>
-            </div>
-            <div>
-              {rolesQuery.isLoading ? (
-                <div className="hf-panel-body u-flex-center">
-                  <Spin />
-                </div>
-              ) : (
-                roles.map((r) => {
-                  const portal = r.permissions.length === 0;
-                  return (
-                    <div
-                      key={r.id}
-                      className={r.id === role?.id ? 'hf-tr hf-tr--on' : 'hf-tr'}
-                      onClick={() => setSelectedId(r.id)}
-                    >
-                      <span className="hf-td--grow hf-primary hf-ellipsis">{r.name}</span>
-                      <span className="hf-td w-180 hf-muted hf-mono">{r.code}</span>
-                      <span className="hf-td w-120 hf-secondary">{DATA_SCOPE_LABEL[r.dataScope] ?? r.dataScope}</span>
-                      <span className="hf-td hf-td--right w-90 hf-td--num">
-                        {r._count.users > 0 ? (
-                          <span className="hf-secondary">{r._count.users}</span>
-                        ) : (
-                          <span className="hf-faint">—</span>
-                        )}
-                      </span>
-                      <span className="hf-td hf-td--right w-180">
-                        {portal ? (
-                          <span className="hf-faint">门户角色 · 无后台权限</span>
-                        ) : (
-                          <span className="hf-progress-num">{r.permissions.length} 项</span>
-                        )}
-                      </span>
-                      <span className="hf-td hf-td--right w-90">
-                        <span className={canManage && r.code !== 'ADMIN' ? 'hf-link' : 'hf-link--off'}>编辑权限</span>
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+      <div className="hf-atable hf-atable--fit">
+        <Table<Role>
+          columns={roleColumns}
+          dataSource={roles}
+          rowKey="id"
+          loading={rolesQuery.isLoading}
+          pagination={false}
+          scroll={{ x: 644 }}
+        />
+      </div>
 
-          <div className="hf-panel hf-panel--grow">
+      <div className="hf-panel hf-panel--grow">
             <div className="hf-panel-head">
               <span className="hf-panel-title">最近权限变更</span>
               <span className="hf-link" onClick={onGoAudit}>
@@ -220,82 +248,83 @@ function RolesSection({ onGoAudit }: { onGoAudit: () => void }) {
                     </span>
                   </div>
                 ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 右栏：权限矩阵常驻，取代 620px 弹窗 */}
-        <div className="hf-rail">
-          <div className="hf-panel hf-panel--grow">
-            <div className="hf-panel-head">
-              <div>
-                <span className="hf-panel-title">{role?.name ?? '选择角色'}</span>
-                <div className="hf-panel-sub">
-                  数据范围：{role ? DATA_SCOPE_LABEL[role.dataScope] : '—'} · {role?._count.users ?? 0} 名成员
-                </div>
-              </div>
-              <span className="hf-faint hf-td--num">
-                已选 {selected.length} / {totalPerms} 项
-              </span>
-            </div>
-            <div className="hf-panel-body">
-              {permissionsQuery.isLoading ? (
-                <Spin size="small" />
-              ) : (
-                groups.map(([group, defs]) => {
-                  const on = defs.filter((d) => selected.includes(d.code)).length;
-                  return (
-                    <div key={group} className="hf-perm-group">
-                      <div className="u-flex-between u-mb-4">
-                        <span className="hf-caption">{group}</span>
-                        <span className={on === defs.length ? 'hf-faint hf-state--ok' : 'hf-faint'}>
-                          {on} / {defs.length}
-                        </span>
-                      </div>
-                      <div className="hf-perm-grid">
-                        {defs.map((d) => {
-                          const checked = selected.includes(d.code);
-                          return (
-                            <span
-                              key={d.code}
-                              className="hf-perm-item"
-                              onClick={() => {
-                                if (canManage && !isAdmin) toggle(d.code);
-                              }}
-                            >
-                              <span className={checked ? 'hf-check hf-check--on' : 'hf-check'}>
-                                {checked ? '✓' : ''}
-                              </span>
-                              <span className={checked ? 'hf-check-label' : 'hf-check-label hf-state--off'}>
-                                {d.name}
-                              </span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            {canManage && !isAdmin && (
-              <div className="hf-panel-foot">
-                <Button type="primary" block loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                  保存权限
-                </Button>
-                {defaults && <Button onClick={() => setSelectedCodes([...defaults])}>恢复默认</Button>}
-              </div>
-            )}
-          </div>
         </div>
       </div>
+
+      {/* 权限矩阵：原本是右栏常驻，改成从操作列唤起的弹窗，列表才能占满宽度 */}
+      <Modal
+        className="hf-modal"
+        width={720}
+        title={
+          <>
+            {role?.name ?? '角色权限'}
+            <div className="hf-modal-sub">
+              数据范围：{role ? DATA_SCOPE_LABEL[role.dataScope] : '—'} · {role?._count.users ?? 0} 名成员 · 已选{' '}
+              {selected.length} / {totalPerms} 项
+            </div>
+          </>
+        }
+        open={Boolean(selectedId)}
+        onCancel={() => setSelectedId(null)}
+        destroyOnHidden
+        footer={
+          canManage && !isAdmin ? (
+            <>
+              <span className="hf-modal-hint">保存后相关账号需重新登录才生效</span>
+              {defaults && <Button onClick={() => setSelectedCodes([...defaults])}>恢复默认</Button>}
+              <Button onClick={() => setSelectedId(null)}>取消</Button>
+              <Button type="primary" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                保存权限
+              </Button>
+            </>
+          ) : (
+            // 系统管理员固定全量权限，只读展示，不给保存按钮
+            <span className="hf-modal-hint">该角色的权限不可编辑</span>
+          )
+        }
+      >
+        {permissionsQuery.isLoading ? (
+          <Spin size="small" />
+        ) : (
+          groups.map(([group, defs]) => {
+            const on = defs.filter((d) => selected.includes(d.code)).length;
+            return (
+              <div key={group} className="hf-perm-group">
+                <div className="u-flex-between u-mb-4">
+                  <span className="hf-caption">{group}</span>
+                  <span className={on === defs.length ? 'hf-faint hf-state--ok' : 'hf-faint'}>
+                    {on} / {defs.length}
+                  </span>
+                </div>
+                <div className="hf-perm-grid">
+                  {defs.map((d) => {
+                    const checked = selected.includes(d.code);
+                    return (
+                      <span
+                        key={d.code}
+                        className="hf-perm-item"
+                        onClick={() => {
+                          if (canManage && !isAdmin) toggle(d.code);
+                        }}
+                      >
+                        <span className={checked ? 'hf-check hf-check--on' : 'hf-check'}>{checked ? '✓' : ''}</span>
+                        <span className={checked ? 'hf-check-label' : 'hf-check-label hf-state--off'}>{d.name}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </Modal>
 
       <Modal
         className="hf-modal"
         title={
           <>
             新建角色
-            <div className="hf-modal-sub">创建后在右栏勾选权限点并保存</div>
+            <div className="hf-modal-sub">创建后会直接打开权限弹窗，勾选权限点并保存</div>
           </>
         }
         open={createOpen}
@@ -401,6 +430,65 @@ function MembersSection() {
   const users = (usersQuery.data ?? []).filter((u) => !keyword || u.name.includes(keyword) || u.email.includes(keyword));
   const active = users.filter((u) => u.status === 'ACTIVE').length;
 
+  const userColumns: TableProps<UserItem>['columns'] = [
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      width: 148,
+      render: (name: string) => <span className="hf-primary hf-ellipsis">{name}</span>,
+    },
+    {
+      title: '邮箱',
+      dataIndex: 'email',
+      width: 240,
+      ellipsis: true,
+      render: (email: string) => <span className="hf-secondary hf-ellipsis">{email}</span>,
+    },
+    {
+      title: '部门',
+      key: 'dept',
+      width: 140,
+      render: (_, u) => <span className="hf-secondary">{u.department?.name ?? '—'}</span>,
+    },
+    {
+      title: '状态',
+      key: 'status',
+      width: 100,
+      render: (_, u) => {
+        const on = u.status === 'ACTIVE';
+        return (
+          <span className={`hf-state ${on ? '' : 'hf-state--off'}`}>
+            <span className={on ? 'hf-dot hf-dot--ok' : 'hf-dot hf-dot--off'} />
+            {on ? '启用' : '停用'}
+          </span>
+        );
+      },
+    },
+    {
+      // 角色：一行文本，取代每行几个 Tag
+      title: '角色',
+      key: 'roles',
+      ellipsis: true,
+      render: (_, u) => (
+        <span className={u.status === 'ACTIVE' ? 'hf-secondary hf-ellipsis' : 'hf-faint hf-ellipsis'}>
+          {u.roles.map(({ role }) => role.name).join(' · ') || '（未分配）'}
+        </span>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 110,
+      align: 'right',
+      fixed: 'right',
+      render: (_, u) => (
+        <span className="hf-link" onClick={() => setEditing(u)}>
+          分配角色
+        </span>
+      ),
+    },
+  ];
+
   return (
     <>
       <div className="hf-section-head">
@@ -418,46 +506,21 @@ function MembersSection() {
         </div>
       </div>
 
-      <div className="hf-table">
-        <div className="hf-thead">
-          <span className="hf-td w-148">姓名</span>
-          <span className="hf-td w-240">邮箱</span>
-          <span className="hf-td w-140">部门</span>
-          <span className="hf-td w-100">状态</span>
-          <span className="hf-td--grow">角色</span>
-          <span className="hf-td hf-td--right w-110">操作</span>
-        </div>
-        <div className="hf-tbody">
-          {usersQuery.isLoading ? (
-            <div className="hf-panel-body u-flex-center">
-              <Spin />
-            </div>
-          ) : (
-            users.map((u) => {
-              const on = u.status === 'ACTIVE';
-              return (
-                <div key={u.id} className={on ? 'hf-tr' : 'hf-tr hf-tr--muted'} onClick={() => setEditing(u)}>
-                  <span className="hf-td w-148">
-                    <span className="hf-primary hf-ellipsis">{u.name}</span>
-                  </span>
-                  <span className="hf-td w-240 hf-secondary hf-ellipsis">{u.email}</span>
-                  <span className="hf-td w-140 hf-secondary">{u.department?.name ?? '—'}</span>
-                  <span className={`hf-td w-100 hf-state ${on ? '' : 'hf-state--off'}`}>
-                    <span className={on ? 'hf-dot hf-dot--ok' : 'hf-dot hf-dot--off'} />
-                    {on ? '启用' : '停用'}
-                  </span>
-                  {/* 角色：一行文本，取代每行几个 Tag */}
-                  <span className={on ? 'hf-td--grow hf-secondary hf-ellipsis' : 'hf-td--grow hf-faint hf-ellipsis'}>
-                    {u.roles.map(({ role }) => role.name).join(' · ') || '（未分配）'}
-                  </span>
-                  <span className="hf-td hf-td--right w-110">
-                    <span className="hf-link">分配角色</span>
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
+      <div className="hf-atable">
+        <Table<UserItem>
+          columns={userColumns}
+          dataSource={users}
+          rowKey="id"
+          loading={usersQuery.isLoading}
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: false,
+            hideOnSinglePage: true,
+            showTotal: (t, [f, to]) => `第 ${f}–${to} 条 / 共 ${t} 条`,
+          }}
+          scroll={{ x: 900 }}
+          rowClassName={(u) => (u.status === 'ACTIVE' ? '' : 'hf-row--muted')}
+        />
       </div>
 
       <Modal
@@ -639,6 +702,84 @@ function DepartmentsSection() {
   const depts = departmentsQuery.data ?? [];
   const maxUsers = Math.max(...depts.map((d) => d._count.users), 1);
 
+  const deptColumns: TableProps<DepartmentItem>['columns'] = [
+    {
+      title: '部门',
+      dataIndex: 'name',
+      render: (name: string) => <span className="hf-primary hf-ellipsis">{name}</span>,
+    },
+    {
+      title: '成员分布',
+      key: 'dist',
+      width: 220,
+      render: (_, d) => (
+        <span className="hf-progress">
+          <span className="hf-bar-track">
+            <span
+              className="hf-bar-fill"
+              style={cssVars({ '--w': `${Math.round((d._count.users / maxUsers) * 100)}%` })}
+            />
+          </span>
+        </span>
+      ),
+    },
+    {
+      title: '成员',
+      key: 'users',
+      width: 90,
+      align: 'right',
+      render: (_, d) => <span className="hf-progress-num">{d._count.users}</span>,
+    },
+    {
+      title: '职位',
+      key: 'jobs',
+      width: 90,
+      align: 'right',
+      render: (_, d) => <span className="hf-secondary hf-td--num">{d._count.jobs}</span>,
+    },
+    {
+      title: '子部门',
+      key: 'children',
+      width: 90,
+      align: 'right',
+      render: (_, d) => (
+        <span className="hf-muted hf-td--num">{d._count.children > 0 ? d._count.children : '—'}</span>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      align: 'right',
+      fixed: 'right',
+      render: (_, d) => {
+        const empty = d._count.users + d._count.jobs + d._count.children === 0;
+        return (
+          <span className="u-flex-end u-flex-gap-14">
+            <span
+              className="hf-link"
+              onClick={() => {
+                setEditing(d);
+                form.setFieldsValue({ name: d.name });
+              }}
+            >
+              改名
+            </span>
+            {empty ? (
+              <Popconfirm title={`删除部门「${d.name}」？`} onConfirm={() => removeMutation.mutate(d.id)}>
+                <span className="hf-link hf-link--danger">删除</span>
+              </Popconfirm>
+            ) : (
+              <span className="hf-link--off" title="部门下还有职位 / 成员 / 子部门，需先清空或转移">
+                删除
+              </span>
+            )}
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
     <>
       <div className="hf-section-head">
@@ -651,58 +792,14 @@ function DepartmentsSection() {
         </Button>
       </div>
 
-      <div className="hf-table">
-        <div className="hf-thead">
-          <span className="hf-td--grow">部门</span>
-          <span className="hf-td w-220">成员分布</span>
-          <span className="hf-td hf-td--right w-90">成员</span>
-          <span className="hf-td hf-td--right w-90">职位</span>
-          <span className="hf-td hf-td--right w-90">子部门</span>
-          <span className="hf-td hf-td--right w-120">操作</span>
-        </div>
-        <div className="hf-tbody">
-          {depts.map((d) => {
-            const empty = d._count.users + d._count.jobs + d._count.children === 0;
-            return (
-              <div key={d.id} className="hf-tr">
-                <span className="hf-td--grow hf-primary hf-ellipsis">{d.name}</span>
-                <span className="hf-td w-220 hf-progress">
-                  <span className="hf-bar-track">
-                    <span
-                      className="hf-bar-fill"
-                      style={cssVars({ '--w': `${Math.round((d._count.users / maxUsers) * 100)}%` })}
-                    />
-                  </span>
-                </span>
-                <span className="hf-td hf-td--right w-90 hf-progress-num">{d._count.users}</span>
-                <span className="hf-td hf-td--right w-90 hf-secondary hf-td--num">{d._count.jobs}</span>
-                <span className="hf-td hf-td--right w-90 hf-muted hf-td--num">
-                  {d._count.children > 0 ? d._count.children : '—'}
-                </span>
-                <span className="hf-td hf-td--right w-120 u-flex-end u-flex-gap-14">
-                  <span
-                    className="hf-link"
-                    onClick={() => {
-                      setEditing(d);
-                      form.setFieldsValue({ name: d.name });
-                    }}
-                  >
-                    改名
-                  </span>
-                  {empty ? (
-                    <Popconfirm title={`删除部门「${d.name}」？`} onConfirm={() => removeMutation.mutate(d.id)}>
-                      <span className="hf-link hf-link--danger">删除</span>
-                    </Popconfirm>
-                  ) : (
-                    <span className="hf-link--off" title="部门下还有职位 / 成员 / 子部门，需先清空或转移">
-                      删除
-                    </span>
-                  )}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+      <div className="hf-atable">
+        <Table<DepartmentItem>
+          columns={deptColumns}
+          dataSource={depts}
+          rowKey="id"
+          pagination={false}
+          scroll={{ x: 780 }}
+        />
         <div className="hf-panel-foot hf-panel-foot--tight">
           <span>部门下还有职位 / 成员 / 子部门时不可删除，需先清空或转移</span>
         </div>
@@ -784,7 +881,62 @@ function CompanyDocsSection() {
     (d) =>
       !keyword || d.title.includes(keyword) || d.tags.some((t) => t.includes(keyword)) || d.content.includes(keyword),
   );
-  const preview = docs.find((d) => d.id === previewId) ?? docs[0];
+  const preview = docs.find((d) => d.id === previewId) ?? null;
+
+  const docColumns: TableProps<CompanyDoc>['columns'] = [
+    {
+      title: '标题',
+      dataIndex: 'title',
+      width: 200,
+      render: (title: string) => <span className="hf-primary hf-ellipsis">{title}</span>,
+    },
+    {
+      title: '标签',
+      key: 'tags',
+      ellipsis: true,
+      render: (_, d) => <span className="hf-secondary hf-ellipsis">{d.tags.join(' · ') || '—'}</span>,
+    },
+    {
+      title: '篇幅',
+      key: 'size',
+      width: 100,
+      align: 'right',
+      render: (_, d) => <span className="hf-muted hf-td--num">{(d.content.length / 1000).toFixed(1)}k 字</span>,
+    },
+    {
+      title: '更新',
+      dataIndex: 'updatedAt',
+      width: 130,
+      align: 'right',
+      render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD HH:mm')}</span>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      align: 'right',
+      fixed: 'right',
+      render: (_, d) => (
+        <span className="u-flex-end u-flex-gap-12">
+          <span className="hf-link" onClick={() => setPreviewId(d.id)}>
+            预览
+          </span>
+          <span
+            className="hf-link"
+            onClick={() => {
+              setEditing(d);
+              form.setFieldsValue({ title: d.title, content: d.content, tags: d.tags });
+            }}
+          >
+            编辑
+          </span>
+          <Popconfirm title={`删除文档「${d.title}」？`} onConfirm={() => removeMutation.mutate(d.id)}>
+            <span className="hf-link hf-link--danger">删除</span>
+          </Popconfirm>
+        </span>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -801,76 +953,48 @@ function CompanyDocsSection() {
         </div>
       </div>
 
-      <div className="hf-cols">
-        <div className="hf-table">
-          <div className="hf-thead">
-            <span className="hf-td w-200">标题</span>
-            <span className="hf-td--grow">标签</span>
-            <span className="hf-td hf-td--right w-100">篇幅</span>
-            <span className="hf-td hf-td--right w-130">更新</span>
-            <span className="hf-td hf-td--right w-100">操作</span>
-          </div>
-          <div className="hf-tbody">
-            {docs.map((d) => (
-              <div
-                key={d.id}
-                className={d.id === preview?.id ? 'hf-tr hf-tr--on' : 'hf-tr'}
-                onClick={() => setPreviewId(d.id)}
-              >
-                <span className="hf-td w-200 hf-primary hf-ellipsis">{d.title}</span>
-                <span className="hf-td--grow hf-secondary hf-ellipsis">{d.tags.join(' · ') || '—'}</span>
-                <span className="hf-td hf-td--right w-100 hf-muted hf-td--num">
-                  {(d.content.length / 1000).toFixed(1)}k 字
-                </span>
-                <span className="hf-td hf-td--right w-130 hf-muted hf-td--num">
-                  {dayjs(d.updatedAt).format('MM-DD HH:mm')}
-                </span>
-                <span className="hf-td hf-td--right w-100 u-flex-end u-flex-gap-12">
-                  <span
-                    className="hf-link"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditing(d);
-                      form.setFieldsValue({ title: d.title, content: d.content, tags: d.tags });
-                    }}
-                  >
-                    编辑
-                  </span>
-                  <Popconfirm title={`删除文档「${d.title}」？`} onConfirm={() => removeMutation.mutate(d.id)}>
-                    <span className="hf-link hf-link--danger" onClick={(e) => e.stopPropagation()}>
-                      删除
-                    </span>
-                  </Popconfirm>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 右栏：正文预览常驻 */}
-        <div className="hf-rail">
-          <div className="hf-panel hf-panel--grow">
-            <div className="hf-panel-head">
-              <div>
-                <span className="hf-panel-title">{preview?.title ?? '选择文档'}</span>
-                <div className="hf-panel-sub">标签：{preview?.tags.join(' · ') || '—'}</div>
-              </div>
-              {preview && (
-                <span className="hf-faint hf-td--num">
-                  {(preview.content.length / 1000).toFixed(1)}k 字 · {dayjs(preview.updatedAt).format('MM-DD')} 更新
-                </span>
-              )}
-            </div>
-            <div className="hf-panel-body">
-              <div className="hf-caption u-mb-8">正文预览</div>
-              <div className="hf-doc-preview">{preview?.content ?? '—'}</div>
-            </div>
-            <div className="hf-panel-foot hf-panel-foot--tight hf-notice--flat">
-              <span className="hf-faint">入职问答机器人只依据这些文档作答；标签建议覆盖同义词，命中即可被检索到。</span>
-            </div>
-          </div>
-        </div>
+      <div className="hf-atable">
+        <Table<CompanyDoc>
+          columns={docColumns}
+          dataSource={docs}
+          rowKey="id"
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: false,
+            hideOnSinglePage: true,
+            showTotal: (t, [f, to]) => `第 ${f}–${to} 条 / 共 ${t} 条`,
+          }}
+          scroll={{ x: 720 }}
+        />
       </div>
+
+      {/* 正文预览：原本是右栏常驻，改成按需弹窗，表格才能占满宽度 */}
+      <Modal
+        className="hf-modal"
+        width={720}
+        title={
+          <>
+            {preview?.title ?? '文档预览'}
+            {preview && (
+              <div className="hf-modal-sub">
+                标签：{preview.tags.join(' · ') || '—'} · {(preview.content.length / 1000).toFixed(1)}k 字 ·{' '}
+                {dayjs(preview.updatedAt).format('MM-DD')} 更新
+              </div>
+            )}
+          </>
+        }
+        open={Boolean(previewId)}
+        onCancel={() => setPreviewId(null)}
+        footer={null}
+        destroyOnHidden
+      >
+        <div className="hf-doc-preview">{preview?.content ?? '—'}</div>
+        <div className="hf-notice hf-notice--flat u-mt-16">
+          <span className="hf-faint">
+            入职问答机器人只依据这些文档作答；标签建议覆盖同义词，命中即可被检索到。
+          </span>
+        </div>
+      </Modal>
 
       <Modal
         className="hf-modal"
@@ -969,6 +1093,43 @@ function AuditSection() {
     }
   };
 
+  const auditColumns: TableProps<ActivityItem>['columns'] = [
+    {
+      title: '时间',
+      dataIndex: 'createdAt',
+      width: 150,
+      render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD HH:mm:ss')}</span>,
+    },
+    {
+      title: '操作人',
+      key: 'actor',
+      width: 130,
+      render: (_, a) => (
+        <span className={a.actor ? 'hf-secondary' : 'hf-muted'}>{a.actor?.name ?? a.actorName ?? '系统'}</span>
+      ),
+    },
+    {
+      title: '动作',
+      dataIndex: 'action',
+      width: 260,
+      render: (action: string) => <span className="hf-mono hf-mono--action">{action}</span>,
+    },
+    {
+      title: '实体',
+      dataIndex: 'entityType',
+      width: 110,
+      render: (t: string | null) => <span className="hf-muted">{t ?? '—'}</span>,
+    },
+    {
+      title: '详情',
+      key: 'payload',
+      ellipsis: true,
+      render: (_, a) => (
+        <span className="hf-faint hf-mono hf-ellipsis">{a.payload ? JSON.stringify(a.payload) : '—'}</span>
+      ),
+    },
+  ];
+
   return (
     <>
       <div className="hf-section-head">
@@ -986,35 +1147,15 @@ function AuditSection() {
         </div>
       </div>
 
-      <div className="hf-table">
-        <div className="hf-thead">
-          <span className="hf-td w-150">时间</span>
-          <span className="hf-td w-130">操作人</span>
-          <span className="hf-td w-260">动作</span>
-          <span className="hf-td w-110">实体</span>
-          <span className="hf-td--grow">详情</span>
-        </div>
-        <div className="hf-tbody">
-          {auditQuery.isLoading ? (
-            <div className="hf-panel-body u-flex-center">
-              <Spin />
-            </div>
-          ) : (
-            items.map((a) => (
-              <div key={a.id} className="hf-tr hf-tr--dense">
-                <span className="hf-td w-150 hf-muted hf-td--num">{dayjs(a.createdAt).format('MM-DD HH:mm:ss')}</span>
-                <span className={a.actor ? 'hf-td w-130 hf-secondary' : 'hf-td w-130 hf-muted'}>
-                  {a.actor?.name ?? a.actorName ?? '系统'}
-                </span>
-                <span className="hf-td w-260 hf-mono hf-mono--action">{a.action}</span>
-                <span className="hf-td w-110 hf-muted">{a.entityType ?? '—'}</span>
-                <span className="hf-td--grow hf-faint hf-mono hf-ellipsis">
-                  {a.payload ? JSON.stringify(a.payload) : '—'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
+      <div className="hf-atable">
+        <Table<ActivityItem>
+          columns={auditColumns}
+          dataSource={items}
+          rowKey="id"
+          loading={auditQuery.isLoading}
+          pagination={false}
+          scroll={{ x: 900 }}
+        />
         <div className="hf-panel-foot">
           <span>
             第 {total === 0 ? 0 : (page - 1) * 20 + 1}–{Math.min(page * 20, total)} 条 / 共 {total} 条
