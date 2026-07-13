@@ -20,3 +20,8 @@ apps/api/.pgdata/
 coverage/
 .vite/
 .claude
+
+# 数据库导出与备份：含真实数据（邮箱/手机号/薪资）和连接串，绝不能进版本库
+.dbdump/
+*.backup-*.sql
+.env.bak-*
