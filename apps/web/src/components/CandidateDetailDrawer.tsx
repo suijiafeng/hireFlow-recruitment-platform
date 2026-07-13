@@ -430,7 +430,6 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
             {/* 头部：姓名 + 匹配分 + 一行元信息 + 固定主操作 */}
             <div className="u-flex-between">
               <div className="u-flex-gap-12 u-flex-center-v">
-                <span className="hf-avatar hf-avatar--lg">{detail.name.charAt(0)}</span>
                 <div>
                   <div className="u-flex-gap-10 u-flex-center-v">
                     <span className="hf-section-title">{detail.name}</span>
@@ -465,9 +464,9 @@ export function CandidateDetailDrawer({ candidateId, onClose }: Props) {
             <div className="hf-drawer-tabs">
               {(
                 [
-                  ['applications', `应聘记录 ${detail.applications.length}`],
-                  ['resumes', `简历 ${detail.resumes.length}`],
-                  ['timeline', `时间轴 ${detail.timeline.length}`],
+                  ['applications', `应聘记录`],
+                  ['resumes', `简历`],
+                  ['timeline', `时间轴`],
                 ] as Array<[Tab, string]>
               ).map(([key, label]) => (
                 <span

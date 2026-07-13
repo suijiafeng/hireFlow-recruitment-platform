@@ -5,7 +5,7 @@ import { App, Button, Form, Input, Modal, Select, Spin, Steps, Table, Typography
 import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { onboardingApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import { QueryErrorResult } from '../../components/QueryErrorResult';
@@ -348,10 +348,6 @@ export function OnboardingPage() {
   const listQuery = useQuery({ queryKey: ['onboardings'], queryFn: onboardingApi.list, retry: false });
 
   const all = listQuery.data ?? [];
-  /** 默认选中第一张进行中的单，主从布局不会出现空右栏 */
-  useEffect(() => {
-    if (!selected && all.length) setSelected(all.find((o) => o.status !== 'COMPLETED')?.id ?? all[0].id);
-  }, [all, selected]);
 
   const reviewCount = (o: Onboarding) => o.documents?.filter((d) => d.needsReview).length ?? 0;
   const visible = all.filter((o) => {
@@ -442,6 +438,20 @@ export function OnboardingPage() {
       align: 'right',
       render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD')}</span>,
     },
+    {
+      title: '操作',
+      key: 'action',
+      width: 110,
+      align: 'right',
+      fixed: 'right',
+      render: (_, o) => (
+        // 入职单没有独立的可编辑业务字段：清单勾选、材料上传、合同生成都在详情弹窗里完成，
+        // 所以这里只给一个入口，不去凑一个指向同一处的「编辑」按钮
+        <span className="hf-link" onClick={() => setSelected(o.id)}>
+          查看 / 办理
+        </span>
+      ),
+    },
   ];
 
   const doneCount = all.filter((o) => o.status === 'COMPLETED').length;
@@ -528,10 +538,14 @@ export function OnboardingPage() {
                 columns={onboardingColumns}
                 dataSource={visible}
                 rowKey="id"
-                pagination={false}
+                pagination={{
+            pageSize: 20,
+            showSizeChanger: false,
+            hideOnSinglePage: true,
+            showTotal: (t, [f, to]) => `第 ${f}–${to} 条 / 共 ${t} 条`,
+          }}
                 scroll={{ x: 760, y: 1 }}
                 rowClassName={(o) => (o.id === selected ? 'hf-row--on' : '')}
-                onRow={(o) => ({ onClick: () => setSelected(o.id) })}
               />
               <div className="hf-panel-foot hf-panel-foot--tight">
                 <span>全部 {all.length} 张入职单</span>
@@ -543,11 +557,21 @@ export function OnboardingPage() {
             </div>
           )}
 
-          <div className="hf-rail">
-            <DetailRail id={selected} />
-          </div>
+
         </div>
       </div>
+
+      <Modal
+        className="hf-modal hf-modal--wide"
+        title="入职办理"
+        open={Boolean(selected)}
+        onCancel={() => setSelected(null)}
+        footer={null}
+        width={720}
+        destroyOnHidden
+      >
+        <DetailRail id={selected} />
+      </Modal>
     </div>
   );
 }

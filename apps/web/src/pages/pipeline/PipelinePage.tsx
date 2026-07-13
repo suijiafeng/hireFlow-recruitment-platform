@@ -249,6 +249,7 @@ function CompareModal({ data, loading, onClose }: { data: CompareData | null; lo
   };
   return (
     <Modal
+      className="hf-modal"
       title={data ? `候选人对比 · ${data.jobTitle}` : 'AI 正在对比…'}
       open={loading || Boolean(data)}
       onCancel={onClose}
@@ -812,6 +813,7 @@ export function PipelinePage() {
       </Card>
 
       <Modal
+        className="hf-modal"
         title="回退阶段需填写原因"
         open={Boolean(pendingRevert)}
         onCancel={() => {
@@ -857,6 +859,7 @@ export function PipelinePage() {
 
       {/* 批量淘汰：破坏性操作显示影响人数 */}
       <Modal
+        className="hf-modal"
         title={`批量淘汰 ${selected.size} 人`}
         open={batchRejectOpen}
         onCancel={() => setBatchRejectOpen(false)}
@@ -889,6 +892,7 @@ export function PipelinePage() {
 
       {/* 批量移动：目标阶段 + 可选回退原因（批量含回退卡时后端逐条校验） */}
       <Modal
+        className="hf-modal"
         title={`批量移动 ${selected.size} 人`}
         open={batchMoveOpen}
         onCancel={() => setBatchMoveOpen(false)}
