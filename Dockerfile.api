@@ -1,5 +1,6 @@
 # HireFlow API —— 独立 Dockerfile，供 Render 等不支持多 stage target 选择的平台使用
-# 与根目录 Dockerfile 的 deps/build/api 三层完全一致，需同步维护（web 侧不受影响）
+# 与根目录 Dockerfile 共用同一套 deps 层定义（需同步维护）；build 层各建各的：
+# 本文件只构建 shared + api，web 产物由根 Dockerfile 负责，两边互不依赖。
 FROM node:22-alpine AS deps
 WORKDIR /repo
 COPY package.json package-lock.json ./
@@ -11,15 +12,36 @@ RUN npm ci
 FROM deps AS build
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-COPY apps/web apps/web
+# prisma generate 需要 DATABASE_URL 存在但不会连库，这里给个占位值
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 RUN npm run build:shared \
   && npm run db:generate \
-  && npm run build -w apps/api \
-  && npm run build -w apps/web
+  && npm run build -w apps/api
 
-FROM build AS api
+# ---- 运行期依赖：生产依赖 + 入口脚本要用的三件工具 ----
+# prisma CLI（迁移）、tsx（跑 TS 写的种子）、dotenv（prisma.config.ts 里 import）本是
+# devDependencies，prune 会一并带走，所以 prune 之后再显式装回来。
+FROM deps AS prod-deps
+RUN npm prune --omit=dev \
+  && npm i --no-save prisma@7.8.0 tsx@^4.23.1 dotenv@^17.4.2 \
+  && rm -rf /root/.npm
+
+# ---- 运行时：全新的基础镜像，只拷进真正要跑的东西 ----
+# 不能用 `FROM build`——镜像层是叠加的，在后面的层里 rm 掉源码和 devDependencies
+# 并不会让镜像变小，之前的层原样保留在最终镜像里。
+FROM node:22-alpine AS api
 ENV NODE_ENV=production
+WORKDIR /repo
+COPY package.json ./
+COPY --from=prod-deps /repo/node_modules ./node_modules
+# node_modules/@hireflow/shared 是指向 packages/shared 的软链，目标目录必须一并拷贝
+COPY --from=build /repo/packages/shared/package.json packages/shared/
+COPY --from=build /repo/packages/shared/dist packages/shared/dist
+COPY --from=build /repo/apps/api/package.json /repo/apps/api/prisma.config.ts apps/api/
+COPY --from=build /repo/apps/api/dist apps/api/dist
+COPY --from=build /repo/apps/api/prisma apps/api/prisma
+# prisma/seed.ts 直接 import 生成的 Client，运行期必须带上
+COPY --from=build /repo/apps/api/src/generated apps/api/src/generated
 COPY deploy/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
 RUN chmod +x /usr/local/bin/api-entrypoint.sh
 WORKDIR /repo/apps/api
