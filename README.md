@@ -2,9 +2,34 @@
 
 > 🚀 开源智能招聘系统（ATS）——以「候选人流转看板」为中枢、「AI Copilot」为差异化、「自动化工作流」贯穿全链路
 
+[![在线体验](https://img.shields.io/badge/在线体验-demo.suijf.site-2457c5)](https://demo.suijf.site)
 [![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D20.19-brightgreen)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue)](#许可证)
+[![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)](./apps/api/tsconfig.json)
 [![Monorepo](https://img.shields.io/badge/Monorepo-npm%20workspaces-333333)](#目录结构)
+
+**[👉 在线体验 demo.suijf.site](https://demo.suijf.site)** —— 登录页右侧列出了系统管理员 / HR / 用人经理 / 面试官四个角色的测试账号，用不同角色登录可以直接看出权限与数据范围的差异。
+
+### 数据洞察：TTH 中位数、渠道效能、面试官效能、阶段停留分位
+
+![数据洞察](./screenshot/insights.jpg)
+
+> 招聘周期 TTH 取**中位数而非均值**（小样本下均值会被个别超长案例带偏）；阶段停留同时给 **P50 与 P90**（P90 才是"最慢的那批人卡在哪"）；渠道效能追踪「投递 → 进面 → Offer → 入职」四段转化，而不只是投递量。
+
+### 角色与权限：按钮级权限 × 行级数据范围
+
+![角色与权限](./screenshot/rbac.jpg)
+
+> 数据范围一列是这套权限模型的核心——同样有「查看候选人」权限，HR 看全部、用人经理看本部门、面试官只看指派给自己的。权限矩阵可在后台可视化编辑并导出。
+
+<details>
+<summary>更多截图（登录页 / 数据大盘）</summary>
+
+![登录](./screenshot/login.jpg)
+
+![数据大盘](./screenshot/dashboard.jpg)
+
+</details>
 
 ## 功能矩阵
 
@@ -359,9 +384,39 @@ HireFlow 遵循以下核心设计理念，确保系统稳定、安全、可追�
 - 没有黑盒判断，所有决策可解释
 
 ### 5️⃣ 乐观锁而非悲观锁
-- 高并发路径（看板拖拽、Offer 状态流转）使用 Prisma 的 `updateMany` + 状态前置条件
-- 冲突返回 409，由前端提示用户重试（而非锁定等待）
-- 降低数据库锁竞争，提升吞吐量
+
+**并发控制不是套一个模板，而是逐点选武器。** 全库只有一个 `version` 字段（`Application.version`），因为只有「拖拽看板」这一个场景操作的是 `position` 这种没有状态语义的字段，必须靠版本号。
+
+其余 6 处并发点用的是**状态守卫式 CAS**——把状态的前置条件直接写进 `updateMany` 的 `WHERE`，靠影响行数判定输赢：
+
+```ts
+// Offer 答复：approvalStatus 与 decision 两个维度都不留读写窗口
+const r = await prisma.offer.updateMany({
+  where: { id, approvalStatus: 'SENT', decision: null },
+  data: { decision, decidedAt: new Date() },
+});
+if (r.count === 0) throw new ConflictException('该 Offer 状态已变更，请刷新后重试');
+```
+
+关键差别在于：**状态机校验和并发控制合并成了一次原子写**，而不是「先 `findUnique` 查出来 `if` 一下，再去 `update`」——后者在读和写之间永远有窗口。而且这个 `WHERE` 同时表达了业务规则本身：`decision: null` 既是并发保护，也是「已答复的 Offer 不能再答复」。
+
+冲突统一返回 409，前端 `onMutate` 快照 / `onError` 回滚 / `onSettled` invalidate 三段式处理，409 单独提示「已自动刷新」而非报错。
+
+## ⚖️ 已知权衡与欠账
+
+写在这里而不是等着被发现。以下都是清楚知道、当前有意接受、并且知道正确做法的取舍：
+
+| 现状 | 代价 | 正确做法 |
+|---|---|---|
+| **权限快照进 JWT，有效期 12h，无 refresh / 黑名单** | 改权限最长 12 小时后才生效；禁用账号只在登录时校验 | 短 access token + refresh，或在 claim 里放权限版本号，服务端比对版本失效即拒。前端目前一路提示「需重新登录生效」作为补偿 |
+| **`expectedVersion` 在 DTO 里是可选的** | 客户端不传即退化成无锁——**这是协议性乐观锁，防误操作有效，防恶意无效**；批量移动接口复用单条逻辑但未传版本号，整条路径无锁 | 设为必填，或把 `stageId`（从哪一列来）也钉进 `WHERE`，让「起点」也成为 CAS 条件 |
+| **数据范围的 where 拼装在 6 个 service 里重复 11 处** | 加一档新的数据范围要改 11 个地方；「这个职位是不是我部门的」这个子查询写了三遍，三种错误文案 | 用 Prisma Client Extension 在 ORM 层统一注入范围条件，让「漏加」变成不可能而不是靠自觉；`data-scope.ts` 改 exhaustive switch，新增枚举值不处理直接编译报错 |
+| **门户 token 永不过期、不轮换** | token 在 URL path 段，会进反代日志、浏览器历史、Referer | 加 `expiresAt` 列、重发时轮换、提交后置空、加限流。业务层已有 Offer `expiresAt` 与懒过期，但那是业务过期不是 token 过期 |
+| **测试只有 4 个 spec，且乐观锁本身零覆盖** | 测试里 `updateMany` 被硬编码成影响 1 行，四条 `count === 0 → 409` 分支从未被执行 | `mockResolvedValueOnce({ count: 0 })` 一行覆盖一条分支；`data-scope.ts` 是纯函数最该表驱动测试；漏斗回放也是纯计算，喂数据断言即可 |
+| **无 CI、无全局异常过滤器** | Prisma 的 `P2002`/`P2003` 会原样冒成 500，而 schema 里有大量刻意不级联的外键 | `PrismaExceptionFilter` 映射 P2002→409 / P2003→409 / P2025→404；补一条跑 `tsc --noEmit + jest + prettier --check` 的 workflow |
+| **`analytics` 模块未使用 `CN_TZ_OFFSET_MS`** | 容器默认 UTC，北京时间 00:00–08:00 创建的应聘会落到上一周 / 上一季度的桶里 | 周/季度分桶统一走 `CN_TZ_OFFSET_MS`，与 Offer 有效期、面试禁跨天、合同签署日三处保持同一口径 |
+| **批量移动是串行 N 次全流程** | 100 条上限下最坏约 900 次严格串行查询在一个 HTTP 请求里 | 串行本身是刻意的（部分失败不回滚、错误报告模式），但可改成分批并发；失败时为拿姓名的二次查询应从已有结果里带出 |
+| **撞场检测无时间下界、无 `take`** | 拉出该面试官历史上所有非取消面试再在 JS 里 filter，随职业生涯线性增长 | 加 `scheduledAt: { gte, lte }` 把全表扫变索引范围扫，并给 `Interview` 补对应索引 |
 
 ## 📊 功能完成度
 
@@ -444,9 +499,19 @@ HireFlow 遵循以下核心设计理念，确保系统稳定、安全、可追�
 
 ### 测试要求
 
-- 功能模块应包含单元测试（Jest）
-- 集成测试覆盖核心业务流程
-- 提交 PR 前运行 `npm run test`（如适用）
+**当前状态（如实说明）**：仓库里只有 4 个 spec 文件，覆盖 Offer 状态机边界、脱敏不变式和工作日推算；前端零测试；尚未接入 CI。乐观锁与数据范围过滤这两块核心逻辑目前**没有测试覆盖**——这是明确的欠账，见 [已知权衡](#️-已知权衡与欠账)。
+
+跑测试（注意要指定 workspace，根目录没有 `test` 脚本）：
+
+```bash
+npm run test -w apps/api        # Jest
+npm run lint  -w apps/web       # oxlint
+```
+
+提 PR 时：
+
+- 改动 `apps/api/src/common/` 下的纯函数（`data-scope` / `mask` / `portal`），请补对应的表驱动测试
+- 改动涉及 `updateMany + count === 0` 的并发分支，请至少补一个 `mockResolvedValueOnce({ count: 0 })` 的用例
 
 ### 报告 Bug
 
