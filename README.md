@@ -121,12 +121,26 @@ web    → Vite        http://localhost:5173
 
 ### 想用真 Postgres？
 
-把 `apps/api/.env` 里的 `DATABASE_URL` 换成你的连接串，然后：
+用 `docker compose up -d` 起本仓库自带的 Postgres 18 + MinIO（compose 只提供这两个依赖，不含应用），对应连接串是：
+
+```
+DATABASE_URL="postgresql://arthr:arthr_dev_password@localhost:5432/arthr?schema=public"
+```
+
+把它写进 `apps/api/.env`（换成你自己的 Postgres 也一样，只改这一行），然后：
 
 ```bash
 docker compose up -d          # 或者用你自己的 Postgres
+npm run db:generate           # 生成 Prisma Client（src/generated 不进 git，必须跑）
+npm run db:migrate            # 建表
+npm run db:seed               # 灌演示数据
 npm run dev:external-db       # 不拉起 PGlite，直连 DATABASE_URL
 ```
+
+> `npm run dev` 那条路径里，建库/迁移/种子由 `db:setup` 自动完成；`dev:external-db` 只启动服务，
+> 上面三步是首次连一个空库时必须手动补的，否则 API 一查表就报错。库里已有数据时直接起最后一条即可。
+
+MinIO 的 bucket 不用手建，API 启动时不存在会自动创建。
 
 生产环境本来就走这条路（见 [render.yaml](render.yaml)），schema 和迁移完全一致。
 
