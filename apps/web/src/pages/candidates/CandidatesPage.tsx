@@ -33,7 +33,7 @@ function stageTagClass(stage: string) {
 }
 
 export function CandidatesPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
 
@@ -70,6 +70,15 @@ export function CandidatesPage() {
       void queryClient.invalidateQueries({ queryKey: ['candidates'] });
     },
     onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: candidatesApi.remove,
+    onSuccess: () => {
+      message.success('候选人已删除');
+      void queryClient.invalidateQueries({ queryKey: ['candidates'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '删除失败')),
   });
 
   const openEdit = (candidate: Candidate) => {
@@ -182,17 +191,33 @@ export function CandidatesPage() {
     {
       title: '操作',
       key: 'action',
-      width: 130,
+      width: 132,
       align: 'right',
       fixed: 'right',
       render: (_, c) => (
         <RowActions
           actions={[
-            { key: 'detail', label: '详情', onClick: () => setDetailId(c.id) },
+            { key: 'detail', label: '详情', hint: '查看候选人 360° 详情', onClick: () => setDetailId(c.id) },
             hasPermission(PERMISSIONS.CANDIDATE_UPDATE) && {
               key: 'edit',
               label: '编辑',
               onClick: () => openEdit(c),
+            },
+            hasPermission(PERMISSIONS.CANDIDATE_DELETE) && {
+              key: 'delete',
+              label: '删除',
+              danger: true,
+              // 进过流程的候选人不给删，避免抹掉招聘留痕；后端同样会拦
+              disabled: (c.applications?.length ?? 0) > 0,
+              onClick: () =>
+                modal.confirm({
+                  title: `删除候选人「${c.name}」？`,
+                  content: '其简历将一并移除，此操作不可撤销。',
+                  okText: '删除',
+                  okButtonProps: { danger: true },
+                  cancelText: '取消',
+                  onOk: () => removeMutation.mutateAsync(c.id),
+                }),
             },
           ]}
         />

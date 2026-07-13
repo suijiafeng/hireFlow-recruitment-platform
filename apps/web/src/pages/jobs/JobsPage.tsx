@@ -1,7 +1,7 @@
 import { AppstoreOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JOB_STATUS_LABEL, PERMISSIONS, type JobStatus } from '@hireflow/shared';
-import { App, Button, Dropdown, Form, Input, InputNumber, Modal, Select, Spin, Table } from 'antd';
+import { App, Button, Form, Input, InputNumber, Modal, Select, Spin, Table } from 'antd';
 import type { TableProps } from 'antd';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { aiApi, departmentsApi, jobsApi, usersApi } from '../../api';
 import { extractErrorMessage } from '../../api/client';
 import type { Job } from '../../api/types';
+import { RowActions } from '../../components/RowActions';
 import { ScorecardModal } from './ScorecardModal';
 import { TalentPoolDrawer } from './TalentPoolDrawer';
 import { useAuthStore } from '../../stores/auth';
@@ -40,7 +41,7 @@ const STATUS_FILTERS: Array<{ key: string; label: string }> = [
 ];
 
 export function JobsPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
 
@@ -86,6 +87,15 @@ export function JobsPage() {
       void queryClient.invalidateQueries({ queryKey: ['jobs'] });
     },
     onError: (error) => message.error(extractErrorMessage(error, '更新失败')),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: jobsApi.remove,
+    onSuccess: () => {
+      message.success('职位已删除');
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '删除失败')),
   });
 
   const generateJdMutation = useMutation({
@@ -209,37 +219,45 @@ export function JobsPage() {
       render: (at: string) => <span className="hf-muted hf-td--num">{dayjs(at).format('MM-DD')}</span>,
     },
     {
-      // 操作：主动作 + 「···」更多，取代 300px 四连链接
+      // 操作：编辑/删除平铺，低频的人才库唤醒与评分卡模板收进「···」
       title: '操作',
       key: 'action',
-      width: 140,
+      width: 120,
       align: 'right',
       fixed: 'right',
-      render: (_, job) => (
-        <span className="u-flex-end u-flex-gap-12">
-          <span className="hf-link">看板</span>
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                hasPermission(PERMISSIONS.APPLICATION_CREATE) ? { key: 'pool', label: '人才库唤醒' } : null,
-                hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'scorecard', label: '评分卡模板' } : null,
-                hasPermission(PERMISSIONS.JOB_UPDATE) ? { key: 'edit', label: '编辑职位' } : null,
-              ].filter(Boolean) as Array<{ key: string; label: string }>,
-              onClick: ({ key, domEvent }) => {
-                domEvent.stopPropagation();
-                if (key === 'pool') setTalentPoolJob(job);
-                if (key === 'scorecard') setScorecardJob(job);
-                if (key === 'edit') openEdit(job);
-              },
-            }}
-          >
-            <span className="hf-more" onClick={(e) => e.stopPropagation()}>
-              ···
-            </span>
-          </Dropdown>
-        </span>
-      ),
+      render: (_, job) => {
+        const canUpdate = hasPermission(PERMISSIONS.JOB_UPDATE);
+        const hasApplications = (job._count?.applications ?? 0) > 0;
+        return (
+          <RowActions
+            actions={[
+              canUpdate ? { key: 'edit', label: '编辑', hint: '编辑职位信息', onClick: () => openEdit(job) } : null,
+              hasPermission(PERMISSIONS.JOB_DELETE)
+                ? {
+                    key: 'delete',
+                    label: '删除',
+                    danger: true,
+                    // 有人投递过就不给删：后端也会拦，这里先把入口置灰并说明原因
+                    disabled: hasApplications,
+                    onClick: () =>
+                      modal.confirm({
+                        title: `删除职位「${job.title}」？`,
+                        content: '该职位及其 Pipeline 阶段将被移除，此操作不可撤销。',
+                        okText: '删除',
+                        okButtonProps: { danger: true },
+                        cancelText: '取消',
+                        onOk: () => removeMutation.mutateAsync(job.id),
+                      }),
+                  }
+                : null,
+              hasPermission(PERMISSIONS.APPLICATION_CREATE)
+                ? { key: 'pool', label: '唤醒', hint: '人才库唤醒：历史候选人 AI 打分推荐', onClick: () => setTalentPoolJob(job) }
+                : null,
+              canUpdate ? { key: 'scorecard', label: '评分卡', hint: '编辑面试评分卡模板', onClick: () => setScorecardJob(job) } : null,
+            ]}
+          />
+        );
+      },
     },
   ];
   const kpis = [
